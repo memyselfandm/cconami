@@ -51,10 +51,16 @@ If input is a feature description:
 3. **Initialize File:** Create new PRD with placeholder structure
 4. **Confirm Creation:** "Created new PRD file: [filename]"
 
+**File Safety and Versioning:**
+- Check if generated filename already exists before creating
+- If file exists: Ask user "File [filename] already exists. Choose: A) Use [filename]-v2.md, B) Provide different name, C) Overwrite (requires explicit confirmation)"
+- When user chooses "Start fresh" for existing files: Create backup as [original-filename]-backup.md before proceeding
+- Always confirm file creation: "Creating new PRD file: [full-path-to-file]"
+
 **Error Handling:**
 - If file reference doesn't exist: "File not found. Treating as feature description instead."
 - If filename generation is unclear: Ask user for preferred filename
-- If file exists when creating new: Offer "-v2.md" suffix option
+- Never proceed with file operations without explicit user confirmation
 
 **File Structure to Initialize:**
 ```markdown
@@ -112,9 +118,11 @@ Begin this phase by stating: "Switching to PM mode to focus on product value and
    - Security, performance, or compliance features if relevant
 
 **File Update Process:**
-1. Use MultiEdit to write both Executive Summary and Key Features sections
-2. Ensure clean formatting and clear language
-3. Verify content aligns with PRD format requirements
+1. **Pre-Update Confirmation:** Before making changes, show user: "About to update [filename] with Executive Summary and Key Features sections. Proceed? (y/n)"
+2. **Wait for Confirmation:** Do not proceed until user confirms with "y", "yes", or equivalent
+3. **Execute Update:** Use MultiEdit to write both Executive Summary and Key Features sections
+4. **Verify Update:** Confirm successful update: "Updated [filename] with product definition sections"
+5. Ensure clean formatting and clear language
 
 **Collaboration Checkpoint:**
 1. **Present Sections:** Display both Executive Summary and Key Features
@@ -187,9 +195,11 @@ Begin this phase by stating: "Switching to Architect mode to design the technica
    - Testing strategy recommendations
 
 **File Update Process:**
-1. Use MultiEdit to write all three technical sections simultaneously
-2. Ensure technical consistency across all sections
-3. Align recommendations with user input and product requirements
+1. **Pre-Update Confirmation:** Show user: "Ready to update [filename] with technical specifications (Stack, Architecture, Technical Notes). Proceed? (y/n)"
+2. **Wait for Confirmation:** Do not proceed until user explicitly confirms
+3. **Execute Update:** Use MultiEdit to write all three technical sections simultaneously
+4. **Verify Update:** Confirm: "Updated [filename] with technical specifications"
+5. Ensure technical consistency across all sections and alignment with user input
 
 **Collaboration Checkpoint:**
 1. **Present Sections:** Display all technical sections clearly formatted
@@ -282,10 +292,11 @@ State: "Switching to SWE mode for task breakdown and implementation planning..."
    - Avoid vague tasks like "implement feature X"
 
 **File Update Process:**
-1. Use MultiEdit to write the entire Backlog section
-2. Ensure consistent formatting across all features
-3. Verify feature and task alignment with technical specifications
-4. Double-check implementation order makes technical sense
+1. **Automated Update (No Confirmation Needed):** Phase 4 is fully automated - proceed directly
+2. **Execute Update:** Use MultiEdit to write the entire Backlog section
+3. **Verify Update:** Confirm: "Generated backlog with [X] features and [Y] total tasks"
+4. Ensure consistent formatting across all features
+5. Verify feature and task alignment with technical specifications
 
 **Backlog Format Standard:**
 ```markdown
@@ -310,16 +321,51 @@ State: "Switching to SWE mode for task breakdown and implementation planning..."
 ### Phase 5: Completion
 **Objective:** Provide clear handoff to implementation phase
 
-**Process:**
-1. Reference the completed PRD file path to the user
-2. Provide a brief summary of what was accomplished
-3. Instruct the user: "Please review the completed PRD file. When you're ready to begin implementation, clear your Claude Code context to start fresh."
+**Completion Process:**
+1. **File Path Reference:** Provide the complete file path: "Your PRD is complete and saved at: [full-path-to-file]"
+2. **Accomplishment Summary:** 
+   - "✅ Executive Summary: [brief description of what was defined]"
+   - "✅ Key Features: [number] features identified"
+   - "✅ Technical Specifications: [stack summary]"
+   - "✅ Implementation Backlog: [number] features broken into [number] tasks"
+3. **Quality Assurance:** "The PRD provides comprehensive guidance for development teams"
+4. **Next Steps Instructions:** 
+   ```
+   Next Steps:
+   1. Review the completed PRD file at the path above
+   2. Share with your development team for feedback
+   3. When ready to begin implementation, CLEAR YOUR CLAUDE CODE CONTEXT
+   4. Start fresh for implementation work to avoid confusion
+   ```
+5. **Final Note:** "This concludes the PRD creation session. Good luck with implementation!"
 
 ## File Safety Instructions
+
+**Critical Safety Rules:**
 - **Never overwrite existing files without explicit user confirmation**
-- **When creating new versions, use suffix pattern like `-v2.md`** 
-- **Always show what sections will be modified before making changes**
-- **Preserve original files when user chooses "Start fresh" option**
+- **Always ask before making ANY file modifications**: "About to update [filename] with [description]. Proceed? (y/n)"
+- **Wait for explicit confirmation** before proceeding with file operations
+- **Use versioning for new files**: If filename exists, offer `-v2.md`, `-v3.md` suffix options
+- **Preserve originals**: When user chooses "Start fresh", create backup as `[filename]-backup.md`
+- **Show file paths**: Always reference complete file paths in completion messages
+- **Confirm updates**: After each file operation, confirm what was written
+
+**File Operation Patterns:**
+```
+# Before updating:
+"About to update [filename] with [section names]. Proceed? (y/n)"
+
+# After updating:
+"Updated [filename] with [what was written]"
+
+# For completion:
+"Your PRD is complete and saved at: [full-path]"
+```
+
+**Version Management:**
+- New files: Check existence, offer versioning if needed
+- Existing files: Always backup before "Start fresh" option
+- Never assume user wants to overwrite - always ask first
 
 ## Mode Switching Guidelines
 Throughout the session, explicitly adopt the specified mode by stating:
