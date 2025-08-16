@@ -6,12 +6,12 @@ description: Review a backlog file, select the next sprint, and execute it with 
 
 # Sprint Execution Command
 
-Read the backlog file $ARGUMENTS, and pay attention to current roadmap progress, as well as dependencies and parrallelization opportunities.
-You will create a team of sub-agents to execute the next phase of work, passing the agents the appropriate features and tasks, and managing parraellization according to the roadmap specified in the backlog file.
+Read the backlog file $ARGUMENTS, and pay attention to current roadmap progress, as well as dependencies and parallelization opportunities.
+You will create a team of sub-agents to execute the next phase of work, passing the agents the appropriate features and tasks, and managing parallelization according to the roadmap specified in the backlog file.
 
 
-## Parrallel Agentic Execution
-For each feature in the sprint, launch a sub-agent to implement the feature. Launch all agents **simultaneously, in parrallel.**
+## Parallel Agentic Execution
+For each feature in the sprint, launch a sub-agent to implement the feature. Launch all agents **simultaneously, in parallel.**
 
 **Agent Assignment Protocol:**
 Each sub-agent receives:
@@ -27,7 +27,7 @@ Use this prompt template for each sub-agent
 ROLE: Act as a principal software engineer specializing in [SPECIALIZATION 1] and [SPECIALIZATION 2]
 
 CONTEXT:
-- PRD: @ai_docs/prds/00_pacc_mvp_prd.md
+- PRD: @ai_docs/prds/*.md (if applicable)
 - Helpful documentation: @ai_docs/knowledge/*
 
 INSTRUCTIONS:

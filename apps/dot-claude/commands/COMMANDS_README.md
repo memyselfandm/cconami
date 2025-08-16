@@ -7,6 +7,7 @@ This directory contains custom slash commands for Claude Code. Each command is o
 | Command | Description | Documentation | Examples |
 |---------|-------------|---------------|----------|
 | `/prd-meeting` | Start an interactive PRD writing session | [Usage Guide](./prd-meeting/docs/prd-meeting-usage-guide.md) | [Example Output](./prd-meeting/docs/prd-meeting-example-output.md) |
+| `/sprint` | Execute parallel feature development sprints from backlog files | [Usage Guide](./sprint/docs/sprint-usage-guide.md) | [Example Output](./sprint/docs/sprint-example-output.md) |
 
 ## Command Structure
 
@@ -32,16 +33,26 @@ command-name/
 - **Troubleshooting:** [Common Issues](./prd-meeting/docs/prd-meeting-troubleshooting.md)
 - **Quick Reference:** [Cheat Sheet](./prd-meeting/docs/prd-meeting-quick-reference.md)
 
+### Sprint Command
+- **Command File:** [sprint.md](./sprint/sprint.md)
+- **Documentation Index:** [Documentation Overview](./sprint/docs/sprint-documentation-index.md)
+- **Quick Start:** [Usage Guide](./sprint/docs/sprint-usage-guide.md)
+- **Examples:** [Example Output](./sprint/docs/sprint-example-output.md)
+- **Troubleshooting:** [Common Issues](./sprint/docs/sprint-troubleshooting.md)
+- **Quick Reference:** [Cheat Sheet](./sprint/docs/sprint-quick-reference.md)
+
 ## Usage
 
 To use any command, simply type the command name in Claude Code:
 ```
 /prd-meeting <feature-description>
+/sprint @backlog.md
 ```
 
 For commands with file references:
 ```
 /prd-meeting @path/to/existing-prd.md
+/sprint @backlog.md
 ```
 
 ## Adding New Commands
