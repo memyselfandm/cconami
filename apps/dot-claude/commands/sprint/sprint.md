@@ -1,14 +1,12 @@
 ---
 allowed-tools: Bash(date:*), Bash(git status:*), Bash(git commit:*), Bash(mkdir:*), Task, Write, MultiEdit
 argument-hint: [backlog-file]
-description: Review a backlog file, select the next sprint, and execute it with subagents
+description: (*Run from PLAN mode*) Review a backlog file, select the next sprint, and execute it with subagents
 ---
 
 # Sprint Execution Command
-
 Read the backlog file $ARGUMENTS, and pay attention to current roadmap progress, as well as dependencies and parallelization opportunities.
-You will create a team of sub-agents to execute the next phase of work, passing the agents the appropriate features and tasks, and managing parallelization according to the roadmap specified in the backlog file.
-
+You will plan the next sprint and execute it using subagents.
 
 ## Parallel Agentic Execution
 For each feature in the sprint, launch a sub-agent to implement the feature. Launch all agents **simultaneously, in parallel.**
@@ -24,29 +22,74 @@ Each sub-agent receives:
 **Agent Task Specification:**
 Use this prompt template for each sub-agent
 ```
-ROLE: Act as a principal software engineer specializing in [SPECIALIZATION 1] and [SPECIALIZATION 2]
+VARIABLES:
+$agentnumber: [ASSIGNED NUMBER]
+$worklog: `tmp/worklog/sprintagent-$agentnumber.log`
+
+ROLE: Act as a principal software engineer specializing in [SPECIALIZATIONS]
 
 CONTEXT:
-- PRD: @ai_docs/prds/*.md (if applicable)
+<optional PRD reference, if provided in backlog>
+- PRD: @ai_docs/prds/00_pacc_mvp_prd.md
+</optional PRD reference>
 - Helpful documentation: @ai_docs/knowledge/*
 
+FEATURE:
+[Assigned FEATURE, TASKS, and ACCEPTANCE CRITERIA from backlog file]
+
 INSTRUCTIONS:
-1. Implement this feature using test-driven-development. Write meaningful tests that will validate complete implementation of the feature.
-[Assigned FEATURE and TASKS from backlog file]
-2. Commit your work when you've finished.
-3. Report to the main agent with a summary of your work.
+1. Implement this feature using test-driven-development. Write meaningful, honest tests that will validate complete implementation of the feature.
+2. Do not commit your work.
+3. Log your progress in $worklog using markdown.
+4. When you've completed your work, summarize your changes along with a list of files you touched in $worklog
+5. Report to the main agent with a summary of your work.
 ```
 
-**Parallel Execution Management:**
-- Launch all assigned sub-agents **simultaneously** using Task tool and the above prompt template
-- Monitor sub-agent progress and completion
-- Handle any sub-agent failures by re-launching that sub-agent with context on where it left off.
-- If a sub-agent fails more than two times, do not re-launch the sub-agent. Report the failure to the user for analysis and further instruction.
+## Instructions
+### Step 1: Setup
+1. Create a `tmp/worklog` folder if it does not exist, and add it to .gitignore. Remove any existing agent worklogs with `rm -rf tmp/worklog/sprintagent-*.log`.
 
-## Sprint Completion
-When all sub-agents have finished their implementation, do the following:
-1. **Clean up**: review unstaged changes and remove any temp files or throwaway code.
-2. **Document**: ensure the project documentation (README) is updated for the changes made in the sprint.
-3. **Update the backlog**: Update the backlog file with the progress and notes from the sprint. Check off completed tasks and indicate any tasks that were not completed and why.
-4. **Commit**: make any final commits needed to have a clean workspace.
-5. **Report**: Report the sprint outcomes to the user.
+### Step 2: Plan the Sprint
+1. Read the backlog file: identify the next phase/sprint of work, and the features and tasks in the sprint.
+2. Plan the team: based on the features, tasks, and parallelization guidance, plan the sub-agents who will execute the sprint. 
+    - Assign specializations, features, and tasks to each subagent. 
+    - Assign each subagent an incremental number (used for their worklog file)
+3. Plan the execution: based on dependencies, assign the agents to an execution phase. You do not need to assign agents to every phase. 
+    1. foundation: dependencies, scaffolding, and shared components that must be built first.
+    2. features: the main execution phase. most subagents should be in this phase, and all agents in this phase execute **simultaneously**.
+    3. integration: testing, documentation, and final polish after the main execution phase is complete.
+
+### Step 3: Execute the Sprint
+#### Phase 1: Foundation (Dependencies & Scaffolding)
+1. Launch the agent(s) in the foundation phase and wait for the phase to complete successfully.
+2. If the phase does not complete successfully, you may re-launch the agent(s) up to 2 times. If the phase fails more than 2 times, STOP and inform the user of the issue.
+3. When the phase completes successfully, read the agents' worklogs in `tmp/worklog`, then:
+    - make commits for the changes made in this phase
+    - summarize the changes and add the summary to `tmp/worklog/sprint-<sprint-number>.log`
+    - check off any completed features and tasks in the backlog file
+    - continue to the next phase
+
+#### Phase 2: Features (Main Execution)
+1. Launch all the agents assigned to the features phase **simultaneously**, and wait for all agents to complete.
+2. If any agent(s) in this phase does not complete successfully, you may re-launch the agent(s) up to 2 times. If any agent fails more than 2 times, STOP and inform the user of the issue.
+3. When all agents in this phase completes successfully, read the agents' worklogs in `tmp/worklog`, then:
+    - make commits for the changes made in this phase
+    - summarize the changes and add the summary to `tmp/worklog/sprint-<sprint-number>.log`
+    - check off any completed features and tasks in the backlog file
+    - continue to the next phase
+
+#### Phase 3: Integration (Testing & Polish)
+1. Launch all the agents assigned to the integration phase **simultaneously**, and wait for all agents to complete.
+2. If any agent(s) in this phase does not complete successfully, you may re-launch the agent(s) up to 2 times. If any agent fails more than 2 times, STOP and inform the user of the issue.
+3. When all agents in this phase completes successfully, read the agents' worklogs in `tmp/worklog`, then:
+    - make commits for the changes made in this phase
+    - summarize the changes and add the summary to `tmp/worklog/sprint-<sprint-number>.log`
+    - check off any completed features and tasks in the backlog file
+    - continue to the next phase
+
+### Step 4: Finalize and Report
+1. Clean up: scan the project and clear any temp files or throwaway code left by the subagents
+2. Make any final backlog updates: ensure the progress made in the sprint is reflected in the backlog file
+3. Update memory: Ensure the changes made in the sprint are reflected in CLAUDE.md
+4. Final commits: make any final commits.
+5. Present a summary and report of the sprint to the user.

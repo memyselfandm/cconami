@@ -2,20 +2,72 @@
 
 ## Command Syntax
 ```bash
-/sprint <backlog-file>                    # Execute sprint from backlog file
+/sprint @backlog.md                      # Execute sprint from backlog file (PLAN mode required)
 /sprint @ai_docs/backlogs/mvp.md         # Common backlog path
 /sprint @planning/sprint-backlog.md      # Alternative backlog location
 ```
 
+**IMPORTANT:** Must be run from PLAN mode in Claude Code.
+
 ## Sprint Execution Overview
 
-| Phase | Type | Description | Duration |
-|-------|------|-------------|----------|
-| 1. Backlog Analysis | Automatic | Parse file, identify dependencies | 2-3 min |
-| 2. Sprint Planning | Automatic | Select features for next sprint | 3-5 min |
-| 3. Agent Assignment | Automatic | Create specialized sub-agents | 5-10 min |
-| 4. Parallel Execution | Monitored | Sub-agents implement features | 15-60+ min |
-| 5. Sprint Completion | Automatic | Cleanup, docs, backlog update | 5-10 min |
+### 4-Step Process
+1. **Setup** - Create worklog folder, cleanup previous runs
+2. **Plan Sprint** - Analyze backlog, assign agents to phases
+3. **Execute** - Run 3 execution phases with sub-agents
+4. **Finalize** - Cleanup, update backlog, final commits
+
+### 3 Execution Phases
+| Phase | Purpose | Execution | Duration |
+|-------|---------|-----------|----------|
+| **Foundation** | Dependencies & scaffolding | Sequential | 5-15 min |
+| **Features** | Main implementation | **Parallel** | 15-60+ min |
+| **Integration** | Testing & polish | Parallel | 10-20 min |
+
+## Quick Setup Checklist
+
+### Pre-Sprint Requirements
+- [ ] Switch to PLAN mode in Claude Code
+- [ ] Ensure backlog file exists and is well-formatted
+- [ ] Dependencies are clearly identified
+- [ ] PRD and documentation are up to date
+- [ ] Git workspace is clean
+
+### During Sprint
+- [ ] Monitor worklog files: `tmp/worklog/sprintagent-N.log`
+- [ ] Watch for failed agents (max 2 retries per phase)
+- [ ] Track completion status in backlogs
+
+### Post-Sprint
+- [ ] Review `tmp/worklog/sprint-<number>.log` summary
+- [ ] Verify backlog updates
+- [ ] Check final commits
+
+## Backlog Conversion Template
+
+### Convert Existing Backlogs
+```markdown
+# Add these sections to your existing backlog:
+
+## Sprint Planning Context
+- **Current Sprint:** [number] of [total]
+- **Phase:** [Foundation/Features/Integration]
+- **Parallelization:** [Independent/Sequential/Mixed]
+
+## Execution Phases
+### Foundation Phase
+- [ ] Feature dependencies that must be built first
+- [ ] Shared components and scaffolding
+
+### Features Phase  
+- [ ] Main feature implementations (parallel execution)
+- [ ] Independent feature modules
+
+### Integration Phase
+- [ ] Testing and validation
+- [ ] Documentation updates
+- [ ] Final polish and cleanup
+```
 
 ## Backlog File Format Templates
 
@@ -104,17 +156,27 @@
 
 ### Standard Template
 ```
-ROLE: Act as a principal software engineer specializing in [SPECIALIZATION 1] and [SPECIALIZATION 2]
+VARIABLES:
+$agentnumber: [ASSIGNED NUMBER]
+$worklog: `tmp/worklog/sprintagent-$agentnumber.log`
+
+ROLE: Act as a principal software engineer specializing in [SPECIALIZATIONS]
 
 CONTEXT:
+<optional PRD reference, if provided in backlog>
 - PRD: @ai_docs/prds/00_pacc_mvp_prd.md
+</optional PRD reference>
 - Helpful documentation: @ai_docs/knowledge/*
 
+FEATURE:
+[Assigned FEATURE, TASKS, and ACCEPTANCE CRITERIA from backlog file]
+
 INSTRUCTIONS:
-1. Implement this feature using test-driven-development. Write meaningful tests that will validate complete implementation of the feature.
-[Assigned FEATURE and TASKS from backlog file]
-2. Commit your work when you've finished.
-3. Report to the main agent with a summary of your work.
+1. Implement this feature using test-driven-development. Write meaningful, honest tests that will validate complete implementation of the feature.
+2. Do not commit your work.
+3. Log your progress in $worklog using markdown.
+4. When you've completed your work, summarize your changes along with a list of files you touched in $worklog
+5. Report to the main agent with a summary of your work.
 ```
 
 ### Specialized Templates by Domain
@@ -195,26 +257,51 @@ Phase 3: D (depends on B,C)
 ```
 **Use When:** Some dependencies exist, want to maximize parallelization
 
-## Sprint Execution Checklist
+## Rate Limit Management Tips
 
-### Pre-Sprint
-- [ ] Backlog file is complete and well-formatted
-- [ ] Dependencies are clearly identified
-- [ ] PRD and documentation are up to date
-- [ ] Git workspace is clean
+### Managing Claude Credits
+- **Foundation Phase:** Usually 1-2 agents, moderate usage
+- **Features Phase:** 3-6+ agents in parallel, **high usage**
+- **Integration Phase:** 1-3 agents, moderate usage
 
-### During Sprint
-- [ ] Monitor sub-agent progress regularly
-- [ ] Handle failed agents (max 2 retries)
-- [ ] Track completion status
-- [ ] Resolve blocking dependencies
+### Credit Conservation Strategies
+- Start with smaller sprints (1-3 features) to gauge usage
+- Break large features into smaller, focused tasks
+- Use specific specializations to reduce trial-and-error
+- Provide clear acceptance criteria to minimize rework
+- Monitor worklog files to catch issues early
 
-### Post-Sprint
-- [ ] Review and clean unstaged changes
-- [ ] Update project documentation
-- [ ] Update backlog with progress
-- [ ] Commit final changes
-- [ ] Generate sprint report
+### Warning Signs
+- Multiple agent retries (check task clarity)
+- Agents generating excessive code changes
+- Unclear feature specifications leading to rework
+
+## Worklog File Patterns
+
+### Individual Agent Logs
+```
+tmp/worklog/sprintagent-1.log    # Agent 1 progress
+tmp/worklog/sprintagent-2.log    # Agent 2 progress  
+tmp/worklog/sprintagent-N.log    # Agent N progress
+```
+
+### Sprint Summary Log
+```
+tmp/worklog/sprint-1.log         # Overall sprint summary
+tmp/worklog/sprint-2.log         # Next sprint summary
+```
+
+### Monitoring Commands
+```bash
+# Watch all agent progress
+tail -f tmp/worklog/sprintagent-*.log
+
+# Check specific agent
+cat tmp/worklog/sprintagent-3.log
+
+# Sprint summary
+cat tmp/worklog/sprint-1.log
+```
 
 ## Quick Examples by Project Type
 

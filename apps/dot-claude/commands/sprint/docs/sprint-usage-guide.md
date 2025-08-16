@@ -3,6 +3,22 @@
 ## Overview
 The `/sprint` command provides an intelligent sprint execution system that reads backlog files, analyzes roadmaps and dependencies, and launches parallel sub-agents to implement features simultaneously. It's designed for efficient, automated development sprints with comprehensive project management and git workflow integration.
 
+## ⚠️ Credit Consumption Warning
+
+**HIGH CREDIT USAGE ALERT**: The `/sprint` command launches multiple parallel AI agents that consume significant credits. Each sub-agent runs independently and can hit rate limits.
+
+**Credit Consumption Factors:**
+- **Multiple Agents**: Each feature launches a separate AI agent (2-6 agents typical)
+- **Long Execution**: Agents run for extended periods (30-120 minutes each)
+- **Retry Logic**: Failed agents restart up to 2 times, tripling potential usage
+- **Rate Limits**: Claude API rate limits may cause delays and timeouts
+
+**Recommendations:**
+- Start with small sprints (1-2 features) to gauge credit usage
+- Monitor your Claude credits before launching large sprints
+- Consider running sprints during off-peak hours to avoid rate limits
+- Use the worklog system to track progress and avoid duplicate work
+
 ## Command Syntax
 ```
 /sprint <backlog-file>
@@ -25,72 +41,237 @@ The `/sprint` command provides an intelligent sprint execution system that reads
 /sprint @backlog.md
 ```
 
-## Command Workflow: 5-Phase Execution
+## Setup Requirements
 
-### Phase 1: Backlog Analysis and Roadmap Review
+### Prerequisites
+**Git Repository Setup:**
+- Must be run in a git repository with clean working directory
+- Recommend creating a dedicated branch or worktree for sprint work
+- Ensure you're on the correct branch before starting
+
+**Branch/Worktree Strategy:**
+```bash
+# Option 1: Feature branch (recommended for most cases)
+git checkout -b sprint-feature-batch-1
+
+# Option 2: Git worktree (for parallel sprint execution)
+git worktree add ../project-sprint-1 main
+cd ../project-sprint-1
+```
+
+**Environment Validation:**
+- Clean git status: `git status` should show no uncommitted changes
+- All dependencies installed and working
+- Development server can start without errors
+- Tests can run successfully
+
+## 4-Step Execution Process
+
+### Step 1: Setup
+**What Happens:**
+- Creates `tmp/worklog` directory for agent logging
+- Adds worklog directory to .gitignore
+- Cleans up any previous sprint worklogs
+- Validates environment and git repository state
+
+**What You'll See:**
+```
+Setting up sprint workspace...
+Created tmp/worklog directory
+Added worklog to .gitignore
+Cleaned previous sprint logs
+Validating git repository state... ✓ Clean
+```
+
+### Step 2: Plan the Sprint
 **What Happens:**
 - Reads and parses the specified backlog file
 - Analyzes current roadmap progress and completed features
 - Identifies available features ready for implementation
 - Evaluates dependencies between features
-- Determines parallelization opportunities
+- Assigns sub-agents to specializations and execution phases
+- Creates execution plan with 3 phases: Foundation → Features → Integration
+
+**Agent Assignment Process:**
+- **Specialization Matching**: Agents receive roles matching feature requirements
+- **Phase Assignment**: Agents distributed across Foundation/Features/Integration phases
+- **Numbering**: Each agent gets incremental number for worklog tracking
+- **Dependency Analysis**: Ensures proper execution order
 
 **What You'll See:**
 ```
-Reading backlog file: @ai_docs/backlogs/mvp-sprint-1.md
+Reading backlog: @ai_docs/backlogs/mvp-sprint-1.md
 Analyzing roadmap progress...
 Found 8 features total, 3 completed, 5 remaining
-Identified 3 features ready for parallel implementation
-Dependencies analyzed: Feature B depends on Feature A completion
+Planning execution phases:
+  Foundation Phase: 1 agent (database setup)
+  Features Phase: 3 agents (auth, catalog, search)
+  Integration Phase: 1 agent (testing, docs)
+Agent assignments created with worklogs: sprintagent-1.log through sprintagent-5.log
 ```
 
-### Phase 2: Sprint Planning and Agent Assignment
+### Step 3: Execute the Sprint
+Executes three sequential phases with parallel agents within each phase:
+
+#### Phase 1: Foundation (Dependencies & Scaffolding)
+**Purpose**: Build shared dependencies, scaffolding, and infrastructure that other features need
+**Execution**: Sequential (must complete before Features phase)
+**Typical Work**: Database schemas, shared utilities, base components, authentication setup
+
 **What Happens:**
-- Selects optimal features for the current sprint based on dependencies
-- Plans parallel execution strategy
-- Assigns specializations to each feature (backend, frontend, database, etc.)
-- Prepares context and task specifications for each sub-agent
-- Validates that all prerequisites are met
+- Launches foundation agents and waits for completion
+- Reads agent worklogs and commits foundation work
+- Updates backlog with completed foundation tasks
+- **Credit Impact**: 1-2 agents running for 15-45 minutes each
 
-**Sprint Selection Criteria:**
-- Features with no blocking dependencies
-- Features that can be parallelized effectively
-- Optimal team size (typically 2-4 parallel agents)
-- Estimated complexity and time considerations
+#### Phase 2: Features (Main Execution)
+**Purpose**: Implement the core features of the sprint
+**Execution**: Parallel (all agents run simultaneously)
+**Typical Work**: Feature implementation, API endpoints, UI components, business logic
 
-### Phase 3: Parallel Sub-Agent Launch
 **What Happens:**
-- Launches all assigned sub-agents simultaneously using the Task tool
-- Each agent receives specialized context and role assignment
-- Agents work independently on their assigned features
-- Parallel execution begins across all selected features
+- Launches ALL feature agents simultaneously in parallel
+- Waits for ALL agents to complete successfully
+- Reads all agent worklogs and commits feature work
+- Updates backlog with completed features
+- **Credit Impact**: 2-6 agents running simultaneously for 30-90 minutes each
 
-**Sub-Agent Assignments Include:**
-- Sprint context and overall goals
-- Specific feature and task details from backlog
-- Role specialization (e.g., "backend API development", "React frontend")
-- Quality standards and testing requirements
-- PRD references and documentation links
+#### Phase 3: Integration (Testing & Polish)
+**Purpose**: Integration testing, documentation, and final polish
+**Execution**: Parallel within phase, sequential after Features
+**Typical Work**: End-to-end tests, documentation updates, performance optimization
 
-### Phase 4: Execution Monitoring and Management
 **What Happens:**
-- Monitors progress of all running sub-agents
-- Handles agent failures and recovery procedures
-- Manages communication between dependent agents
-- Tracks completion status across all features
+- Launches integration agents after Features phase completes
+- Handles testing, documentation, and final polish work
+- Commits integration work and updates backlog
+- **Credit Impact**: 1-2 agents running for 15-30 minutes each
 
-**Failure Recovery:**
-- Automatic restart for failed agents (up to 2 retries)
-- Context preservation for resumed work
-- Escalation to user after repeated failures
+**Error Handling Per Phase:**
+- Failed agents automatically restart (up to 2 retries per agent)
+- If any agent fails 3 times, sprint stops with error report
+- Worklog preservation for debugging and recovery
 
-### Phase 5: Sprint Completion and Cleanup
+### Step 4: Finalize and Report
 **What Happens:**
-- Reviews all unstaged changes and removes temporary files
-- Updates project documentation (README, etc.)
-- Updates backlog file with completed tasks and progress notes
-- Makes final commits for clean workspace
-- Generates comprehensive sprint report
+- Scans project for temporary files and cleanup
+- Updates backlog file with final sprint progress
+- Updates project documentation (CLAUDE.md)
+- Makes final cleanup commits
+- Generates comprehensive sprint summary report
+
+**Final Deliverables:**
+- Clean git history with meaningful commits per phase
+- Updated backlog reflecting completed work
+- Sprint summary in `tmp/worklog/sprint-<number>.log`
+- Updated project documentation
+
+## Worklog System
+
+The sprint command uses a comprehensive worklog system for tracking agent progress and enabling recovery:
+
+### Worklog Structure
+```
+tmp/worklog/
+├── sprintagent-1.log    # Foundation agent worklog
+├── sprintagent-2.log    # Feature agent 1 worklog
+├── sprintagent-3.log    # Feature agent 2 worklog
+├── sprintagent-4.log    # Integration agent worklog
+└── sprint-1.log         # Overall sprint summary
+```
+
+### Agent Worklog Contents
+Each agent maintains a detailed log with:
+- **Progress Updates**: Real-time implementation progress
+- **Files Touched**: Complete list of modified/created files
+- **Challenges**: Problems encountered and solutions
+- **Test Results**: TDD progress and test outcomes
+- **Summary**: Final summary of completed work
+
+### Sprint Summary Log
+The main sprint log contains:
+- **Phase Summaries**: What was accomplished in each phase
+- **Commit References**: Git commits made during the sprint
+- **Agent Performance**: Success/failure rates and timing
+- **Backlog Updates**: Features and tasks completed
+
+### Using Worklogs for Recovery
+- **Resuming Failed Sprints**: Worklog shows exactly where each agent stopped
+- **Debugging Issues**: Detailed error logs and context preservation
+- **Progress Tracking**: Monitor sprint progress in real-time
+- **Credit Optimization**: Avoid restarting completed work
+
+## Backlog Preparation
+
+### Converting Plans to Backlog Format
+Most projects start with high-level plans or PRDs. Here's how to convert them to sprint-ready backlogs:
+
+#### Step 1: Extract Core Features
+From your PRD/plan, identify distinct features:
+```markdown
+# Original Plan
+"Build user authentication with registration, login, and profile management"
+
+# Converted to Features
+### Feature: User Registration System
+### Feature: User Login System  
+### Feature: User Profile Management
+```
+
+#### Step 2: Define Dependencies
+Map which features depend on others:
+```markdown
+### Feature: User Registration System
+**Dependencies:** None
+**Status:** Ready
+
+### Feature: User Login System
+**Dependencies:** User Registration System
+**Status:** Blocked
+
+### Feature: User Profile Management
+**Dependencies:** User Login System
+**Status:** Blocked
+```
+
+#### Step 3: Break Down Into Tasks
+Convert feature descriptions into 3-5 specific, actionable tasks:
+```markdown
+### Feature: User Registration System
+**Tasks:**
+1. Create user model with email, password hash, and timestamps
+2. Implement registration endpoint with input validation
+3. Add email verification system with token generation
+4. Create registration form component with error handling
+5. Write comprehensive unit tests for registration flow
+```
+
+#### Step 4: Add Specializations
+Assign technical specializations for agent assignment:
+```markdown
+### Feature: User Registration System
+**Specialization:** backend, database, api
+**Priority:** High
+```
+
+#### Step 5: Set Initial Status
+Mark features as Ready/Blocked based on dependencies:
+```markdown
+### Feature: User Registration System
+**Status:** Ready  # No dependencies, can start immediately
+
+### Feature: User Profile Management
+**Status:** Blocked  # Depends on registration being complete
+```
+
+### Backlog Preparation Checklist
+- [ ] All features broken down into 3-5 specific tasks
+- [ ] Dependencies clearly mapped between features
+- [ ] At least 2-3 features marked as "Ready" for first sprint
+- [ ] Specializations assigned (backend, frontend, database, etc.)
+- [ ] Priorities set (High/Medium/Low)
+- [ ] Acceptance criteria included in task descriptions
+- [ ] Testing requirements specified for each feature
 
 ## Backlog File Format Requirements
 
@@ -421,23 +602,107 @@ Sprint Progress: 3/4 agents active
 **Status:** Ready
 ```
 
-### Git Workflow Integration
+### Git Workflow and Commit Strategy
 **Pre-Sprint Setup:**
 - Ensure clean working directory (`git status` should be clean)
 - Create feature branch for sprint if needed
 - Update from main branch to get latest changes
 
-**During Sprint:**
-- Each agent commits work independently
-- Meaningful commit messages with feature context
-- Regular intermediate commits to prevent work loss
+**During Sprint - Per-Phase Commits:**
+- **Foundation Phase**: Single commit after all foundation agents complete
+- **Features Phase**: Single commit after all feature agents complete
+- **Integration Phase**: Single commit after all integration agents complete
+- **Finalization**: Final cleanup commit
+
+**Commit Message Format:**
+```bash
+git commit -m "feat: foundation phase - database schema and auth setup
+
+- Added user authentication schema (Agent 1)
+- Set up database migrations and seeding
+- Created shared utility functions
+
+Sprint 1 - Foundation Phase Complete"
+```
+
+**Individual Agent Work:**
+- Agents do NOT commit their work (per command instructions)
+- Work is staged and committed by main sprint coordinator
+- Worklogs track individual agent contributions
+- Clean, meaningful commits per phase rather than per agent
 
 **Post-Sprint:**
-- Clean up any temporary or debugging code
-- Squash commits if needed for cleaner history
-- Update documentation to reflect new features
+- All work already committed in organized phase-based commits
+- No need for squashing - commits are already clean
+- Update documentation reflected in final commit
 
-## Advanced Usage Patterns
+## Advanced Patterns
+
+### "Kage-bunshin-no-jutsu" - Multiple Parallel Sprints
+For large projects with independent modules, you can run multiple sprints in parallel using git worktrees:
+
+**Setup Multiple Sprint Environments:**
+```bash
+# Create separate worktrees for parallel sprints
+git worktree add ../project-sprint-frontend main
+git worktree add ../project-sprint-backend main
+git worktree add ../project-sprint-mobile main
+
+# Run sprints in parallel in different terminals
+# Terminal 1:
+cd ../project-sprint-frontend
+/sprint @ai_docs/backlogs/frontend-sprint-1.md
+
+# Terminal 2: 
+cd ../project-sprint-backend
+/sprint @ai_docs/backlogs/backend-sprint-1.md
+
+# Terminal 3:
+cd ../project-sprint-mobile
+/sprint @ai_docs/backlogs/mobile-sprint-1.md
+```
+
+**⚠️ Credit Consumption Warning for Parallel Sprints:**
+- **Exponential Credit Usage**: Each sprint uses 2-6 agents, parallel sprints multiply this
+- **Rate Limit Conflicts**: Multiple sprints may compete for API rate limits
+- **Recommended Limit**: Maximum 2 parallel sprints to avoid quota issues
+- **Monitor Carefully**: Check credit usage frequently during parallel execution
+
+### Sprint Size Optimization for Credit Management
+**Small Sprints (1-2 features):**
+- Lower credit consumption
+- Faster feedback loops
+- Less risk of rate limit issues
+- Easier to debug and recover
+
+**Medium Sprints (3-4 features):**
+- Balanced efficiency and risk
+- Good parallelization opportunities
+- Moderate credit consumption
+- Recommended for most cases
+
+**Large Sprints (5+ features):**
+- High credit consumption
+- Higher risk of agent failures
+- Longer execution times
+- Use only for well-tested workflows
+
+### Rate Limit Management Strategies
+**Timing Optimization:**
+- Run sprints during off-peak hours (nights, weekends)
+- Stagger sprint execution if running multiple sprints
+- Monitor Claude API status for known issues
+
+**Sprint Batching:**
+```markdown
+# Instead of one large sprint:
+/sprint @backlogs/mega-sprint.md  # 8 features, 6 agents, 4+ hours
+
+# Break into smaller sprints:
+/sprint @backlogs/sprint-1-foundation.md  # 2 features, 2 agents, 1 hour
+/sprint @backlogs/sprint-2-features.md    # 3 features, 3 agents, 1.5 hours  
+/sprint @backlogs/sprint-3-polish.md      # 3 features, 2 agents, 1 hour
+```
 
 ### Multi-Sprint Coordination
 For large projects, coordinate multiple sprints:
@@ -568,7 +833,35 @@ When sprints fail repeatedly:
 3. **Review Environment**: Verify development setup and tool availability
 4. **Simplify Features**: Break complex features into smaller, focused tasks
 5. **Test Individually**: Try running single features manually to identify issues
+6. **Check Credit Limits**: Ensure sufficient credits before launching large sprints
+7. **Review Worklogs**: Examine agent worklogs for patterns in failures
+
+### Credit and Rate Limit Troubleshooting
+
+#### "Rate Limit Exceeded" Errors
+**Problem**: Agents failing due to Claude API rate limits
+**Solutions**:
+- Wait 10-15 minutes before retrying
+- Reduce sprint size (fewer parallel agents)
+- Run sprints during off-peak hours
+- Check Claude API status page for known issues
+
+#### "Insufficient Credits" Errors
+**Problem**: Account running out of credits mid-sprint
+**Solutions**:
+- Check credit balance before starting sprints
+- Use smaller sprint sizes to conserve credits
+- Purchase additional credits before large sprints
+- Monitor credit usage during execution
+
+#### Agent Timeout Issues
+**Problem**: Agents taking too long and timing out
+**Solutions**:
+- Break large features into smaller tasks
+- Reduce complexity of individual tasks
+- Check if agents are waiting for rate limits
+- Verify development environment is properly set up
 
 ---
 
-**Remember**: The `/sprint` command is designed for efficient, automated development sprints. Success depends on well-structured backlog files, clear feature specifications, and proper dependency management. When in doubt, start with smaller, simpler features to build confidence before tackling complex multi-agent sprints.
+**Remember**: The `/sprint` command is designed for efficient, automated development sprints with significant credit consumption. Success depends on well-structured backlog files, clear feature specifications, proper dependency management, and adequate credit budgeting. When in doubt, start with smaller, simpler features to build confidence and understand credit usage patterns before tackling complex multi-agent sprints.

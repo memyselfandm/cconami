@@ -7,7 +7,7 @@ This directory contains custom slash commands for Claude Code. Each command is o
 | Command | Description | Documentation | Examples |
 |---------|-------------|---------------|----------|
 | `/prd-meeting` | Start an interactive PRD writing session | [Usage Guide](./prd-meeting/docs/prd-meeting-usage-guide.md) | [Example Output](./prd-meeting/docs/prd-meeting-example-output.md) |
-| `/sprint` | Execute parallel feature development sprints from backlog files | [Usage Guide](./sprint/docs/sprint-usage-guide.md) | [Example Output](./sprint/docs/sprint-example-output.md) |
+| `/sprint` | (*Run from PLAN mode*) Execute parallel feature development sprints from backlog files | [Usage Guide](./sprint/docs/sprint-usage-guide.md) | [Example Output](./sprint/docs/sprint-example-output.md) |
 
 ## Command Structure
 
@@ -46,12 +46,17 @@ command-name/
 To use any command, simply type the command name in Claude Code:
 ```
 /prd-meeting <feature-description>
+
+# Switch to PLAN mode first, then:
 /sprint @backlog.md
 ```
 
 For commands with file references:
 ```
 /prd-meeting @path/to/existing-prd.md
+
+# Note: Sprint command requires PLAN mode and may consume significant credits
+# Switch to PLAN mode first, then:
 /sprint @backlog.md
 ```
 
