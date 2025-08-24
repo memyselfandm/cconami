@@ -14,7 +14,15 @@ Commands for product management, planning, and operations.
 - `/prd-meeting` - Start an interactive PRD writing session
 - `/sprint` - (*Run from PLAN mode*) Execute parallel feature development sprints
 
-**Linear Integration** - Sprint management with Linear
+**Linear Integration** - Complete Linear workflow automation
+
+*Issue Refinement Suite* - Transform ideas into AI-ready issues (dual-mode: refine OR create)
+- `/refine-epic` - Transform issues into comprehensive epics with full PRD template
+- `/refine-epic-lite` - Quick epic creation with minimal 1-pager template
+- `/refine-feature` - Refine features with right-sizing logic and subtask generation
+- `/refine-issue` - Generic refinement for tasks, bugs, and chores with custom templates
+
+*Sprint Management* - Parallel AI agent execution
 - `/epic-breakdown` - (*Run from PLAN mode*) Analyze epic and create features/tasks
 - `/epic-prep` - (*Run from PLAN mode*) Prepare epic for sprint execution
 - `/sprint-plan` - (*Run from PLAN mode*) Create optimized sprint project
