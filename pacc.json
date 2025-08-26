@@ -1,0 +1,35 @@
+{
+  "name": "mmm-cconami",
+  "version": "1.0.0",
+  "description": "MeMyselfAndM's Claude Code Cheats Repo",
+  "author": "cconami",
+  "repository": "https://github.com/memyselfandm/cconami",
+  "extensions": {
+    "commands": [
+      "apps/dot-claude/commands/product/ops/linear/epic-breakdown/epic-breakdown.md",
+      "apps/dot-claude/commands/product/ops/linear/epic-prep/epic-prep.md",
+      "apps/dot-claude/commands/product/ops/linear/refine-epic/refine-epic.md",
+      "apps/dot-claude/commands/product/ops/linear/refine-epic-lite/refine-epic-lite.md",
+      "apps/dot-claude/commands/product/ops/linear/refine-feature/refine-feature.md",
+      "apps/dot-claude/commands/product/ops/linear/refine-issue/refine-issue.md",
+      "apps/dot-claude/commands/product/ops/linear/sprint-execute/sprint-execute.md",
+      "apps/dot-claude/commands/product/ops/linear/sprint-plan/sprint-plan.md",
+      "apps/dot-claude/commands/product/ops/linear/sprint-status/sprint-status.md",
+      "apps/dot-claude/commands/product/ops/prd-meeting/prd-meeting.md",
+      "apps/dot-claude/commands/product/ops/sprint/sprint.md",
+      "apps/dot-claude/commands/uiux/ui_design/design_brainstorm/design-brainstorm.md",
+      "apps/dot-claude/commands/eng/dev/git_status.md"
+    ],
+    "agents": [
+      "apps/dot-claude/agents/subagent-architect/subagent-architect.md"
+    ]
+  },
+  "metadata": {
+    "tags": ["productivity", "linear", "project-management", "sprint-planning"],
+    "license": "MIT",
+    "requirements": {
+      "claude-code": ">=1.0.0",
+      "mcp-server": "linear"
+    }
+  }
+}
