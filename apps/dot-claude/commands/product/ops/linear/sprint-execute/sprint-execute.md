@@ -16,7 +16,7 @@ The command will always maximize concurrency, identifying independent work strea
 **Agent Assignment Protocol:**
 Each sub-agent receives:
 1. **Sprint Context**: Summary of the overall sprint goals and related issues
-2. **Linear Issue Context**: Assigned Linear issue(s) with full descriptions, acceptance criteria, and labels
+2. **Linear Issue Context**: Assigned Linear issue(s) (and sub-issues) with full descriptions, acceptance criteria, and labels
 3. **Specialization Directive**: Explicit role keywords based on issue labels and content
 4. **Quality Standards**: Requirements from Linear issue descriptions and comments
 5. **Linear Issue IDs**: For updating issue state and adding completion comments
@@ -37,18 +37,33 @@ CONTEXT:
 - Sprint Goals: [OVERALL SPRINT OBJECTIVES]
 
 FEATURES TO IMPLEMENT:
+Main Issue: $mainIssueId - $mainIssueTitle
+Subtasks (update these to "Done" when complete):
+- $subtaskId1 - $subtaskTitle1 (parentId: $mainIssueUUID)
+- $subtaskId2 - $subtaskTitle2 (parentId: $mainIssueUUID)
+
 [Linear issue descriptions, acceptance criteria, and technical requirements]
 
 INSTRUCTIONS:
 1. Implement the assigned Linear issues using test-driven development
 2. Write meaningful tests that validate complete implementation
-3. Do not commit your work
+3. Do not git commit your work
 4. Use Linear MCP to add progress comments to your assigned issues:
-   - Post "🤖 Agent-$agentnumber starting work" when beginning
-   - Post progress updates as you complete major milestones
-   - Post final summary with files modified when complete
+   - Comment "🤖 Agent-$agentnumber starting work" when beginning
+   - Comment progress updates to the Linear issue as you complete major milestones
+   - Update status of sub-issues (parentId: $mainIssueUUID) to "Done" as you complete subtasks
+   - Comment final summary with files modified when complete
 5. Update Linear issue status to "In Review" when complete
-6. Report completion with a summary of implemented Linear issues
+6. Use this format for your final Linear comment:
+   ```
+   🤖 Agent-$agentnumber Complete
+   Files Modified:
+   - path/to/file1.ts
+   - path/to/file2.js
+   Tests: Added X, All passing
+   Summary: [Brief description of what was implemented]
+   ```
+7. Report completion with a summary of implemented Linear issues
 ```
 
 ## Instructions
@@ -66,6 +81,9 @@ INSTRUCTIONS:
 2. **Fetch Sprint Issues**:
    - Use `mcp__linear__list_issues` with project filter
    - Include all issues in "Backlog", "Planned", or "Todo" states
+   - For each issue with children:
+     - Fetch subtasks using parent relationship
+     - Map subtask IDs to parent IDs for agents
    - Fetch detailed information for each issue including:
      - Description and acceptance criteria
      - Labels (especially phase:* and area:* labels)
@@ -103,7 +121,16 @@ INSTRUCTIONS:
            groups[area] = []
        groups[area].append(issue)
    
-   # Assign 1-3 related issues per agent
+   # Assign 1-3 related issues per agent with subtask mapping
+   agent_assignment = {
+       "main_issues": [issue.id for issue in group],
+       "subtasks": {
+           subtask.id: parent.uuid
+           for parent in group
+           for subtask in parent.subtasks
+       },
+       "specialization": area
+   }
    # Balance complexity across agents
    ```
 
@@ -132,7 +159,14 @@ INSTRUCTIONS:
    - Launch foundation agents sequentially
    - Each agent posts starting comment to Linear
    - On failure: retry up to 2 times
-   - On success: Update issues to "In Review" state
+   - On success:
+      - Run `git status` to check for uncommitted changes
+      - Parse Linear comments from agents for file lists
+      - Stage all modified files: `git add .`
+      - Make commits with Linear references:
+        `git commit -m "Implement ISSUE-123, ISSUE-124: Description"`
+      - Verify clean working directory: `git status`
+      - Update issues to "In Review" state
 
 #### Phase 2: Features (Maximum Parallel Execution)
 1. **CRITICAL PARALLELIZATION REQUIREMENT**:
@@ -158,12 +192,17 @@ INSTRUCTIONS:
    ```
 
 3. **Monitor Parallel Execution**:
-   - Poll Linear for issue status updates
    - Track agent progress via Linear comments
    - Retry failed agents up to 2 times
    - Wait for ALL agents to complete
 
 4. **Update Linear on Completion**:
+   - Run `git status` to check for uncommitted changes
+   - Parse Linear comments from agents for file lists
+   - Stage all modified files: `git add .`
+   - Make commits with Linear references:
+     `git commit -m "Implement ISSUE-123, ISSUE-124: Description"`
+   - Verify clean working directory: `git status`
    - Move completed issues to "Done" state
    - Add summary comments with implementation details
    - Note any issues that couldn't be completed
@@ -222,8 +261,14 @@ INSTRUCTIONS:
    
    ### Completed Issues
    - [ISSUE-KEY]: [Title] ✅
+     - [SUBTASK-KEY]: [Subtask Title] ✅
+     - [SUBTASK-KEY]: [Subtask Title] ✅
    - [ISSUE-KEY]: [Title] ✅
    - [Continue for all completed...]
+   
+   ### Subtask Completion Rate
+   - Total Subtasks: [COUNT]
+   - Completed: [COUNT] ([PERCENTAGE]%)
    
    ### Blocked/Incomplete Issues
    - [ISSUE-KEY]: [Title] - [Reason]
@@ -243,11 +288,13 @@ INSTRUCTIONS:
 ```python
 For each failed agent:
   if retry_count < 2:
-    - Check Linear for any partial progress
-    - Relaunch agent with same assignment
+    - Check Linear for any partial progress on main issue
+    - Check subtask completion status
+    - Relaunch agent with uncompleted subtasks only
     - Note retry in Linear comments
   else:
     - Mark issues as "Blocked"
+    - Mark incomplete subtasks as "Blocked"
     - Add comment explaining failure
     - Continue with other agents
 ```
