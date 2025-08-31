@@ -10,6 +10,7 @@ The Linear command suite provides end-to-end sprint management capabilities:
 |---------|---------|-------|
 | **epic-breakdown** | Analyze epic and create features/tasks hierarchy | Planning |
 | **epic-prep** | Ensure epic is ready for sprint execution | Preparation |
+| **issue-execute** | Execute specific Linear issues ad-hoc with AI agents | Execution |
 | **sprint-plan** | Create optimized sprint project from backlog | Planning |
 | **sprint-execute** | Execute sprint with parallel AI agents | Execution |
 | **sprint-status** | Monitor sprint progress and agent activity | Monitoring |
@@ -52,7 +53,42 @@ graph TD
 - Provides sprint planning recommendations
 - Reports parallelization analysis
 
-### 2. epic-prep
+### 2. issue-execute
+**Purpose**: Execute specific Linear issues by ID with automatic dependency resolution, phase detection, and parallel subagent orchestration. Perfect for ad-hoc development, hot fixes, or executing individual features outside of sprint cycles.
+
+**Usage**:
+```bash
+/issue-execute --issue <id>                # Single issue
+/issue-execute --issues <id1,id2,id3>      # Multiple issues
+/issue-execute --team <team-name>          # Team context
+/issue-execute --force                     # Execute despite blockers
+/issue-execute --dry-run                   # Preview execution plan
+```
+
+**Key Features**:
+- Direct issue execution without sprint/project context
+- Automatic dependency and blocker resolution
+- Smart phase detection based on labels and dependencies
+- Maximum parallelization for independent issues
+- Real-time Linear progress tracking
+- Subtask handling and status updates
+- Retry logic for failed agents
+
+**Execution Strategy**:
+- Fetches complete issue details including subtasks
+- Analyzes blocking relationships and dependencies
+- Assigns issues to foundation/features/integration phases
+- Groups related issues by technical area
+- Launches parallel agents for independent work
+- Updates Linear with progress comments and status changes
+
+**Output**:
+- Execution plan preview (with --dry-run)
+- Real-time progress updates in Linear
+- Agent assignment and specialization details
+- Final summary with completion statistics
+
+### 3. epic-prep
 **Purpose**: Ensures an epic is properly structured with features, tasks, and metadata for sprint execution.
 
 **Usage**:
@@ -73,7 +109,7 @@ graph TD
 - Metadata corrections applied
 - Sprint execution recommendations
 
-### 3. sprint-plan
+### 4. sprint-plan
 **Purpose**: Breaks down a Linear epic into multiple focused sprint projects, prioritizing parallelization and avoiding dependency clashes.
 
 **Usage**:
@@ -100,7 +136,7 @@ graph TD
 - Clear execution order with dependency map
 - Ready for sequential sprint execution
 
-### 4. sprint-execute
+### 5. sprint-execute
 **Purpose**: Executes a sprint by launching parallel AI agents to implement Linear issues.
 
 **Usage**:
@@ -127,7 +163,7 @@ graph TD
 - Specializations based on Linear labels
 - Incremental agent numbering for tracking
 
-### 5. sprint-status
+### 6. sprint-status
 **Purpose**: Monitors sprint progress, active agents, and blocked issues.
 
 **Usage**:
@@ -386,11 +422,14 @@ Sprint-execute creates commits with:
 |----------|---------------|
 | New epic needs structure | `epic-prep` → `epic-breakdown` |
 | Epic ready for sprint | `sprint-plan` → `sprint-execute` |
+| Single hot fix needed | `issue-execute --issue <id>` |
+| Multiple features to implement | `issue-execute --issues <ids>` |
 | Check current progress | `sprint-status` |
 | Epic missing features | `epic-prep --execute` |
 | Create features from epic | `epic-breakdown` |
 | Start next sprint | `sprint-plan` → `sprint-execute` |
 | Debug blocked sprint | `sprint-status --detailed` |
+| Ad-hoc issue execution | `issue-execute --dry-run` → `issue-execute` |
 
 ## 📝 Example Linear Epic Structure
 

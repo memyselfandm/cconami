@@ -66,6 +66,10 @@ cconami-dev/
 
 See [COMMANDS_README.md](./apps/dot-claude/commands/COMMANDS_README.md) for available custom slash commands and their documentation.
 
+## Subagents
+
+See [SUBAGENTS_README.md](./apps/dot-claude/agents/SUBAGENTS_README.md) for specialized AI subagents and their capabilities.
+
 ## Quick Start: Idea to Execution
 
 ```bash
