@@ -1,10 +1,39 @@
 ---
 allowed-tools: mcp__linear__get_issue, mcp__linear__create_issue, mcp__linear__update_issue, mcp__linear__list_issues, mcp__linear__list_teams
 argument-hint: [issue-id-or-url] [--team <name>] [--skip-validation]
-description: Quick epic refinement with minimal 1-pager template - refine existing or create new from ideas
+description: (**DEPRECATED**) Use /refine-epic --lite instead - lite template now integrated into main command
 ---
 
-# /refine-epic-lite - Lightweight Epic Refinement (1-Pager)
+# ⚠️ DEPRECATED: Lightweight Epic Refinement (1-Pager)
+
+> **⚠️ This command has been deprecated and consolidated into `/refine-epic`.**  
+> The refine-epic command now includes the lite template via the `--lite` flag.  
+> Use `/refine-epic [issue-id] --lite` instead.
+
+---
+
+## Migration Guide
+
+**Old command:**
+```bash
+/refine-epic-lite CCC-123
+/refine-epic-lite --team "Chronicle"
+```
+
+**New command:**
+```bash
+/refine-epic CCC-123 --lite
+/refine-epic --team "Chronicle" --lite
+```
+
+**Additional benefits in the consolidated command:**
+- Combined with `--analyze-codebase` for technical context
+- Switch between comprehensive and lite templates seamlessly
+- Better integration with the epic workflow
+
+---
+
+## Legacy Documentation (For Reference Only)
 
 ## Command Purpose
 Transform a basic Linear epic into a lean, focused specification using a minimal 1-page template. Perfect for personal projects, MVPs, hackathons, and situations where speed matters more than comprehensive documentation.
@@ -436,4 +465,26 @@ Consider using `/refine-epic` instead when:
 
 ---
 
-*Part of the linear:refine-[type] command suite for AI-optimized issue management*
+## Complete Migration Examples
+
+**Refine existing epic with lite template:**
+```bash
+# Old: /refine-epic-lite CCC-123
+# New:
+/refine-epic CCC-123 --lite
+```
+
+**Create new lite epic:**
+```bash  
+# Old: /refine-epic-lite --team "Chronicle"
+# New:
+/refine-epic --team "Chronicle" --lite
+```
+
+**Combine lite template with codebase analysis:**
+```bash
+# New feature not available in old command:
+/refine-epic CCC-123 --lite --analyze-codebase
+```
+
+*This was part of the linear:refine-[type] command suite - now consolidated for better workflow integration*

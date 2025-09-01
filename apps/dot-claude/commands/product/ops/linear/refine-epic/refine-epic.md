@@ -1,27 +1,92 @@
 ---
-allowed-tools: mcp__linear__get_issue, mcp__linear__list_issues, mcp__linear__create_issue, mcp__linear__update_issue, mcp__linear__list_comments, mcp__linear__list_teams, mcp__linear__list_issue_labels
-argument-hint: <issue-id-or-url> [--interactive] [--output-format <type>] [--validate-only]
-description: Transform a Linear issue into a comprehensive, shovel-ready epic using AI-optimized PRD template
+allowed-tools: mcp__linear__get_issue, mcp__linear__list_issues, mcp__linear__create_issue, mcp__linear__update_issue, mcp__linear__list_comments, mcp__linear__list_teams, mcp__linear__list_issue_labels, Task, Glob, Grep
+argument-hint: [issue-id-or-url] [--lite] [--analyze-codebase] [--interactive] [--team <name>] [--title <text>]
+description: Transform a Linear issue into a comprehensive epic using full PRD or lite 1-pager template, with optional codebase analysis
 ---
 
 # /refine-epic - Convert Linear Issue to Shovel-Ready Epic
 
 ## Command Purpose
-Transform a minimal Linear issue into a comprehensive, AI-ready epic using the full AI-optimized Epic/PRD template. This ensures AI coding agents have maximum context for epic breakdown, sprint planning, and implementation.
+Transform a minimal Linear issue into a comprehensive, AI-ready epic using either the full AI-optimized Epic/PRD template or a lightweight 1-pager template. Optionally enhance with codebase analysis for better technical grounding. This ensures AI coding agents have maximum context for epic breakdown, sprint planning, and implementation.
 
 ## Usage
-```
-/refine-epic <issue-id-or-url> [options]
+
+### Multi-Mode Operation
+```bash
+# Mode 1: Refine existing epic (default: comprehensive)
+/refine-epic CCC-123 [options]
+
+# Mode 2: Refine with lightweight template
+/refine-epic CCC-123 --lite
+
+# Mode 3: Refine with codebase analysis
+/refine-epic CCC-123 --analyze-codebase
+
+# Mode 4: Combined lite + analysis
+/refine-epic CCC-123 --lite --analyze-codebase
+
+# Mode 5: Create new epic from scratch
+/refine-epic --team "Team Name" --title "Epic Title"
+
+# Mode 6: Interactive mode for guided refinement
+/refine-epic CCC-123 --interactive
 ```
 
 ### Parameters
-- **issue-id-or-url** (required): Linear issue identifier (e.g., "PROJ-123") or full Linear URL
-- **--team <name>** (optional): Target Linear team if different from source issue
+- **issue-id-or-url** (optional): Linear issue ID or URL. If omitted with --team, creates new epic
+- **--lite** (optional): Use lightweight 1-pager template instead of comprehensive PRD
+- **--analyze-codebase** (optional): Add lightweight codebase analysis to inform epic refinement
+- **--team <name>** (optional): Target Linear team (required for create mode)
+- **--title <text>** (optional): Initial title for new epic (create mode)
 - **--interactive** (optional): Step through template sections with guided prompts
-- **--output-format <type>** (optional): Output format - `epic-issue` (default), `notion-page`, `markdown-file`
 - **--validate-only** (optional): Check issue accessibility and preview current content
+- **--skip-validation** (optional): Skip readiness checks for faster refinement (lite mode only)
+
+## Template Selection
+
+### Choose Template Based on Flags
+
+**Comprehensive PRD Template (default):**
+- Use when --lite flag is NOT present
+- Best for production features, multi-team work
+- 12+ sections with deep detail
+- 30+ minutes to complete
+
+**Lightweight 1-Pager Template (--lite):**
+- Use when --lite flag IS present
+- Perfect for MVPs, personal projects, hackathons
+- 6 essential sections only
+- 5 minutes to complete
+
+**Codebase Analysis Enhancement (--analyze-codebase):**
+- Works with either template
+- Adds lightweight technical context
+- Launches parallel analysis agents
+- Enhances Technical Approach section
 
 ## Step-by-Step Process
+
+### Step 0: Mode Detection
+```python
+# Determine operation mode
+if issue_id_provided:
+    mode = "refine"
+    issue = mcp__linear__get_issue(issue_id)
+else:
+    mode = "create"
+    if not team_provided:
+        error("--team required for create mode")
+
+# Select template
+if lite_flag:
+    template = "lite"  # 1-pager
+else:
+    template = "comprehensive"  # Full PRD
+
+# Enable analysis if requested
+if analyze_codebase_flag:
+    enable_codebase_analysis = True
+```
 
 ### 1. Issue Analysis & Context Gathering
 **Retrieve and analyze the source Linear issue:**
@@ -45,6 +110,8 @@ Transform a minimal Linear issue into a comprehensive, AI-ready epic using the f
 
 ### 2. Interactive Template Population
 
+#### For Comprehensive Template (Default)
+
 **For Refine Mode:**
 - Analysis of existing issue content
 - Intelligent prompts for missing critical information
@@ -63,6 +130,31 @@ Guide through all template sections interactively:
 8. Integration Points (if applicable)
 9. Testing Strategy (optional)
 10. Rollout Plan (optional)
+
+#### For Lite Template (--lite Flag)
+
+**Quick 1-Pager Focus:**
+1. Problem Statement (2-3 sentences max)
+2. Solution Overview (5 key points)
+3. Success Criteria (5-6 measurable items)
+4. Technical Approach (1 paragraph, enhanced with --analyze-codebase)
+5. Feature Breakdown (3-6 features)
+6. Risks & Dependencies (only critical)
+
+**Interactive Prompts (Lite Mode):**
+```
+For Refine Mode - Only ask for missing essentials:
+❓ What problem does this solve? (if not clear)
+❓ What's the main approach? (if vague)
+❓ When is this successful? (if no criteria)
+
+For Create Mode - Quick 5-question flow:
+1️⃣ What problem does this solve? (2-3 sentences)
+2️⃣ How will you solve it? (3-5 bullet points)
+3️⃣ What does success look like? (3-5 criteria)
+4️⃣ Technical approach? (1 paragraph or skip)
+5️⃣ What features? (list 3-5 or auto-generate)
+```
 
 ### Template Section Breakdown
 
@@ -224,6 +316,46 @@ Observability:
 - User metrics from user journey analysis
 ```
 
+### 2A. Codebase Analysis Enhancement (--analyze-codebase Flag)
+
+When the `--analyze-codebase` flag is present, perform lightweight reconnaissance:
+
+```python
+# Lightweight Codebase Analysis
+if analyze_codebase:
+    # Infer technical areas from epic description
+    analysis_areas = extract_technical_areas(epic_description)
+    # Examples: "authentication", "API", "database", "frontend components"
+    
+    # Launch parallel analysis agents (lightweight, not full breakdown)
+    analysis_tasks = []
+    for area in analysis_areas:
+        agent_prompt = f"""
+        Quick codebase check for {area}:
+        1. Check if related code exists in project directories
+        2. Use Glob to find main files/components: **/*{area}*
+        3. Use Grep to identify existing patterns or constraints
+        4. Note any ai_docs/knowledge/* relevant to {area}
+        5. Return brief technical context (1 paragraph)
+        
+        Focus on:
+        - Existing implementations to follow
+        - Architectural patterns in use
+        - Technical constraints or requirements
+        - Integration points
+        """
+        analysis_tasks.append(Task(agent_prompt))
+    
+    # Synthesize findings
+    technical_context = synthesize_analysis_results(analysis_tasks)
+    
+    # Enhance epic template with findings
+    if template == "lite":
+        epic_template['technical_approach'] += f"\n\nCodebase Context:\n{technical_context}"
+    else:
+        epic_template['technical_context'] += f"\n\nCodebase Analysis:\n{technical_context}"
+```
+
 ### 3. AI Agent Guidance Generation
 
 **Parallelization Analysis:**
@@ -240,15 +372,53 @@ Observability:
 
 ### 4. Output Generation & Validation
 
-#### **Epic Issue Creation** (default output)
+#### **Epic Issue Creation** (adapts to template type)
+
+**For Comprehensive Template (default):**
 ```
 Create comprehensive Linear issue:
 - Title: "Epic: [Original Title]"
-- Description: Full template populated with gathered information
+- Description: Full PRD template populated with all 12+ sections
 - Labels: Add "epic", "shovel-ready", plus existing relevant labels
 - Priority: Carry over or upgrade from source issue
 - Parent: Link to original issue as parent if appropriate
 - Project: Keep in same project or suggest epic-appropriate project
+```
+
+**For Lite Template (--lite flag):**
+```python
+refined_description = f"""
+# Epic: {title}
+
+## 🎯 Problem
+{problem_statement}
+
+## 💡 Solution
+{solution_bullets}
+
+## ✅ Success Criteria
+{success_checkboxes}
+
+## 🛠 Technical Approach
+{tech_paragraph}
+{codebase_context if analyze_codebase else ""}
+
+## 📦 Features
+{feature_list}
+
+## ⚠️ Risks & Dependencies
+{risks_if_any}
+
+---
+*Refined with /refine-epic --lite for quick epic definition*
+"""
+
+mcp__linear__update_issue(
+    id=issue_id,
+    title=f"Epic: {title}",
+    description=refined_description,
+    labels=["epic", "epic-lite"] + existing_labels
+)
 ```
 
 #### **Alternative Output Formats**
@@ -291,7 +461,7 @@ Markdown File:
 
 ## Command Output Examples
 
-### **Standard Flow**
+### **Standard Flow (Comprehensive Template)**
 ```
 🔍 Analyzing Linear issue PROJ-123...
 ✅ Issue found: "Add user authentication system"
@@ -313,6 +483,77 @@ Markdown File:
 ✅ Epic created: EPIC-CHRON-001
 🔗 View: https://linear.app/chronicle/issue/EPIC-CHRON-001
 📊 Ready for /epic-breakdown command
+```
+
+### **Lite Template Mode (--lite)**
+```
+/refine-epic CCC-123 --lite
+
+🚀 Quick Epic Refinement Starting...
+📋 Found epic: "Build notification system"
+⚡ Using lightweight 1-pager template
+
+🔍 Quick Assessment:
+  ✅ Has basic description
+  ⚠️ Missing clear problem statement
+  ⚠️ No success criteria
+
+💬 Let's quickly fill in the gaps:
+  
+  Problem this solves? 
+  > Users miss important updates and can't configure alerts
+
+  Main success criteria? (what makes this done?)
+  > Users can subscribe to events, receive real-time notifications, manage preferences
+
+📝 Generating lean epic...
+
+✅ Epic refined: CCC-123
+⏱️ Time: 3 minutes
+📄 Size: 1 page (vs 5+ for full epic)
+🔗 View: https://linear.app/team/issue/CCC-123
+```
+
+### **With Codebase Analysis (--analyze-codebase)**
+```
+/refine-epic CCC-123 --analyze-codebase
+
+🔍 Analyzing Linear issue CCC-123...
+✅ Issue found: "Add user authentication system"
+
+🔬 Launching codebase analysis agents...
+  Agent-1: Analyzing authentication patterns...
+  Agent-2: Checking existing user models...
+  Agent-3: Reviewing API structure...
+  
+📊 Codebase Analysis Results:
+  ✅ Found existing JWT utilities in lib/auth/
+  ✅ User model exists in models/user.ts
+  ✅ API follows REST patterns with middleware
+  ⚠️ No OAuth implementation found
+  
+🔄 Enhancing epic with codebase context...
+
+✅ Epic created with technical grounding: EPIC-CHRON-001
+📊 Technical context enhanced with actual codebase patterns
+```
+
+### **Combined Lite + Analysis**
+```
+/refine-epic CCC-123 --lite --analyze-codebase
+
+🚀 Quick Epic with Codebase Context
+📋 Using 1-pager template + technical analysis
+
+🔬 Quick codebase scan...
+  ✅ Found relevant patterns in 3 areas
+  
+📝 Generating lean epic with technical context...
+
+✅ Epic refined: CCC-123
+⏱️ Time: 5 minutes
+📄 Size: 1 page with codebase insights
+🎯 Ready for breakdown with technical grounding
 ```
 
 ### **Interactive Mode**

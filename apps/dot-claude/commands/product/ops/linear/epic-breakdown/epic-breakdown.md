@@ -1,17 +1,168 @@
 ---
-allowed-tools: mcp__linear__*, filesystem:*, Task
-argument-hint: --team <team-name> --epic <epic-id>
-description: (*Run from PLAN mode*) Analyze a Linear epic and break it down into features and tasks with parallel codebase analysis
+allowed-tools: mcp__linear__*, filesystem:*, Task, Write
+argument-hint: --team <team-name> --epic <epic-id> [--skip-prep]
+description: (*Run from PLAN mode*) Prepare, analyze, and break down a Linear epic into features and tasks with parallel codebase analysis
 ---
 
 # Linear Epic Breakdown Command
-Analyze a Linear epic, assess its readiness, perform parallel codebase analysis, and create a complete hierarchy of features and tasks optimized for AI agent execution.
+Prepare, analyze, and break down a Linear epic into a complete hierarchy of features and tasks optimized for AI agent execution. Now includes full epic preparation capabilities.
 
 ## Usage
 - `--team <name>`: (Required) Linear team name
-- `--epic <id>`: (Required) Epic issue ID to break down
+- `--epic <id>`: (Required) Epic issue ID to prepare and break down  
+- `--skip-prep`: (Optional) Skip preparation phase and go directly to breakdown
 
 ## Instructions
+
+### Step 0: Epic Structure Preparation
+
+**Note**: This phase incorporates functionality from the deprecated epic-prep command
+
+1. **Check Skip Flag**:
+   ```python
+   if "--skip-prep" in arguments:
+       print("⏭️ Skipping preparation phase, going directly to breakdown...")
+       goto step_1_readiness_assessment
+   else:
+       print("🔧 Starting epic structure preparation...")
+   ```
+
+2. **Gather Epic Context** (Same as epic-prep Step 1):
+   ```python
+   # Fetch Epic Details
+   epic = mcp__linear__get_issue(epic_id)
+   
+   # Get Team Context
+   team = mcp__linear__get_team(team_name)
+   available_labels = mcp__linear__list_issue_labels(team=team_name)
+   issue_statuses = mcp__linear__list_issue_statuses(team=team_name)
+   
+   # Analyze Current Epic Structure
+   child_issues = mcp__linear__list_issues(parentId=epic_id)
+   
+   # Build hierarchy: Epic → Features → Tasks
+   features = [issue for issue in child_issues if has_child_issues(issue)]
+   orphan_tasks = [issue for issue in child_issues if not has_child_issues(issue)]
+   ```
+
+3. **Epic Completeness Analysis** (From epic-prep Step 2):
+   ```python
+   # Parse Epic Objectives
+   objectives = extract_objectives_from_description(epic.description)
+   technical_components = extract_technical_areas(epic.description)
+   success_criteria = extract_success_criteria(epic.description)
+   
+   # Map Existing Coverage
+   coverage_gaps = []
+   for objective in objectives:
+       matching_feature = find_matching_feature(objective, features)
+       if not matching_feature:
+           coverage_gaps.append(objective)
+   
+   # Feature Gap Identification
+   missing_features = identify_missing_features(coverage_gaps)
+   ```
+
+4. **Orphan Feature Discovery** (From epic-prep Step 3):
+   ```python
+   # Query Potential Orphans
+   orphan_candidates = mcp__linear__list_issues(
+       team=team_name,
+       parentId__null=True,  # No parent
+       state="Backlog",
+       hasChildren=True  # Has child issues (indicates feature-level)
+   )
+   
+   # Conservative Alignment Analysis
+   orphan_matches = []
+   for orphan in orphan_candidates:
+       score = calculate_alignment_score(orphan, epic)
+       if score >= 70:  # High confidence threshold
+           orphan_matches.append((orphan, score))
+   ```
+
+5. **Structure Fixes** (From epic-prep Steps 4-6):
+   ```python
+   prep_actions = []
+   
+   # Create missing features
+   for gap in coverage_gaps:
+       feature_template = create_feature_template(gap, epic)
+       prep_actions.append({
+           "type": "create_feature",
+           "feature": feature_template,
+           "reason": f"Missing coverage for: {gap.description}"
+       })
+   
+   # Match high-confidence orphans
+   for orphan, score in orphan_matches:
+       prep_actions.append({
+           "type": "match_orphan",
+           "orphan": orphan,
+           "confidence": score,
+           "reason": f"High alignment score: {score}%"
+       })
+   
+   # Fix metadata inconsistencies
+   for issue in child_issues:
+       metadata_fixes = identify_metadata_fixes(issue, epic)
+       if metadata_fixes:
+           prep_actions.append({
+               "type": "fix_metadata",
+               "issue": issue,
+               "fixes": metadata_fixes
+           })
+   ```
+
+6. **Execute Preparation Changes**:
+   ```python
+   print(f"\n🔧 Preparation Analysis Complete")
+   print(f"Found {len(prep_actions)} structure improvements needed")
+   
+   if prep_actions:
+       print("\nApplying structural fixes...")
+       
+       for action in prep_actions:
+           if action["type"] == "create_feature":
+               new_feature = mcp__linear__create_issue(
+                   team=team.id,
+                   title=action["feature"]["title"],
+                   description=action["feature"]["description"],
+                   labels=action["feature"]["labels"],
+                   parentId=epic.id,
+                   priority=epic.priority
+               )
+               print(f"✅ Created feature: {new_feature.identifier}")
+               
+           elif action["type"] == "match_orphan":
+               mcp__linear__update_issue(
+                   id=action["orphan"].id,
+                   parentId=epic.id
+               )
+               # Add comment explaining match
+               mcp__linear__create_comment(
+                   parent={"page_id": action["orphan"].id},
+                   rich_text=[{
+                       "type": "text",
+                       "text": {
+                           "content": f"Matched to epic {epic.identifier} with {action['confidence']}% confidence by epic-breakdown prep phase."
+                       }
+                   }]
+               )
+               print(f"✅ Matched orphan: {action['orphan'].identifier}")
+               
+           elif action["type"] == "fix_metadata":
+               mcp__linear__update_issue(
+                   id=action["issue"].id,
+                   **action["fixes"]
+               )
+               print(f"✅ Fixed metadata: {action['issue'].identifier}")
+   
+   else:
+       print("✅ Epic structure already well-prepared")
+   
+   print("\n📊 Preparation Complete - Proceeding to readiness assessment...")
+   ```
 
 ### Step 1: Epic Readiness Assessment
 
@@ -374,7 +525,13 @@ Analyze a Linear epic, assess its readiness, perform parallel codebase analysis,
 ```markdown
 ## Epic Breakdown Complete: {epic.title}
 
-### 📊 Breakdown Summary
+### 🔧 Preparation Summary
+**Structure Fixes Applied**: {len(prep_actions)}
+**Features Created During Prep**: {prep_features_count}
+**Orphans Matched**: {orphan_matches_count}
+**Metadata Corrections**: {metadata_fixes_count}
+
+### 📊 Breakdown Summary  
 **Team**: {team.name}
 **Epic**: {epic.id} - {epic.title}
 **Total Features Created**: {len(features)}
@@ -443,9 +600,12 @@ View in Linear: {epic.url}
 
 ### ✅ Next Steps
 1. Review created features and tasks in Linear
-2. Adjust any dependencies if needed
+2. Adjust any dependencies if needed  
 3. Run `/sprint-plan --team {team.name} --epic {epic.id}` to create first sprint
 4. Execute with `/sprint-execute --project "Sprint YYYY-MM-NNN"`
+
+### 🗂️ Command Consolidation Note
+This command now includes epic preparation functionality. The separate `/epic-prep` command has been deprecated in favor of this integrated approach.
 ```
 
 ## Error Handling
@@ -453,9 +613,11 @@ View in Linear: {epic.url}
 ### Common Issues
 1. **Epic Not Ready**: Provide clear guidance on what's missing
 2. **Analysis Agent Failures**: Retry failed agents up to 2 times
-3. **Circular Dependencies**: Detect and report with visualization
+3. **Circular Dependencies**: Detect and report with visualization  
 4. **Feature Too Large**: Auto-split into smaller features
 5. **Linear API Limits**: Batch create with delays
+6. **Preparation Failures**: Log preparation errors but continue to breakdown
+7. **Orphan Matching Conflicts**: Conservative approach - skip ambiguous matches
 
 ### Validation Checks
 - No feature larger than 8 tasks
@@ -469,12 +631,26 @@ View in Linear: {epic.url}
 ```bash
 $ /epic-breakdown --team Chronicle --epic EPIC-123
 
+🔧 Starting epic structure preparation...
+🔍 Gathering epic context and analyzing current structure
+✅ Found 4 existing features, 2 orphan tasks
+
+📊 Preparation Analysis Complete
+Found 3 structure improvements needed
+
+Applying structural fixes...
+✅ Created feature: EPIC-124 (Missing API authentication coverage)
+✅ Matched orphan: EPIC-110 (OAuth integration feature)
+✅ Fixed metadata: EPIC-112 (Updated priority and labels)
+
+📊 Preparation Complete - Proceeding to readiness assessment...
+
 🔍 Analyzing Epic: User Authentication System
 ✅ Epic ready for breakdown
 
 📊 Launching 5 Parallel Analysis Agents
 - Agent-1: Analyzing database schema changes
-- Agent-2: Analyzing JWT implementation
+- Agent-2: Analyzing JWT implementation  
 - Agent-3: Analyzing OAuth providers
 - Agent-4: Analyzing frontend components
 - Agent-5: Analyzing API endpoints
@@ -493,11 +669,24 @@ $ /epic-breakdown --team Chronicle --epic EPIC-123
 - Setting up dependencies... ✅
 
 📊 Epic Breakdown Complete!
-- 12 features (1 foundation, 9 features, 2 integration)
-- 43 tasks
+- Preparation: 1 feature created, 1 orphan matched, 1 metadata fix
+- Breakdown: 12 features (1 foundation, 9 features, 2 integration)
+- 43 tasks total
 - 75% can run in parallel
 - 3 suggested sprints
 
 View in Linear: https://linear.app/chronicle/issue/EPIC-123
 Ready for sprint planning!
+```
+
+### Skip Preparation Example
+```bash
+$ /epic-breakdown --team Chronicle --epic EPIC-123 --skip-prep
+
+⏭️ Skipping preparation phase, going directly to breakdown...
+
+🔍 Analyzing Epic: User Authentication System
+✅ Epic ready for breakdown
+
+[... rest of breakdown process ...]
 ```
