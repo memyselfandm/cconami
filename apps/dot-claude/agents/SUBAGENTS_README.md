@@ -45,6 +45,39 @@ Specialized AI agents that extend Claude Code's capabilities for specific domain
 - Sets up workflows and automations
 - Follows Notion best practices
 
+### 🕸️ langgraph-engineer
+**Purpose**: Specialist for LangGraph framework implementations and multi-agent systems  
+**Use When**: Building production-ready LangGraph applications, hierarchical agent teams, durable execution, checkpointing, or state management  
+**Tools**: Read, Write, Edit, MultiEdit, Bash, WebFetch, Grep, Glob, Task  
+**Key Features**:
+- Multi-agent orchestration (hierarchical, supervisor, collaborative, sequential)
+- State management with persistent checkpointing and recovery
+- Production deployment patterns for LangGraph Cloud
+- Enterprise-grade implementations with monitoring and observability
+- Human-in-the-loop workflows and streaming applications
+
+### 🎨 frontend-designer
+**Purpose**: UI/UX implementation and frontend architecture specialist  
+**Use When**: Building components, design systems, responsive layouts, accessibility compliance, or modern framework development  
+**Tools**: Read, Write, Edit, Grep, Glob, LS  
+**Key Features**:
+- Component architecture with atomic design principles
+- WCAG 2.1 AA accessibility compliance built-in
+- Modern framework expertise (React/Next.js, Vue/Nuxt.js, Svelte)
+- Design system creation and maintenance automation
+- Performance optimization and Core Web Vitals improvement
+
+### 🗄️ database-engineer
+**Purpose**: Multi-database schema design and optimization specialist  
+**Use When**: Database design, query optimization, migration management, or multi-database architecture tasks  
+**Tools**: Read, Write, Edit, MultiEdit, Bash, WebFetch, Grep, Glob, Task  
+**Key Features**:
+- Multi-database expertise (PostgreSQL, MongoDB, Redis, Supabase, cloud-native)
+- Automated migration strategies with zero-downtime deployments
+- Performance tuning and query optimization across database systems
+- Adaptive capabilities with context-aware specialization modes
+- Cloud-native integration and vector database support
+
 ## Usage
 
 Subagents are automatically invoked by Claude Code when their specialized expertise is needed. They can also be explicitly called using the Task tool.
@@ -113,7 +146,12 @@ Claude Code selects subagents based on:
 
 ## Updates and Improvements
 
-### Recent Updates (Aug 2025)
+### Recent Updates (Sep 2025)
+- **langgraph-engineer**: NEW - Specialist for LangGraph framework and multi-agent systems
+- **frontend-designer**: NEW - UI/UX implementation with accessibility-first approach  
+- **database-engineer**: NEW - Multi-database expertise with adaptive specialization modes
+
+### Previous Updates (Aug 2025)
 - **slash-command-architect**: Added Review Mode for validating existing commands
 - **context-engineering-subagent**: Implemented arxiv best practices
 - **notion-workspace-architect**: Added support for complex database structures
