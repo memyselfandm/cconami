@@ -1,5 +1,5 @@
 ---
-allowed-tools: mcp__linear__*, Task, TodoWrite, Read, Write
+allowed-tools: mcp__linear__get_issue, mcp__linear__list_issues, mcp__linear__update_issue, mcp__linear__create_comment, mcp__linear__list_issue_labels, mcp__linear__create_issue_label, mcp__linear__get_project, mcp__linear__list_projects, mcp__linear__get_team, mcp__linear__list_teams, Task, TodoWrite, Read, Write
 argument-hint: --action <apply|cleanup|audit> --target <issue-id|epic-id|project-id> [--checkpoint <phase>]
 description: Automated tag lifecycle management for product flow checkpoints - applies checkpoint tags, removes obsolete tags, and maintains tag audit trails
 ---

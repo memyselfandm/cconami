@@ -1,5 +1,5 @@
 ---
-allowed-tools: Task, mcp__linear__*, TodoWrite, Read, Write
+allowed-tools: Task, mcp__linear__get_issue, mcp__linear__list_issues, mcp__linear__update_issue, mcp__linear__get_team, mcp__linear__list_teams, TodoWrite, Read, Write
 argument-hint: [feature-set] [--framework=rice|moscow|kano|value-effort] [--source=linear|manual] [--team <name>] [--output=summary|detailed]
 description: Comprehensive feature prioritization using multiple frameworks (RICE, MoSCoW, Kano) with Linear integration and data-driven roadmap recommendations
 ---
