@@ -1,6 +1,18 @@
 # Claude Code Custom Commands Reference
 
-This directory contains custom slash commands for Claude Code, organized by category for easy discovery and management.
+This directory contains 18 custom slash commands for Claude Code, organized by category for easy discovery and management.
+
+## Command Summary
+
+| Category | Subcategory | Count |
+|----------|-------------|-------|
+| Product | Linear Integration | 14 |
+| Product | Operations | 2 |
+| Engineering | Development | 1 |
+| UI/UX | Design | 1 |
+| **Total** | | **18** |
+
+*Note: Documentation files in command subdirectories are not counted*
 
 ## Command Categories
 
@@ -14,12 +26,29 @@ Commands for product management, planning, and operations.
 - `/prd-meeting` - Start an interactive PRD writing session
 - `/sprint` - (*Run from PLAN mode*) Execute parallel feature development sprints
 
-**Linear Integration** - Sprint management with Linear
-- `/epic-breakdown` - (*Run from PLAN mode*) Analyze epic and create features/tasks
+**Linear Integration** - Complete Linear workflow automation
+
+*Issue Refinement Suite* - Transform ideas into AI-ready issues (dual-mode: refine OR create)
+- `/refine-epic` - Transform issues into comprehensive epics with full PRD template
+- `/refine-epic-lite` - Quick epic creation with minimal 1-pager template
+- `/refine-feature` - Refine features with right-sizing logic and subtask generation
+- `/refine-issue` - Generic refinement for tasks, bugs, and chores with custom templates
+
+*Planning & Sprint Management* - Epic breakdown and sprint orchestration
 - `/epic-prep` - (*Run from PLAN mode*) Prepare epic for sprint execution
-- `/sprint-plan` - (*Run from PLAN mode*) Create optimized sprint project
+- `/epic-breakdown` - (*Run from PLAN mode*) Analyze epic and create features/tasks
+- `/sprint-plan` - (*Run from PLAN mode*) Create optimized sprint project from epic
 - `/sprint-execute` - (*Run from PLAN mode*) Execute sprint with parallel agents
 - `/sprint-status` - Monitor sprint progress and agent activity
+
+*Ad-hoc Execution* - Direct issue execution without sprints
+- `/issue-execute` - (*Run from PLAN mode*) Execute specific issues by ID with parallel agents
+
+*Release Management* - Multi-release planning and execution
+- `/release-plan` - (*Run from PLAN mode*) Plan multi-release roadmap (6-month horizon)
+- `/release-execute` - (*Run from PLAN mode*) Execute entire release (multiple sprints)
+- `/dependency-map` - Analyze dependencies across releases and epics
+- `/project-shuffle` - Move issues between releases/projects
 
 **Research** - User and market research
 - (Empty - future commands)
@@ -31,7 +60,7 @@ Commands for product management, planning, and operations.
 Commands for design and user experience.
 
 **UI Design** - Visual design tools
-- (Empty - future commands)
+- `/design-brainstorm` - Interactive design brainstorming session
 
 **UX Research** - User experience research
 - (Empty - future commands)
@@ -54,18 +83,41 @@ Commands for development, architecture, and technical operations.
 **Dev** - Development tools
 - `/git_status` - Understand the current state of the git repository
 
-## Available Commands
+## Available Commands (Quick Reference)
 
-| Command | Category | Description | Documentation |
-|---------|----------|-------------|---------------|
-| `/prd-meeting` | Product > Ops | Start an interactive PRD writing session | [Usage Guide](./product/ops/prd-meeting/docs/prd-meeting-usage-guide.md) |
-| `/sprint` | Product > Ops | (*Run from PLAN mode*) Execute parallel feature development sprints | [Usage Guide](./product/ops/sprint/docs/sprint-usage-guide.md) |
-| `/epic-breakdown` | Product > Linear | (*Run from PLAN mode*) Analyze epic and create features/tasks | [Command](./product/ops/linear/epic-breakdown/epic-breakdown.md) |
-| `/epic-prep` | Product > Linear | (*Run from PLAN mode*) Prepare epic for sprint execution | [Command](./product/ops/linear/epic-prep/epic-prep.md) |
-| `/sprint-plan` | Product > Linear | (*Run from PLAN mode*) Break epic into multiple sprint projects | [Command](./product/ops/linear/sprint-plan/sprint-plan.md) |
-| `/sprint-execute` | Product > Linear | (*Run from PLAN mode*) Execute sprint with parallel agents | [Command](./product/ops/linear/sprint-execute/sprint-execute.md) |
-| `/sprint-status` | Product > Linear | Monitor sprint progress and agent activity | [Command](./product/ops/linear/sprint-status/sprint-status.md) |
-| `/git_status` | Eng > Dev | Understand the current state of the git repository | [Command](./eng/dev/git_status.md) |
+### Linear Integration Commands
+| Command | Description | Mode |
+|---------|-------------|------|
+| `/refine-epic` | Transform issues into comprehensive epics with full PRD | Dual-mode |
+| `/refine-epic-lite` | Quick epic creation with minimal 1-pager template | Dual-mode |
+| `/refine-feature` | Refine features with right-sizing and subtasks | Dual-mode |
+| `/refine-issue` | Generic refinement for tasks, bugs, and chores | Dual-mode |
+| `/epic-prep` | Prepare epic for sprint execution | PLAN mode |
+| `/epic-breakdown` | Analyze epic and create features/tasks | PLAN mode |
+| `/sprint-plan` | Break epic into multiple sprint projects | PLAN mode |
+| `/sprint-execute` | Execute sprint with parallel agents | PLAN mode |
+| `/sprint-status` | Monitor sprint progress and agent activity | Any mode |
+| `/issue-execute` | Execute specific issues by ID | PLAN mode |
+| `/release-plan` | Plan multi-release roadmap | PLAN mode |
+| `/release-execute` | Execute entire release | PLAN mode |
+| `/dependency-map` | Analyze dependencies across releases | Any mode |
+| `/project-shuffle` | Move issues between projects | Any mode |
+
+### Other Product Commands
+| Command | Description | Documentation |
+|---------|-------------|---------------|
+| `/prd-meeting` | Interactive PRD writing session | [Docs](./product/ops/prd-meeting/docs/) |
+| `/sprint` | Execute parallel feature sprints | [Docs](./product/ops/sprint/docs/) |
+
+### Engineering Commands
+| Command | Description | Documentation |
+|---------|-------------|---------------|
+| `/git_status` | Current git repository state | [Command](./eng/dev/git_status.md) |
+
+### UI/UX Commands
+| Command | Description | Documentation |
+|---------|-------------|---------------|
+| `/design-brainstorm` | Interactive design brainstorming | [Command](./uiux/ui_design/design_brainstorm/design-brainstorm.md) |
 
 ## Directory Structure
 

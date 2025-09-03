@@ -8,8 +8,11 @@ The Linear command suite provides end-to-end sprint management capabilities:
 
 | Command | Purpose | Phase |
 |---------|---------|-------|
-| **epic-breakdown** | Analyze epic and create features/tasks hierarchy | Planning |
-| **epic-prep** | Ensure epic is ready for sprint execution | Preparation |
+| **refine-epic** | Create or enhance epics with comprehensive/lite templates | Definition |
+| **epic-breakdown** | Prepare epic structure and create features/tasks hierarchy | Planning |
+| ~~**epic-prep**~~ | ⚠️ DEPRECATED - Now part of epic-breakdown | - |
+| ~~**refine-epic-lite**~~ | ⚠️ DEPRECATED - Use refine-epic --lite | - |
+| **issue-execute** | Execute specific Linear issues ad-hoc with AI agents | Execution |
 | **sprint-plan** | Create optimized sprint project from backlog | Planning |
 | **sprint-execute** | Execute sprint with parallel AI agents | Execution |
 | **sprint-status** | Monitor sprint progress and agent activity | Monitoring |
@@ -18,62 +21,155 @@ The Linear command suite provides end-to-end sprint management capabilities:
 
 ```mermaid
 graph TD
-    A[Epic Created in Linear] --> B{Epic Ready?}
-    B -->|No| C[epic-prep]
-    C --> D[epic-breakdown]
-    B -->|Yes| D
+    A[Raw Epic Idea] --> A1[refine-epic]
+    A1 --> B[Epic in Linear]
+    B --> D[epic-breakdown]
     D --> E[sprint-plan]
     E --> F[sprint-execute]
     F --> G[sprint-status]
     G -->|Sprint Complete| H[Next Sprint]
     G -->|In Progress| F
+    
+    A2[Existing Epic] --> D
+    
+    style A1 fill:#e1f5fe
+    style D fill:#f3e5f5
 ```
 
 ## 📚 Command Details
 
+### 0. refine-epic
+**Purpose**: Create new epics from ideas or enhance existing ones with comprehensive PRD templates or lightweight 1-pagers.
+
+**Usage**:
+```bash
+# Enhance existing epic with comprehensive template
+/refine-epic EPIC-123
+
+# Create new epic with lite template
+/refine-epic --team "Chronicle" --lite
+
+# Add codebase analysis for technical context
+/refine-epic EPIC-123 --analyze-codebase
+
+# Combine lite template with codebase insights
+/refine-epic --team "Chronicle" --lite --analyze-codebase
+```
+
+**Key Features**:
+- **Dual Templates**: Comprehensive PRD or lightweight 1-pager
+- **Codebase Analysis**: Parallel agents analyze technical context
+- **Interactive Mode**: Guided epic creation with prompts
+- **Template Switching**: Easy migration between comprehensive and lite
+- **AI-Optimized**: Structured for downstream epic-breakdown consumption
+
+**Template Types**:
+- **Comprehensive**: Full PRD with user journeys, NFRs, test strategy (5+ pages)
+- **Lite**: Essential 1-pager with problem, solution, success criteria (~1 page)
+
+**Output**:
+- Well-structured Linear epic ready for breakdown
+- Technical context from codebase analysis
+- Clear acceptance criteria and scope definition
+
 ### 1. epic-breakdown
-**Purpose**: Analyzes a Linear epic and creates a complete hierarchy of features and tasks optimized for AI agent execution.
+**Purpose**: Prepares epic structure, analyzes readiness, and creates a complete hierarchy of features and tasks optimized for AI agent execution.
 
 **Usage**:
 ```bash
 /epic-breakdown --team <team-name> --epic <epic-id>
+/epic-breakdown --team <team-name> --epic <epic-id> --skip-prep  # Skip preparation phase
 ```
 
 **Key Features**:
-- Validates epic readiness (problem statement, user stories, acceptance criteria)
-- Launches parallel analysis agents to examine codebase
-- Creates properly-sized features (1-5 days for AI agents)
-- Generates implementation tasks (max 5 per feature)
-- Sets up dependencies and phase assignments
-- Maximizes parallelization opportunities
+- **Integrated Preparation**: Includes all epic-prep functionality as first phase
+- **Structure Fixing**: Creates missing features, matches orphans, fixes metadata
+- **Readiness Validation**: Ensures epic has required sections and criteria
+- **Parallel Codebase Analysis**: Launches agents to examine technical context
+- **Smart Feature Sizing**: Creates properly-sized features (1-5 days for AI agents)
+- **Task Generation**: Generates implementation tasks (max 5 per feature)
+- **Dependency Mapping**: Sets up dependencies and phase assignments
+- **Parallelization Optimization**: Maximizes concurrent execution opportunities
+
+**Two-Phase Process**:
+1. **Preparation Phase**: Structure validation and fixes (formerly epic-prep)
+2. **Breakdown Phase**: Feature and task creation with analysis
 
 **Output**:
-- Creates Linear features and tasks under the epic
-- Provides sprint planning recommendations
-- Reports parallelization analysis
+- Structurally sound epic with proper feature hierarchy
+- Created Linear features and tasks under the epic
+- Dependency relationships and phase assignments
+- Sprint planning recommendations with parallelization analysis
 
-### 2. epic-prep
-**Purpose**: Ensures an epic is properly structured with features, tasks, and metadata for sprint execution.
+### 2. issue-execute
+**Purpose**: Execute specific Linear issues by ID with automatic dependency resolution, phase detection, and parallel subagent orchestration. Perfect for ad-hoc development, hot fixes, or executing individual features outside of sprint cycles.
 
 **Usage**:
 ```bash
-/epic-prep --team <team-name> --epic <epic-id> [--execute]
+/issue-execute --issue <id>                # Single issue
+/issue-execute --issues <id1,id2,id3>      # Multiple issues
+/issue-execute --team <team-name>          # Team context
+/issue-execute --force                     # Execute despite blockers
+/issue-execute --dry-run                   # Preview execution plan
 ```
 
 **Key Features**:
-- Analyzes epic completeness and structure
-- Identifies feature gaps based on epic objectives
-- Matches orphan features to epic (>70% confidence threshold)
-- Fixes metadata (priorities, labels, descriptions)
-- Dry-run mode by default (use `--execute` to apply changes)
+- Direct issue execution without sprint/project context
+- Automatic dependency and blocker resolution
+- Smart phase detection based on labels and dependencies
+- Maximum parallelization for independent issues
+- Real-time Linear progress tracking
+- Subtask handling and status updates
+- Retry logic for failed agents
+
+**Execution Strategy**:
+- Fetches complete issue details including subtasks
+- Analyzes blocking relationships and dependencies
+- Assigns issues to foundation/features/integration phases
+- Groups related issues by technical area
+- Launches parallel agents for independent work
+- Updates Linear with progress comments and status changes
 
 **Output**:
-- Readiness assessment report
-- List of created features and matched orphans
-- Metadata corrections applied
-- Sprint execution recommendations
+- Execution plan preview (with --dry-run)
+- Real-time progress updates in Linear
+- Agent assignment and specialization details
+- Final summary with completion statistics
 
-### 3. sprint-plan
+### 3. ~~epic-prep~~ ⚠️ DEPRECATED
+**This command has been consolidated into epic-breakdown.**
+
+**Migration**:
+```bash
+# Old workflow:
+/epic-prep --team "Chronicle" --epic EPIC-123 --execute
+/epic-breakdown --team "Chronicle" --epic EPIC-123
+
+# New consolidated workflow:
+/epic-breakdown --team "Chronicle" --epic EPIC-123
+```
+
+**Legacy Purpose**: Ensured epic was properly structured with features, tasks, and metadata.
+**Now Available In**: All epic-prep functionality is now the first phase of epic-breakdown.
+
+### ~~refine-epic-lite~~ ⚠️ DEPRECATED 
+**This command has been consolidated into refine-epic.**
+
+**Migration**:
+```bash
+# Old command:
+/refine-epic-lite CCC-123
+/refine-epic-lite --team "Chronicle"
+
+# New consolidated command:
+/refine-epic CCC-123 --lite
+/refine-epic --team "Chronicle" --lite
+```
+
+**Legacy Purpose**: Quick epic refinement with minimal 1-pager template.
+**Now Available In**: Use `/refine-epic --lite` for the same lightweight template.
+
+### 4. sprint-plan
 **Purpose**: Breaks down a Linear epic into multiple focused sprint projects, prioritizing parallelization and avoiding dependency clashes.
 
 **Usage**:
@@ -100,7 +196,7 @@ graph TD
 - Clear execution order with dependency map
 - Ready for sequential sprint execution
 
-### 4. sprint-execute
+### 5. sprint-execute
 **Purpose**: Executes a sprint by launching parallel AI agents to implement Linear issues.
 
 **Usage**:
@@ -127,7 +223,7 @@ graph TD
 - Specializations based on Linear labels
 - Incremental agent numbering for tracking
 
-### 5. sprint-status
+### 6. sprint-status
 **Purpose**: Monitors sprint progress, active agents, and blocked issues.
 
 **Usage**:
@@ -151,26 +247,37 @@ graph TD
 
 ## 🚀 Complete Workflow Example
 
-### Step 1: Create and Prepare Epic
+### Step 1: Create and Refine Epic
 ```bash
-# First, ensure epic is properly structured
-/epic-prep --team Chronicle --epic EPIC-123
+# Option 1: Create new epic from idea
+/refine-epic --team Chronicle --lite  # For quick MVP/prototype epics
+# OR
+/refine-epic --team Chronicle         # For comprehensive production epics
 
-# If not ready, update epic in Linear based on recommendations
-# Then run epic-prep again with --execute flag
-/epic-prep --team Chronicle --epic EPIC-123 --execute
+# Option 2: Enhance existing epic
+/refine-epic EPIC-123                 # Add comprehensive structure
+# OR  
+/refine-epic EPIC-123 --lite          # Convert to lightweight format
+
+# Option 3: Add technical context
+/refine-epic EPIC-123 --analyze-codebase  # Include codebase analysis
 ```
 
-### Step 2: Break Down Epic
+### Step 2: Prepare and Break Down Epic
 ```bash
-# Create features and tasks from epic
+# Prepare structure and create features/tasks (all-in-one)
 /epic-breakdown --team Chronicle --epic EPIC-123
 
-# This creates:
-# - 12 features across 3 phases
-# - 43 implementation tasks
-# - Dependency relationships
-# - Parallelization analysis
+# If epic structure is already perfect, skip preparation
+/epic-breakdown --team Chronicle --epic EPIC-123 --skip-prep
+
+# This does:
+# - Structure preparation (missing features, orphan matching, metadata fixes)
+# - Readiness validation
+# - Parallel codebase analysis
+# - Feature and task creation
+# - Dependency mapping
+# - Creates: 12 features across 3 phases, 43 implementation tasks
 ```
 
 ### Step 3: Plan Sprints
@@ -384,13 +491,17 @@ Sprint-execute creates commits with:
 
 | Scenario | Command to Use |
 |----------|---------------|
-| New epic needs structure | `epic-prep` → `epic-breakdown` |
+| Create new epic from idea | `refine-epic --team <team> [--lite]` |
+| Enhance existing epic | `refine-epic <epic-id> [--lite] [--analyze-codebase]` |
+| Epic needs structure + breakdown | `epic-breakdown --team <team> --epic <id>` |
 | Epic ready for sprint | `sprint-plan` → `sprint-execute` |
+| Single hot fix needed | `issue-execute --issue <id>` |
+| Multiple features to implement | `issue-execute --issues <ids>` |
 | Check current progress | `sprint-status` |
-| Epic missing features | `epic-prep --execute` |
-| Create features from epic | `epic-breakdown` |
+| Perfect epic, skip prep | `epic-breakdown --team <team> --epic <id> --skip-prep` |
 | Start next sprint | `sprint-plan` → `sprint-execute` |
 | Debug blocked sprint | `sprint-status --detailed` |
+| Ad-hoc issue execution | `issue-execute --dry-run` → `issue-execute` |
 
 ## 📝 Example Linear Epic Structure
 

@@ -1,21 +1,10 @@
 ---
 allowed-tools: mcp__linear__*, Write
 argument-hint: --team <team-name> --epic <epic-id> [--execute]
-description: (**DEPRECATED**) Use /epic-breakdown instead - it includes all epic-prep functionality as the first phase
+description: (*Run from PLAN mode*) Analyze and prepare a Linear epic for sprint execution by ensuring proper structure and completeness
 ---
 
-# ⚠️ DEPRECATED: Epic Preparation Command
-
-> **⚠️ This command has been deprecated and consolidated into `/epic-breakdown`.**  
-> The epic-breakdown command now includes all epic preparation functionality as its first phase.  
-> Use `/epic-breakdown --team <team-name> --epic <epic-id>` instead.
-> 
-> To skip preparation and go directly to breakdown, use: `/epic-breakdown --team <team-name> --epic <epic-id> --skip-prep`
-
----
-
-## Legacy Documentation (For Reference Only)
-
+# Epic Preparation Command
 Analyze a Linear epic to ensure it's properly structured with features and tasks, fix metadata gaps, match orphan features, and report readiness for sprint execution.
 
 ## Usage
@@ -377,26 +366,3 @@ Subtasks:
 - Use conservative matching for orphans
 - Add audit comments for traceability
 - Respect team's existing conventions when found
-
----
-
-## Migration to epic-breakdown
-
-This functionality has been fully integrated into the `/epic-breakdown` command:
-
-**Old workflow:**
-```bash
-/epic-prep --team "Chronicle" --epic EPIC-123 --execute
-/epic-breakdown --team "Chronicle" --epic EPIC-123
-```
-
-**New workflow:**
-```bash
-/epic-breakdown --team "Chronicle" --epic EPIC-123
-# Preparation + breakdown in one command
-```
-
-**To skip preparation phase:**
-```bash
-/epic-breakdown --team "Chronicle" --epic EPIC-123 --skip-prep
-```
