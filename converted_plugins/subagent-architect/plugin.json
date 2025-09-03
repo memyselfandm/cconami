@@ -1,0 +1,16 @@
+{
+  "name": "subagent-architect",
+  "version": "1.0.0",
+  "description": "Converted from Claude Code extensions: 1 agents",
+  "author": {
+    "name": "Unknown"
+  },
+  "components": {
+    "agents": 1
+  },
+  "metadata": {
+    "converted_from": "claude_extensions",
+    "conversion_tool": "pacc",
+    "total_extensions_converted": 1
+  }
+}

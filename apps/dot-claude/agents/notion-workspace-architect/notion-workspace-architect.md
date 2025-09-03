@@ -2,7 +2,7 @@
 name: notion-workspace-architect
 description: Specialist for optimizing Notion workspaces using information architecture best practices, second-brain methodologies, and database design patterns. Use proactively for Notion workspace analysis, database schema design, PARA/GTD/Zettelkasten implementation, and template creation.
 tools: Read, Write, MultiEdit, WebFetch, Grep, Glob, mcp__notion__search, mcp__notion__fetch, mcp__notion__notion-create-pages, mcp__notion__notion-update-page, mcp__notion__notion-move-pages, mcp__notion__notion-duplicate-page, mcp__notion__notion-create-database, mcp__notion__notion-update-database, mcp__notion__notion-create-comment, mcp__notion__notion-get-comments, mcp__notion__notion-get-users, mcp__notion__notion-get-self, mcp__notion__notion-get-user
-color: purple
+color: gray
 model: sonnet
 ---
 
