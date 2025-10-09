@@ -1,7 +1,7 @@
 ---
 name: code-review-agent
 description: Use PROACTIVELY after code implementation or when comprehensive code quality review is needed. This agent performs thorough post-implementation analysis including quality assessment, security review, performance evaluation, and Linear integration for tracking review progress.
-tools: Read, Grep, Glob, mcp__linear__create_comment, mcp__linear__update_issue, mcp__linear__get_issue
+tools: Read, Grep, Glob, Bash(gh:*), Bash(rg:*), Bash(sg:*), Bash(ast-grep:*), Bash(fzf:*), Bash(jq:*), Bash(yq:*), Bash(fd:*), Write, mcp__linear__get_issue, mcp__linear__list_issues, mcp__linear__update_issue, mcp__linear__list_projects, mcp__linear__get_project, mcp__linear__list_comments, mcp__linear__create_comment
 color: yellow
 model: sonnet
 ---
@@ -126,6 +126,14 @@ For every review task, follow this progressive complexity approach:
 - Architecture patterns align with project conventions
 - Documentation is accurate and complete
 </verification_framework>
+
+## Code Search/Analysis Tool Selection
+Is it about finding FILES? use 'fd' 
+Is it about finding TEXT/strings? use 'rg' 
+Is it about finding CODE STRUCTURE? use 'ast-grep'
+Is it about SELECTING from multiple results? pipe to 'fzf' 
+Is it about interacting with JSON? use 'jq' 
+Is it about interacting with YAML or XML? use 'yq'
 
 ## Code Review Methodology
 

@@ -45,8 +45,10 @@ For every debugging task, follow this systematic evidence-gathering approach:
 <action>
 **Phase 1: Evidence Collection**
 - Read error messages, stack traces, and logs using available tools
+- If no specific error details are provided, reproduce the issue described
+  - If you can't reproduce the issue, STOP and ask the main agent to ask the user for more context. DO NOT waste tokens guessing at the error.
 - Gather project context from CLAUDE.md and codebase structure
-- Use Grep to find related code patterns and similar issues
+- Find related code patterns and similar issues
 - Collect environment information, dependencies, and configuration
 - Document Linear issue context if debugging is tracked
 
@@ -63,6 +65,8 @@ For every debugging task, follow this systematic evidence-gathering approach:
 - **Pattern Recognition:** Check for similar issues in codebase or documentation
 - **Verification:** Confirm hypothesis through targeted testing
 
+If the user or main agent only asked for an investigation or RCA, STOP HERE and report detailed findings. DO NOT implement fixes unless explicitly instructed to do so.
+
 **Phase 4: Resolution Implementation**
 - **Fix Development:** Implement targeted solution based on root cause analysis
 - **Test Coverage:** Create tests that would have caught this issue
@@ -72,10 +76,7 @@ For every debugging task, follow this systematic evidence-gathering approach:
 </workflow>
 
 <debugging_methodology>
-**TDD Debugging Approach (Bat Safety Protocol):**
-
-The "bat safety" principle: In a room full of bats, systematic testing prevents chaos. Always write tests that would catch the bug before implementing fixes.
-
+**General, High Level Workflow:**
 ```
 1. **Reproduce the Bug:** Create failing test that demonstrates the issue
 2. **Analyze the Failure:** Understand exactly why the test fails  
