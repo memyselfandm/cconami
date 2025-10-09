@@ -1,7 +1,7 @@
 ---
 name: context-engineering-subagent
 description: Use proactively for optimizing AI agent context through multi-source research, documentation analysis, and evidence-based context engineering following arxiv 2508.08322v1 best practices
-tools: WebFetch, Write, MultiEdit, Glob, Grep
+tools: WebFetch, Write, MultiEdit, Glob, Grep, Read
 color: purple
 model: sonnet
 ---

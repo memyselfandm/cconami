@@ -53,6 +53,8 @@ INSTRUCTIONS:
    - Comment final summary with files modified
 5. Update main issue status to "In Review" when complete
 6. Report completion with summary of implemented features
+
+IMPORTANT: If you discover anything that prevents you from implementing the feature as described, STOP and report back to the main agent IMMEDIATELY. Do not implement placeholders or fallbacks unless explicitly required in the feature.
 ```
 
 ## Instructions
@@ -140,17 +142,39 @@ INSTRUCTIONS:
    agent_assignments = []
    agent_counter = 1
    
+   # Analyze potential file conflicts
+   file_impact_map = {}
+   for issue in execution_scope:
+       estimated_files = estimate_files_touched(issue)  # Based on issue description and area
+       for file in estimated_files:
+           if file not in file_impact_map:
+               file_impact_map[file] = []
+           file_impact_map[file].append(issue.id)
+   
+   # Identify issues that might touch same files
+   conflict_groups = [issues for file, issues in file_impact_map.items() if len(issues) > 1]
+   
    # Group by area labels or content similarity
    issue_groups = group_by_technical_area(phases['features'])
    
+   # Assign whole feature areas to agents, max 4 agents in parallel
+   # Each agent should handle complete features or functional areas
+   MAX_PARALLEL_AGENTS = 4
+   assigned_agents = 0
+   
    for group in issue_groups:
-       agent_assignments.append({
-           'agent_number': agent_counter,
-           'issues': group[:3],  # Max 3 issues per agent
-           'specialization': determine_specialization(group),
-           'phase': 'features'
-       })
-       agent_counter += 1
+       if assigned_agents >= MAX_PARALLEL_AGENTS:
+           # Merge remaining groups to avoid too many parallel agents
+           agent_assignments[-1]['issues'].extend(group)
+       else:
+           agent_assignments.append({
+               'agent_number': agent_counter,
+               'issues': group,  # Assign complete feature groups
+               'specialization': determine_specialization(group),
+               'phase': 'features'
+           })
+           agent_counter += 1
+           assigned_agents += 1
    ```
 
 4. **Execution Plan Output** (if --dry-run):
@@ -168,7 +192,7 @@ INSTRUCTIONS:
    ### Phase 3: Integration (Sequential)
    - [ISSUE-ID]: Issue Title (Agent-5)
    
-   Total Agents: 5
+   Total Agents: 4 (max)
    Estimated Parallel Execution: 70%
    Dependencies Validated: ✓
    ```
@@ -226,10 +250,11 @@ for assignment in feature_assignments:
             body=f"🚀 Agent-{assignment['agent_number']} starting parallel execution"
         )
 
-# Execute all in parallel
+# Execute all in parallel (max 4 agents)
 Todo: "Launch all Feature Phase agents concurrently"
+# Run multiple Task invocations in a SINGLE message
 for prompt in agent_prompts:
-    Task.invoke(prompt)  # All in same response
+    Task.invoke(prompt)  # All in same message
 
 # Wait for all to complete
 wait_for_all_agents(feature_agents)

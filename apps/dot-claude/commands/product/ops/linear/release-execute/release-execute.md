@@ -175,7 +175,7 @@ Release v1.0
          "level": level,
          "sprints": [s.name for s in sprint_group],
          "can_parallel": True,
-         "total_agents": sum(calculate_agents_needed(s) for s in sprint_group),
+         "total_agents": sum(min(calculate_agents_needed(s), 4) for s in sprint_group),  # Max 4 per sprint,
          "estimated_duration": max(estimate_sprint_duration(s) for s in sprint_group)
        }
        execution_plan["waves"].append(wave)
@@ -199,10 +199,11 @@ def execute_sequential_release(plan):
       body: f"🚀 Starting Sprint {sprint}"
     )
     
-    # Execute sprint using sprint-execute command
+    # Execute sprint using sprint-execute command (max 4 parallel agents per sprint)
     result = execute_sprint(
       project: sprint,
-      context: f"Release {version} - Sprint {phase['order']}"
+      context: f"Release {version} - Sprint {phase['order']}",
+      max_agents: 4  # Limit parallelization to avoid conflicts
     )
     
     release_log.append({
@@ -239,15 +240,17 @@ def execute_parallel_release(plan):
     wave_tasks = []
     
     for sprint_name in wave["sprints"]:
-      # Create task for each sprint
+      # Create task for each sprint (with agent limit)
+      agents_needed = calculate_agents_needed(sprint_name)
       task = create_sprint_task(
         sprint: sprint_name,
-        agents: calculate_agents_needed(sprint_name),
+        agents: min(agents_needed, 4),  # Max 4 agents per sprint
         context: f"Release {version} - Wave {wave['level']}"
       )
       wave_tasks.append(task)
     
-    # Execute all tasks in parallel
+    # Execute all tasks in parallel using a SINGLE message
+    # Run multiple Task invocations in a SINGLE message for true parallelization
     results = execute_parallel_tasks(wave_tasks)
     
     # Wait for wave completion

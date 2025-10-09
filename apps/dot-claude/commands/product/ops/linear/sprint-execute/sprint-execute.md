@@ -1,129 +1,233 @@
 ---
-allowed-tools: Bash(date:*), Bash(git status:*), Bash(git commit:*), Bash(mkdir:*), Task, Write, MultiEdit, mcp__linear__*
+allowed-tools: Bash(date:*), Bash(git status:*), Bash(git commit:*), Bash(mkdir:*), Bash(rg:*), Todo, Task, Write, Glob, Grep, MultiEdit, mcp__linear__*
 argument-hint: --project <project-name> [--epic <epic-id>]
 description: (*Run from PLAN mode*) Review Linear project/epic, select sprint work, and execute with subagents maximizing concurrency
 ---
 
 # Linear Sprint Execution Command
-Query Linear for the specified project (and optional epic), analyze the backlog, and execute a sprint using subagents with maximum parallelization.
+Query Linear for the specified sprint project, analyze the issues in the sprint, then plan and execute a sprint using a structured workflow and subagents.
 
-## Usage
+The command will intelligently parallelize implementation where safe and appropriate, carefully identifying independent work streams while rigorously validating for file conflicts and dependencies.
+
+## Variables
 - `--project <name>`: (Required) Linear project name to query for issues
 - `--epic <id>`: (Optional) Specific epic ID to build sprint from. If not provided, analyzes project backlog
 
-The command will always maximize concurrency, identifying independent work streams that can be executed in parallel regardless of any sequential structure suggested by the epic.
 
-**Agent Assignment Protocol:**
-Each sub-agent receives:
-1. **Sprint Context**: Summary of the overall sprint goals and related issues
-2. **Linear Issue Context**: Assigned Linear issue(s) (and sub-issues) with full descriptions, acceptance criteria, and labels
-3. **Specialization Directive**: Explicit role keywords based on issue labels and content
-4. **Quality Standards**: Requirements from Linear issue descriptions and comments
-5. **Linear Issue IDs**: For updating issue state and adding completion comments
-
-**Sub-Agent Prompt Template:**
-Use this prompt template for each sub-agent
-```
-VARIABLES:
-$agentnumber: [ASSIGNED NUMBER]
-$linearIssueIds: [COMMA-SEPARATED LINEAR ISSUE IDS]
-$linearIssueDetails: [ISSUE IDENTIFIERS, TITLES, DESCRIPTIONS, ACCEPTANCE CRITERIA]
-
-ROLE: Act as a principal software engineer specializing in [SPECIALIZATIONS BASED ON LINEAR LABELS]
-
-CONTEXT:
-- Linear Issues: [ISSUE TITLES AND IDS]
-- Related Documentation: @ai_docs/knowledge/*
-- Sprint Goals: [OVERALL SPRINT OBJECTIVES]
-
-FEATURES TO IMPLEMENT:
-[Linear issue descriptions, acceptance criteria, and technical requirements]
-
-INSTRUCTIONS:
-1. Implement the assigned Linear issues using test-driven development
-2. Write meaningful tests that validate complete implementation
-3. Do not git commit your work
-4. Use Linear MCP to add progress comments to your assigned issues:
-   - Comment "🤖 Agent-$agentnumber starting work" when beginning
-   - Comment progress updates to the Linear issue as you complete major milestones
-   - Update status of sub-issues (parentId: $mainIssueUUID) to "Done" as you complete subtasks
-   - Comment final summary with files modified when complete
-5. Update Linear issue status to "In Review" when complete
-6. Update Linear sub-issue status to "Done" when complete
-7. Report completion with a summary of implemented Linear issues
-```
-
-## Instructions
+## Workflow
 
 ### Step 1: Setup
-1. Parse command arguments to extract project and optional epic
-2. Verify Linear MCP connectivity with `mcp__linear__list_teams`
+1. Parse command arguments to extract linear project identifier
 
-### Step 2: Gather Linear Data
-1. **Query Project Details**:
-   - Use `mcp__linear__get_team` to get team context
-   - Use `mcp__linear__list_projects` to find the sprint project
-   - Get project ID from the matching sprint project
+### Step 2: Issue Analysis
+1. Use the Task tool to execute the `project_context_subagent_prompt` below, replacing `$IDENTIFIER` with the project identifier
+   <project_context_subagent_prompt>
+      Execute the following steps:
+      1. Use `mcp__linear__get_team` to get team context
+      2. Use `mcp__linear__list_projects` to find the project with the identifier $IDENTIFIER
+      3. Extract project ID from the matching sprint project
+      4. Use `mcp__linear__list_issues` with project filter to fetch details about all issues in the sprint project, including:
+         - Description and acceptance criteria
+         - Labels (especially phase:* and area:* labels)
+         - Priority level
+         - Dependencies (blocks/blocked by relationships)
+         - Parent/child relationships (use `mcp__linear__list_issues`, passing the issue Id (not the identifier) as `parentId` parameter to fetch child issues)
+         - Any existing comments for context
+      5. Return a report of the sprint's issues to main agent in the following format:
+         ```markdown
+         # Sprint [SprintProjectIdentifier] Issue Details
 
-2. **Fetch Sprint Issues**:
-   - Use `mcp__linear__list_issues` with project filter
-   - Include all issues in "Backlog", "Planned", or "Todo" states
-   - Fetch detailed information for each issue including:
-     - Description and acceptance criteria
-     - Labels (especially phase:* and area:* labels)
-     - Priority level
-     - Dependencies (blocks/blocked by relationships)
-     - Parent/child relationships
-     - Any existing comments for context
+         ## Summary
+         ### Goals
+         [summarize the overall goals of the sprint]
 
-3. **Analyze Dependencies**:
-   - Map blocking relationships between issues
-   - Identify issues with "phase:foundation" label (must run first)
-   - Identify issues with "phase:integration" label (must run last)
-   - All others default to "phase:features" (parallel execution)
+         ### Metrics
+         [list the issue count by priority and status]
 
-### Step 3: Plan Sprint with Maximum Concurrency
+         ## Issue Details
+         <foreach issue>
+         ### [Issue-identifier]-[Issue Title]
+         **Summary:**
+         [summary of the issue from its description]
+         **Acceptance Criteria:**
+         [bulleted list of acceptance criteria]
+         **Metadata:**
+         [include metadata like priority, labels]
+         **Dependencies:**
+         [OPTIONAL - list any dependency relationships]
+         **Implementation Details:**
+         [OPTIONAL - include a summary of implementation details if provided]
+         **Notes/Comments:**
+         [OPTIONAL - include a summary of comments if available]
+         </foreach>
+         ```
+   </project_context_subagent_prompt>
 
-1. **Phase Distribution Analysis**:
-   ```python
-   # Categorize issues by phase labels
-   foundation_issues = [i for i in issues if "phase:foundation" in i.labels]
-   integration_issues = [i for i in issues if "phase:integration" in i.labels]
-   feature_issues = [all other issues]  # Default to parallel execution
+### Step 3: Code Analysis
+1. Based on the report from the Step 2 agent, use the Task tool to launch a subagent for each feature using the `code_analysis_subagent_prompt` prompt below. Launch the agents **concurrently**, making multiple Task tool calls in a single request.
+   <code_analysis_subagent_prompt>
+      # ROLE
+      You are an s-tier research engineer specializing in identifying relevant code for a given feature.
+
+      # CONTEXT
+      Linear Issue: $ISSUE_IDENTIFIER - $ISSUE_TITLE
+      Issue Summary:
+      $ISSUE_SUMMARY
+
+      Acceptance Criteria:
+      $ACCEPTANCE_CRITERA
+
+      [Dependencies: $DEPENDENCIES]
+      [Notes: $NOTES]
+
+      # TASK
+      Think hard about the above issue and how it would be implemented in this codebase. Thoroughly analyze the codebase to find all relevant code (including tests) that would be modified during implementation. Additionally, identify new files that would be created during implementation. Identify any dependency relationships in the implementation. Report your findings to the main agent in the provided format.
+
+      # OUTPUT
+      Format your report like this:
+      ```markdown
+
+      # [ISSUE_IDENTIFIER] Implementation Analysis
+
+      ## Summary
+      [In up to 3 bullet points, summarize the high-level changes to the code]
+
+      ## File Analysis
+      ### New Files
+      [List every file that will be created in the implementation by relative path, and briefly explain its purpose]
+
+      ### File Changes
+      [List every file that will be changed in the implementation by relative file, the type of change (Modified, Deleted, Moved), and briefly explain the change. IF the file will be modified, provide psuedocode or shortened real-code details of the changes as well, with line numbers if possible.]
+
+      ## Dependency Analysis
+      [List file and code dependencies for the implementation]
+      ```
+   </code_analysis_subagent_prompt>
+
+2. Using those analyses, generate a file confict analysis report that: 
+   - Maps out potential file i/o overlaps between different issues
+   - Maps file dependencies between issues
+
+### Step 4: Plan the Sprint Execution
+
+Based on the Linear issues analysis from Step 2 and the code analyses from Step 3, create a safe execution plan that balances parallelization with strict avoidance of file i/o and dependency conflicts.
+
+1. **Distribute each issues into one of three execution phases:**
+   Categorize the sprint issues into execution phases based on their phase labels or dependency chain
    
-   # Verify foundation phase is minimal (< 10% of work)
-   # Verify features phase is maximal (> 70% of work)
-   ```
-
-2. **Agent Assignment Logic**:
-   ```python
-   # Group issues by technical area for agent efficiency
-   groups = {}
-   for issue in issues:
-       area = extract_area_label(issue)  # area:frontend, area:backend, etc.
-       if area not in groups:
-           groups[area] = []
-       groups[area].append(issue)
+   - **Foundation Phase**: (Optional) Issues that must be completed first (e.g. database migrations, core infrastructure changes, blockers to other issues, etc.)
+   - **Features Phase**: Issues that represent the main functional changes for the sprint
+   - **Integration Phase**: Issues that require most other work to be complete (E2E tests, documentation, deployment configs)
    
-   # Assign 1-3 related issues per agent
-   # Balance complexity across agents
-   ```
+   VALIDATE that the distribution follows these guidelines:
+   - Foundation phase should contain less than 10% of total work (ideally 0-5%)
+   - Features phase should contain at least 70% of total work (ideally 75-85%)
+   - Integration phase should contain the remaining work (ideally 10-20%)
+   
+   If the distribution is heavily weighted toward foundation or integration phases, consider re-evaluating whether some issues could actually run in parallel.
 
-3. **Concurrency Validation**:
-   - Ensure no circular dependencies
-   - Verify blocked issues are in later phases than blockers
-   - Confirm maximum parallelization in features phase
-   - Ensure there are ZERO dependency or file clashes in features phase 
-   - Default assumption: everything can run in parallel unless proven otherwise
+2. **Plan Sub-Agent Assignments**
+   Group and assign issues to individual subagents, by:
+   - Stack area (frontend, backend, api, database, etc.) boundaries 
+   - Area of the codebase (especially touching the same files)
+   - Tight-coupling, if the issues do not cross stack or phase boundaries
+   
+   **Agent Distribution Guidelines**:
+   - Assign complete feature areas or functional domains to each agent
+   - Each agent should receive a coherent set of related issues that form a logical unit of work
+   - Balance the complexity and estimated effort across agents, but prioritize keeping related work together
+   - Limit parallel execution to a maximum of 4 agents to avoid resource contention and merge conflicts
+   - If there are more than 4 logical groupings, combine the smallest related groups
 
-4. **Generate Execution Plan**:
-   ```
-   Foundation: 1 issue (5%) - 1 agent
-   Features: 15 issues (75%) - 8 agents (ALL PARALLEL)
-   Integration: 4 issues (20%) - 2 agents
-   ```
+3. **Plan Sub-Agent Identity:**
+   - Assign each agent a number
+   - Think about the features assigned to each subagent and either:
+      - Select an existing, available Claude Code Sub-Agent whose description closely matches the assigned issue(s), OR
+      - Identify up to 3 specializations to use in the `subagent_prompt_template` below
 
-### Step 4: Execute the Sprint
+4. **Strict Validation Checks**:
+   Before finalizing the execution plan, perform rigorous validation to ensure safe parallel execution:
+   
+   - Check for circular dependencies between issues (Issue A blocks B, B blocks C, C blocks A)
+   - Verify that any blocked issues are scheduled in phases after their blocking issues
+   - Validate that parent issues are completed before or alongside their sub-issues
+   
+   **Parallelization Safety Check**:
+   - Only parallelize when file conflicts have been **completely** eliminated
+   - Verify no shared state or database schema conflicts between parallel agents
+   - Default to sequential execution if validation reveals any uncertainty about conflicts
+
+5. **Generate Validated Execution Plan**:
+   Create a comprehensive execution plan that prioritizes safety and correctness:
+   
+   - The number of issues in each phase with their percentage of total work
+   - The number of agents that will run in each phase
+   - **File Conflict Report**: List any files that multiple agents will touch and how conflicts are resolved
+   - **Validation Results**: Confirmation that all file conflicts have been eliminated
+   - **Dependency Map**: Visual or textual representation of issue dependencies
+   - Any identified risks or constraints that affect execution
+   
+   Example format:
+   "Foundation Phase: X issues (Y%) - Z agent(s) running sequentially
+   [Agent and issue assignment details]
+   Features Phase: X issues (Y%) - Z agents (parallel execution validated - NO file conflicts)
+   [Agent and issue assignment details]
+   Integration Phase: X issues (Y%) - Z agents
+   [Agent and issue assignment details]
+   
+   File Conflict Analysis: [PASS/FAIL with details]
+   Dependency Validation: [PASS/FAIL with details]"
+
+### Step 5: Execute the Sprint
+
+<subagent_prompt_template>
+```markdown
+# Role
+You are Agent-[ASSIGNED NUMBER], a principal software engineering agent specializing in [SPECIALIZATIONS BASED ON ASSIGNED ISSUES]
+
+# Assigned Issues
+## Sprint Goals: 
+[OVERALL SPRINT OBJECTIVES]
+
+## Linear Issues: 
+[LIST ASSIGNED LINEAR ISSUES AND SUB-ISSUES WITH IDENTIFIERS, TITLE, DESCRIPTIONS, ACCEPTANCE CRITERIA, AND TECHNICAL REQUIREMENTS]
+
+# Documentation: 
+[OPTIONAL: RELEVANT DOCUMENTATION FILES OR URLS]
+
+# Tools:
+- `mcp__linear__create_comment`: use to note progress on issues
+- `mcp__linear__update_issue`: use to update properties (status, labels, etc) of your assigned issues
+
+# Workflow:
+## Step 1: Write Unit Tests (TDD)
+1. Begin by writing meaningful tests that would pass upon complete implementation of your assigned feature(s). 
+2. Run the tests - they will fail now, because you have not implemented the feature.
+
+## Step 2: Implement the Feature(s) and Track Progress
+1. Implement the assigned feature(s) completely and honestly, ensuring that your tests pass as you implement the functionality.
+2. As you implement the feature, use the linear mcp tools to track your progress:
+   - Comment "🤖 Agent-$agentnumber starting work" when beginning to work on an issue
+   - Comment progress updates as you complete major milestones
+   - Update status of sub-issues (parentId: $mainIssueUUID) to "Done" as you complete subtasks
+   - Comment final summary with files modified when complete
+
+## Step 3: Test, Test, Test
+1. Run the tests from Step 1, and confirm all of the tests pass
+2. IF the tests pass, proceed to Step 4, 
+3. IF the tests do not pass, return to step 2
+
+## Step 4: Wrap Up
+1. Update Linear issue status to "In Review" when complete
+2. Update Linear sub-issue status to "Done" when complete
+3. Report back to the main agent with:
+   - A summary of the work completed for each assigned issue
+   - A list of files created or modified, with a brief summary of what was changed
+   - A test report containing the tests you created and the pass/fail rate of the tests
+
+IMPORTANT: If you discover anything that prevents you from implementing the feature as described (e.g. missing dependencies, missing/incorrect env vars, etc), STOP and report back to the main agent IMMEDIATELY. DO NOT implement placeholders, mocks, or fallbacks unless explicitly required in the feature.
+```
+</subagent_prompt_template>
 
 #### Phase 1: Foundation (Sequential - Only if Required)
 1. **Check if foundation phase exists**:
@@ -139,28 +243,20 @@ INSTRUCTIONS:
       - Make commits based on subagent work logs in Linear comments
       - Update issues to "In Review" state
 
-#### Phase 2: Features (Maximum Parallel Execution)
-1. **CRITICAL PARALLELIZATION REQUIREMENT**:
-   ```markdown
-   ⚠️ ALL feature agents MUST run simultaneously
-   - Create ONE todo: "Launch all Feature Phase agents"
-   - Use MULTIPLE Task invocations in a SINGLE response
-   - DO NOT wait between agent launches
-   - DO NOT create separate todos per agent
-   ```
+#### Phase 2: Features (Validated Parallel Execution)
+1. **Pre-Execution Validation**:
+   ⚠️ CRITICAL: Validate file conflicts before launching parallel agents
+   - Review file conflict analysis from planning phase
+   - Confirm NO two agents will modify the same files
+   - If conflicts detected, STOP and replan agent assignments
+   - Maximum 4 parallel agents to maintain control and avoid resource contention
 
-2. **Launch All Feature Agents**:
-   ```python
-   # Example structure (in ONE response):
-   Todo: "Launch all Feature Phase agents concurrently"
-   
-   Task.invoke(agent_1_prompt)
-   Task.invoke(agent_2_prompt)
-   Task.invoke(agent_3_prompt)
-   Task.invoke(agent_4_prompt)
-   Task.invoke(agent_5_prompt)
-   # ... continue for all feature agents
-   ```
+2. **Launch Validated Feature Agents**:
+   After confirming no file conflicts exist:
+   - Create todo: "Launch validated Feature Phase agents"
+   - Use multiple Task tool calls in a single message to launch agents concurrently, using the `subagent_prompt_template` above
+   - Each agent should have a clear, non-overlapping scope
+   - Monitor for any unexpected conflicts during execution
 
 3. **Monitor Parallel Execution**:
    - Track agent progress via Linear comments
@@ -184,7 +280,7 @@ INSTRUCTIONS:
    - Lint code if applicable, and run new tests if applicable
    - Update final Linear issues
 
-### Step 5: Finalize and Report
+### Step 6: Finalize and Report
 
 1. **Linear Updates**:
    ```python
@@ -220,7 +316,7 @@ INSTRUCTIONS:
    
    ### Phase Breakdown
    - Foundation: [X]/[Y] issues (1 agent, sequential)
-   - Features: [X]/[Y] issues (8 agents, parallel)
+   - Features: [X]/[Y] issues (4 agents max, parallel)
    - Integration: [X]/[Y] issues (2 agents, parallel)
    
    ### Parallelization Metrics
@@ -272,11 +368,11 @@ For each failed agent:
 
 ## Optimization Guidelines
 
-### Maximize Parallelization
-- Challenge every sequential assumption
-- Default to parallel execution
-- Only sequence when explicitly required
-- Aim for 70-90% of work in parallel phase
+### Safe and Intelligent Parallelization
+- Validate file conflicts before any parallel execution
+- Balance parallelization with code safety and quality
+- Default to sequential if validation reveals any conflicts
+- Target 70-80% parallel work only when fully validated
 
 ### Agent Efficiency
 - Group related issues by technical area
@@ -299,17 +395,19 @@ $ /sprint-execute --project "Sprint 2024-12-001: Authentication"
 🔍 Fetching sprint from Linear...
 📋 Found 20 issues in sprint project
 
-⚡ Parallelization Analysis:
+🔍 Validation Analysis:
+  File Conflicts: NONE DETECTED ✅
+  Dependencies: VALIDATED ✅
   Foundation: 1 issue (5%) - 1 agent required
-  Features: 15 issues (75%) - 8 agents (ALL PARALLEL)
+  Features: 15 issues (75%) - 4 agents (parallel execution validated)
   Integration: 4 issues (20%) - 2 agents
 
 🚀 Phase 1: Foundation
   ✅ Agent-1 completed database migrations (ISSUE-101)
 
-🚀 Phase 2: Features (LAUNCHING 8 AGENTS IN PARALLEL)
-  [Creating single todo with 8 parallel Task invocations]
-  ⏳ Agents 2-9 working simultaneously...
+🚀 Phase 2: Features (Validated Parallel Execution)
+  [File conflicts validated - safe to proceed]
+  ⏳ Agents 2-5 working in parallel...
   ✅ All feature agents completed successfully
 
 🚀 Phase 3: Integration

@@ -114,6 +114,9 @@ claudecode-dev/
 
 ## Development Guidelines
 
+### Claude Code Documentation
+- Local markdown copies of Claude Code documentation can be referenced at @~/.claude/context/docs/claude-code/
+
 ### Hook Development
 - Keep hooks focused and fast-executing
 - Use UV's inline dependency declarations
@@ -121,12 +124,14 @@ claudecode-dev/
 - Test hooks thoroughly before deployment
 
 ### Command Best Practices
+- Use @slash-command-architect when creating, reviewing, or improving Clade Code custom commands (aka slash-commands).
 - Make commands reusable and parameterized with $ARGUMENTS
 - Include clear descriptions for discoverability
 - Limit tool access to what's necessary
 - Use bash execution for dynamic context
 
 ### Subagent Design
+- Use @subagent-architect when creating, reviewing, or improving Claude Code subagents.
 - Create specialized agents for distinct domains
 - Write comprehensive system prompts
 - Grant minimal necessary tools
@@ -137,9 +142,6 @@ claudecode-dev/
 - Limit tool permissions appropriately
 - Be cautious with bash command execution
 - Use deny lists to protect sensitive files
-
-## Credits
-Much of this system is adapted or inspired by IndieDevDan's work. The UV single-file scripts architecture and agentic layer concept are particularly noteworthy contributions.
 
 ## Future Enhancements
 - Framework for hook script organization by type

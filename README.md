@@ -18,19 +18,32 @@ Transform ideas into execution-ready Linear issues with AI-optimized templates:
 
 You'll need to tweak them to work with your Linear setup.
 
-### Meta-Agents
-- **[Subagent Architect](./apps/dot-claude/agents/subagent-architect/)** - Builds Claude Code subagents using best practice patterns from Anthropic and others
-- **[Slash Command Architect](./apps/dot-claude/agents/slash-command-architect/)** - Creates and reviews Claude Code slash commands using best practice patterns
-- **[Context Engineering Subagent](./apps/dot-claude/agents/context-engineering-subagent/)** - Uses research-backed patterns for researching and compiling context (based on arxiv 2508.08322v1)
-- **[Notion Workspace Architect](./apps/dot-claude/agents/notion-workspace-architect/)** - Designs and implements Notion workspace structures
+### Domain-Organized Subagents
+
+**Meta-Agents** (Claude Code Enhancement)
+- **[Subagent Architect](./apps/dot-claude/agents/meta/claude-code/subagent-architect/)** - Builds Claude Code subagents using best practice patterns from Anthropic and others
+- **[Slash Command Architect](./apps/dot-claude/agents/meta/claude-code/slash-command-architect/)** - Creates and reviews Claude Code slash commands using best practice patterns
+- **[Context Engineering Subagent](./apps/dot-claude/agents/meta/claude-code/context-engineering-subagent/)** - Uses research-backed patterns for researching and compiling context (based on arxiv 2508.08322v1)
+
+**Engineering Agents** (Technical Implementation)
+- **[Engineering Agent](./apps/dot-claude/agents/eng/core/engineering-agent/)** - Full-stack development and architecture specialist
+- **[LangGraph Engineer](./apps/dot-claude/agents/eng/ai/langgraph-engineer/)** - Multi-agent orchestration and LangGraph framework specialist
+- **[Database Engineer](./apps/dot-claude/agents/eng/data/database-engineer/)** - Multi-database design and optimization specialist
+- **[Claude Agent SDK Python](./apps/dot-claude/agents/eng/ai/claude-agent-sdk-python/)** - Python SDK development specialist
+
+**Product Agents** (Product Management)
+- **[Notion Workspace Architect](./apps/dot-claude/agents/product/ops/notion-workspace-architect/)** - Designs and implements Notion workspace structures
+
+**UI/UX Agents** (Design & User Experience)
+- **[Frontend Designer](./apps/dot-claude/agents/uiux/design/frontend-designer/)** - UI/UX implementation and design systems specialist
 
 
 ## Claude Code Extensions
 
 | Type | Count | Folder | Description |
 |------|-------|--------|-------------|
-| [Commands](./apps/dot-claude/commands/COMMANDS_README.md) | 18 | `apps/dot-claude/commands/` | Custom slash commands organized by domain |
-| [Subagents](./apps/dot-claude/agents/SUBAGENTS_README.md) | 4 | `apps/dot-claude/agents/` | Specialized AI agents for specific tasks |
+| [Commands](./apps/dot-claude/commands/COMMANDS_README.md) | 22 | `apps/dot-claude/commands/` | Custom slash commands organized by domain |
+| [Subagents](./apps/dot-claude/agents/SUBAGENTS_README.md) | 10 | `apps/dot-claude/agents/` | Specialized AI agents organized by domain |
 | [Hooks](./apps/dot-claude/hooks/) | Templates | `apps/dot-claude/hooks/` | Event-driven automation scripts |
 | [Settings](./apps/dot-claude/settings/) | 2 configs | `apps/dot-claude/settings/` | Configuration templates and examples |
 
@@ -44,8 +57,8 @@ You'll need to tweak them to work with your Linear setup.
 ## Key Features
 
 - **Linear Issue Refinement Suite**: Transform ideas into AI-ready Linear issues with dual-mode commands
-- **Custom Slash Commands**: 18 commands organized by domain (engineering, product, UI/UX)
-- **Specialized Subagents**: 4 meta-agents for creating commands, agents, and context
+- **Custom Slash Commands**: 22 commands organized by domain (engineering, product, UI/UX)
+- **Specialized Subagents**: 10 domain-organized agents across 4 specialization areas (eng/, product/, uiux/, meta/)
 - **Hooks System**: Event-driven automation for Claude Code lifecycle
 - **Settings Templates**: Configuration examples for different use cases
 - **Agentic Layer Wrapper**: Framework for AI-friendly project structure

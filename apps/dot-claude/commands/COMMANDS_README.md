@@ -1,16 +1,16 @@
 # Claude Code Custom Commands Reference
 
-This directory contains 18 custom slash commands for Claude Code, organized by category for easy discovery and management.
+This directory contains 22 custom slash commands for Claude Code, organized by domain for easy discovery and management.
 
 ## Command Summary
 
 | Category | Subcategory | Count |
 |----------|-------------|-------|
-| Product | Linear Integration | 14 |
+| Product | Linear Integration | 16 |
 | Product | Operations | 2 |
-| Engineering | Development | 1 |
+| Engineering | Development | 3 |
 | UI/UX | Design | 1 |
-| **Total** | | **18** |
+| **Total** | | **22** |
 
 *Note: Documentation files in command subdirectories are not counted*
 
@@ -49,6 +49,7 @@ Commands for product management, planning, and operations.
 - `/release-execute` - (*Run from PLAN mode*) Execute entire release (multiple sprints)
 - `/dependency-map` - Analyze dependencies across releases and epics
 - `/project-shuffle` - Move issues between releases/projects
+- `/sprint-review` - Review and analyze completed sprint performance with actionable insights
 
 **Research** - User and market research
 - (Empty - future commands)
@@ -82,6 +83,9 @@ Commands for development, architecture, and technical operations.
 
 **Dev** - Development tools
 - `/git_status` - Understand the current state of the git repository
+- `/scrape-docs` - Scrape documentation sites and convert to organized markdown files
+- `/bundle-context` - Bundle project context for AI analysis
+- `/subagent-build` - Build and configure Claude Code subagents with research depth control
 
 ## Available Commands (Quick Reference)
 
@@ -102,6 +106,7 @@ Commands for development, architecture, and technical operations.
 | `/release-execute` | Execute entire release | PLAN mode |
 | `/dependency-map` | Analyze dependencies across releases | Any mode |
 | `/project-shuffle` | Move issues between projects | Any mode |
+| `/sprint-review` | Review completed sprint performance | Any mode |
 
 ### Other Product Commands
 | Command | Description | Documentation |
@@ -113,6 +118,9 @@ Commands for development, architecture, and technical operations.
 | Command | Description | Documentation |
 |---------|-------------|---------------|
 | `/git_status` | Current git repository state | [Command](./eng/dev/git_status.md) |
+| `/scrape-docs` | Scrape documentation sites and convert to organized markdown files | [Command](./eng/dev/scrape-docs.md) |
+| `/bundle-context` | Bundle project context for AI analysis | [Command](./eng/dev/bundle-context.md) |
+| `/subagent-build` | Build and configure Claude Code subagents | [Command](./eng/dev/subagent-build/subagent-build.md) |
 
 ### UI/UX Commands
 | Command | Description | Documentation |
@@ -145,7 +153,10 @@ commands/
     ├── scale/          # Performance/scaling
     ├── security/       # Security tools
     └── dev/            # Development tools
-        └── git_status.md
+        ├── git_status.md
+        ├── scrape-docs.md
+        ├── bundle-context.md
+        └── subagent-build/
 ```
 
 ## Quick Links
@@ -179,11 +190,21 @@ Complete documentation for Linear commands is available at:
 - **Sprint Plan:** [sprint-plan.md](./product/ops/linear/sprint-plan/sprint-plan.md)
 - **Sprint Execute:** [sprint-execute.md](./product/ops/linear/sprint-execute/sprint-execute.md)
 - **Sprint Status:** [sprint-status.md](./product/ops/linear/sprint-status/sprint-status.md)
+- **Sprint Review:** [sprint-review.md](./product/ops/linear/sprint-review/sprint-review.md)
 
 ### Engineering Development Commands
 
 #### Git Status Command
 - **Command File:** [git_status.md](./eng/dev/git_status.md)
+
+#### Documentation Scraper Command
+- **Command File:** [scrape-docs.md](./eng/dev/scrape-docs.md)
+
+#### Context Bundling Command
+- **Command File:** [bundle-context.md](./eng/dev/bundle-context.md)
+
+#### Subagent Builder Command
+- **Command File:** [subagent-build.md](./eng/dev/subagent-build/subagent-build.md)
 
 ## Usage
 
@@ -221,12 +242,30 @@ For commands with file references:
 /sprint @backlog.md
 ```
 
+## Security & Best Practices
+
+### Security Considerations
+**Important**: Some commands contain security considerations that require careful usage:
+
+- **Linear Commands**: Several Linear integration commands use bash wildcards that could allow arbitrary command execution if misused
+- **Tool Permissions**: Commands should request only the minimum tools necessary (3-4 tools recommended vs. current 7-10 in some commands)
+- **Best Practice Example**: `/sprint-review` demonstrates proper command design with minimal tool permissions and secure implementation
+
+### Command Design Best Practices
+1. **Minimal Tool Permissions**: Grant only necessary tools to each command
+2. **Secure Parameter Handling**: Validate all user inputs and avoid bash wildcards where possible
+3. **Clear Documentation**: Provide comprehensive usage examples and parameter validation
+4. **Error Handling**: Implement proper error handling and user feedback
+5. **Testing**: Test commands thoroughly in isolated environments before deployment
+
 ## Adding New Commands
 
-1. Create a new folder with the command name (kebab-case)
-2. Add the command markdown file inside the folder
-3. Create a `docs/` subfolder with documentation
-4. Update this README with the new command information
+1. **Use the slash-command-architect**: `@slash-command-architect` to design and review new commands
+2. Create a new folder with the command name (kebab-case)
+3. Add the command markdown file inside the folder
+4. Create a `docs/` subfolder with documentation
+5. Update this README with the new command information
+6. **Security Review**: Ensure minimal tool permissions and secure implementation
 
 ## Support
 
