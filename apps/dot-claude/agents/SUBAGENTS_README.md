@@ -17,7 +17,7 @@ This hierarchical structure enables:
 - **Unlimited Domain Expansion**: New domains can be added without affecting existing ones
 - **Performance Optimization**: Agents operate independently within their domain scope
 
-## Available Subagents (10 Total)
+## Available Subagents (11 Total)
 
 ### 🔧 Meta Domain (3 agents)
 **Purpose**: Claude Code enhancement and system-level automation
@@ -99,8 +99,21 @@ This hierarchical structure enables:
 - Python SDK development and implementation
 - **Note**: Needs expansion and better tool permissions
 
-### 🎯 Product Domain (1 agent)
+### 🎯 Product Domain (2 agents)
 **Purpose**: Product management, operations, and strategy
+
+#### product/ops/linear-operations-agent
+**Purpose**: Specialized Linear MCP operations agent for efficient API management and token optimization  
+**Use When**: Handling Linear MCP operations, fetching issue details, updating statuses, or generating structured reports from Linear data  
+**Tools**: mcp__linear__*, Read, Write, MultiEdit, Grep  
+**Quality Tier**: ⭐⭐⭐ Top-tier (follows Anthropic XML best practices, optimized for token efficiency)
+**Key Features**:
+- Batch Linear API operations for minimal token consumption
+- Structured data aggregation and dependency analysis
+- Comprehensive Linear workflow optimization
+- Advanced error handling with retry logic
+- Integration backend for existing Linear command suite
+- Team velocity analysis and capacity planning
 
 #### product/ops/notion-workspace-architect
 **Purpose**: Designs and implements Notion workspace structures  
@@ -130,7 +143,7 @@ This hierarchical structure enables:
 ## Quality Analysis & Recommendations
 
 ### Quality Tiers
-- **⭐⭐⭐ Top-tier (3 agents)**: Follow Anthropic XML best practices, well-defined scope, appropriate tools
+- **⭐⭐⭐ Top-tier (4 agents)**: Follow Anthropic XML best practices, well-defined scope, appropriate tools
 - **⭐⭐ Mid-tier (3 agents)**: Good functionality but need structural improvements
 - **⚠️ Needs Major Work (3 agents)**: Require significant refactoring or expansion
 - **🔴 Concerning (1 agent)**: The engineering-agent has fundamental issues with scope and tool permissions
@@ -138,7 +151,7 @@ This hierarchical structure enables:
 ### Key Issues Identified
 1. **Tool Over-Permissioning**: Some agents have 7-11 tools when 3-4 would suffice
 2. **Mixed Purposes**: The engineering-agent tries to do too many things
-3. **Inconsistent Standards**: Only 3/10 agents follow Anthropic's XML best practices
+3. **Inconsistent Standards**: Only 4/11 agents follow Anthropic's XML best practices
 4. **Variable Tool Counts**: Range from 3-11 tools per agent indicates inconsistent scoping
 
 ### Improvement Recommendations
@@ -174,6 +187,7 @@ Claude Code will proactively use subagents when:
 @engineering-agent for general development (use sparingly due to scope issues)
 
 # Product domain: Product management
+@linear-operations-agent for Linear API operations and workflow optimization
 @notion-workspace-architect for workspace design
 
 # UI/UX domain: Design and user experience
@@ -213,6 +227,7 @@ agents/
 │       └── database-engineer/
 ├── product/                 # Product management and operations
 │   └── ops/
+│       ├── linear-operations-agent/
 │       └── notion-workspace-architect/
 └── uiux/                   # Design and user experience
     └── design/
