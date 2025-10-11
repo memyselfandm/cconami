@@ -29,12 +29,32 @@ Reorganizes work between projects while maintaining relationships and dependenci
 
 ### Execution Commands
 
+#### `/sprint-plan`
+Breaks down Linear epics into focused sprint projects with intelligent dependency analysis.
+- Creates sprint projects with naming convention [EPIC-ID].S[NN]
+- Groups 3-8 issues per sprint for optimal execution
+- Validates dependencies and prevents circular dependencies
+- Supports dry-run preview mode
+- **Structure**: 6 XML-structured steps with comprehensive validation
+- **Quality**: Follows Anthropic prompt engineering best practices
+
 #### `/sprint-execute`
 Orchestrates parallel execution of sprint features using multiple AI agents.
 - Launches specialized agents for each feature
 - Manages parallel execution with dependency awareness
 - Updates Linear issues with progress
 - Coordinates agent completion and handoffs
+- **Structure**: XML-tagged subagent prompts with validation
+- **Quality**: Production-ready with comprehensive error handling
+
+#### `/sprint-review`
+Validates completed sprint work against Linear requirements and agent claims.
+- Cross-references specifications with actual implementation
+- Launches parallel review agents (2-4 agents)
+- Generates comprehensive validation reports with quality metrics
+- Optional automatic Linear updates with findings
+- **Structure**: 6 streamlined steps with XML subagent delegation
+- **Quality**: Evidence-based validation with rejection criteria
 
 #### `/release-execute`
 Orchestrates execution of entire releases by managing multiple sprints.
@@ -45,10 +65,12 @@ Orchestrates execution of entire releases by managing multiple sprints.
 
 #### `/issue-execute`
 Executes specific Linear issues with automatic dependency resolution and parallel subagent orchestration.
-- Ad-hoc execution of individual issues
-- Automatic dependency analysis
-- Intelligent phase assignment
+- Ad-hoc execution of individual issues (no sprint project required)
+- Automatic dependency analysis and resolution
+- Intelligent phase assignment (Foundation → Features → Integration)
 - Perfect for hot fixes and urgent features
+- **Structure**: 6 steps with analyze→build→report workflow
+- **Quality**: XML-tagged prompts matching sprint-execute pattern
 
 ## Workflow Patterns
 
@@ -97,6 +119,30 @@ These commands work together to provide complete product lifecycle management:
 3. **Adjustment Phase**: Use `/project-shuffle` to optimize distribution
 4. **Execution Phase**: Use `/sprint-execute`, `/release-execute`, or `/issue-execute` to implement
 5. **Monitoring**: All execution commands update Linear in real-time
+
+## Command Quality Standards
+
+All execution and planning commands follow **Anthropic's prompt engineering best practices**:
+
+### Structural Excellence
+- **XML-tagged subagent prompts** for clear delegation and variable handling
+- **Comprehensive validation** with checklists at each workflow step
+- **Evidence-based error handling** with specific recovery strategies
+- **Multishot examples** covering typical, edge, and error cases
+
+### Workflow Patterns
+- **Analyze → Build → Report**: Clear three-phase execution structure
+- **Parallel subagent delegation**: Multiple agents working concurrently
+- **Self-verification**: Validation requirements at every critical step
+- **Success criteria**: Explicit completion requirements
+
+### Recent Upgrades (2025-01)
+The following commands were upgraded to production-ready quality:
+- `sprint-plan`: 365→1629 lines with comprehensive XML structure
+- `issue-execute`: 396→750 lines with analyze→build→report workflow
+- `sprint-review`: 361→960 lines with streamlined validation process
+
+All now match `sprint-execute`'s proven quality standard.
 
 ## Technical Architecture
 
