@@ -1,6 +1,6 @@
 ---
 allowed-tools: Bash(date:*), Bash(git log:*), Bash(git diff:*), Todo, Task, Read, Grep, Glob, mcp__linear__*
-argument-hint: --project <project-name> [--epic <epic-id>] [--update-linear]
+argument-hint: <project-name> [epic-id] [update-linear]
 description: (*Run from PLAN mode*) Thoroughly review completed sprint work, validate agent claims against actual implementation, and generate comprehensive validation report
 ---
 
@@ -10,17 +10,16 @@ Comprehensive post-sprint validation that cross-references Linear requirements w
 The command analyzes what was supposed to be done (Linear specs), what agents claimed to do (comments), and what was actually implemented (code review), generating detailed validation reports with quality metrics.
 
 ## Variables
-- `--project <name>`: (Required) Linear sprint project name to review
-- `--epic <id>`: (Optional) Specific epic ID for additional context
-- `--update-linear`: (Optional) Auto-confirm Linear issue updates with findings
+- `$1` (project-name): (Required) Linear sprint project name to review
+- `$2` (epic-id): (Optional) Specific epic ID for additional context
+- `$3` (update-linear): (Optional) Pass "yes" or "true" to auto-confirm Linear issue updates with findings
 
 ## Workflow
 
 ### Step 1: Parse Arguments and Setup
-1. Parse command arguments to extract project name from `--project`
-2. Extract optional epic ID from `--epic` (if provided)
-3. Parse `--update-linear` flag for auto-confirmation mode
-4. Initialize review tracking structures for findings aggregation
+1. Parse command arguments: `$1` contains project name, `$2` contains optional epic ID, `$3` contains optional update-linear flag
+2. Validate update-linear flag: check if `$3` is "yes" or "true" for auto-confirmation mode
+3. Initialize review tracking structures for findings aggregation
 
 ### Step 2: Gather Sprint Context and Claims
 1. Use the Task tool to execute the `sprint_context_subagent_prompt` below, replacing `$PROJECT_NAME` with the actual project identifier
@@ -614,7 +613,7 @@ The following issues have discrepancies and should be updated in Linear:
 
 [Continue for all issues needing updates...]
 
-To apply these updates, run with `--update-linear` flag or confirm below.
+To apply these updates, run with update-linear flag (third argument as "yes") or confirm below.
 
 ---
 
@@ -872,9 +871,9 @@ if missing_agent_claims or missing_issues:
 ## Example Execution
 
 ```bash
-$ /sprint-review --project "Sprint 2024-12-001: Authentication"
+$ /sprint-review "Sprint 2024-12-001: Authentication"
 
-🔍 Parsing arguments: --project "Sprint 2024-12-001: Authentication"
+🔍 Parsing arguments: project name "Sprint 2024-12-001: Authentication"
 
 📋 Fetching sprint context and claims from Linear...
    ⏳ Analyzing sprint project and issues...
@@ -923,7 +922,7 @@ Proposed updates:
 - Update status for 5 incomplete issues
 - Add "needs-rework" label to 3 issues
 
-Proceed with Linear updates? (y/n) [or use --update-linear to auto-confirm]
+Proceed with Linear updates? (y/n) [or pass "yes" as third argument to auto-confirm]
 
 [User responds: y]
 

@@ -1,6 +1,6 @@
 ---
 allowed-tools: mcp__linear__*, filesystem:*, Task, Write
-argument-hint: --team <team-name> --epic <epic-id> [--skip-prep]
+argument-hint: <team-name> <epic-id> [skip-prep]
 description: (*Run from PLAN mode*) Prepare, analyze, and break down a Linear epic into features and tasks with parallel codebase analysis
 ---
 
@@ -8,9 +8,9 @@ description: (*Run from PLAN mode*) Prepare, analyze, and break down a Linear ep
 Prepare, analyze, and break down a Linear epic into a complete hierarchy of features and tasks optimized for AI agent execution. Now includes full epic preparation capabilities.
 
 ## Usage
-- `--team <name>`: (Required) Linear team name
-- `--epic <id>`: (Required) Epic issue ID to prepare and break down  
-- `--skip-prep`: (Optional) Skip preparation phase and go directly to breakdown
+- `$1` (team-name): (Required) Linear team name
+- `$2` (epic-id): (Required) Epic issue ID to prepare and break down
+- `$3` (skip-prep): (Optional) Pass "yes" or "true" to skip preparation phase and go directly to breakdown
 
 ## Instructions
 
@@ -20,7 +20,8 @@ Prepare, analyze, and break down a Linear epic into a complete hierarchy of feat
 
 1. **Check Skip Flag**:
    ```python
-   if "--skip-prep" in arguments:
+   skip_prep = $3  # Third positional argument
+   if skip_prep and skip_prep.lower() in ["yes", "true"]:
        print("⏭️ Skipping preparation phase, going directly to breakdown...")
        goto step_1_readiness_assessment
    else:
@@ -601,8 +602,8 @@ View in Linear: {epic.url}
 ### ✅ Next Steps
 1. Review created features and tasks in Linear
 2. Adjust any dependencies if needed  
-3. Run `/sprint-plan --team {team.name} --epic {epic.id}` to create first sprint
-4. Execute with `/sprint-execute --project "Sprint YYYY-MM-NNN"`
+3. Run `/sprint-plan {team.name} {epic.id}` to create first sprint
+4. Execute with `/sprint-execute "Sprint YYYY-MM-NNN"`
 
 ### 🗂️ Command Consolidation Note
 This command now includes epic preparation functionality. The separate `/epic-prep` command has been deprecated in favor of this integrated approach.
@@ -629,7 +630,7 @@ This command now includes epic preparation functionality. The separate `/epic-pr
 ## Usage Example
 
 ```bash
-$ /epic-breakdown --team Chronicle --epic EPIC-123
+$ /epic-breakdown Chronicle EPIC-123
 
 🔧 Starting epic structure preparation...
 🔍 Gathering epic context and analyzing current structure
@@ -681,7 +682,7 @@ Ready for sprint planning!
 
 ### Skip Preparation Example
 ```bash
-$ /epic-breakdown --team Chronicle --epic EPIC-123 --skip-prep
+$ /epic-breakdown Chronicle EPIC-123 yes
 
 ⏭️ Skipping preparation phase, going directly to breakdown...
 

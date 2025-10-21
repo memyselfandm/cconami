@@ -1,6 +1,6 @@
 ---
 allowed-tools: Task, mcp__linear__*, TodoWrite, Read, Write
-argument-hint: --team <team-name> [--scope <all|release|epic|sprint>] [--format <text|mermaid|csv>]
+argument-hint: <team-name> [scope] [format]
 description: Analyze and visualize dependencies across Linear issues, identifying blockers, critical paths, and circular dependencies
 ---
 
@@ -9,13 +9,9 @@ description: Analyze and visualize dependencies across Linear issues, identifyin
 Comprehensive dependency analysis tool that maps relationships across all Linear issue types, identifies blocking chains, detects circular dependencies, and generates visual dependency reports for better project planning.
 
 ## Usage
-- `--team <name>`: (Required) Linear team name to analyze
-- `--scope <type>`: Scope of analysis: all, release, epic, sprint, project (default: all)
-- `--scope-id <id>`: ID of specific release/epic/sprint to analyze
-- `--format <type>`: Output format: text, mermaid, csv, json (default: text)
-- `--depth <number>`: Maximum dependency depth to traverse (default: 10)
-- `--show-external`: Include cross-team dependencies
-- `--critical-only`: Show only critical path dependencies
+- `$1` (team-name): (Required) Linear team name to analyze
+- `$2` (scope): (Optional) Scope of analysis - can be "all", "release", "epic", "sprint", "project", or a specific ID (default: all)
+- `$3` (format): (Optional) Output format: text, mermaid, csv, json (default: text)
 
 ## Dependency Types
 
@@ -308,7 +304,7 @@ TASK-102,TASK-103,blocks,true,3,blocked
 
 ### All Dependencies View
 ```
-/dependency-map --team Chronicle
+/dependency-map Chronicle
 
 📊 Dependency Analysis - Team Chronicle
 
@@ -332,7 +328,7 @@ See full report: ./dependency-report.md
 
 ### Release Scope View
 ```
-/dependency-map --team Chronicle --scope release --scope-id v1.0
+/dependency-map Chronicle v1.0
 
 📊 Release v1.0 Dependencies
 
@@ -383,10 +379,10 @@ Recommended sequence:
 
 ```bash
 # Comprehensive dependency workflow
-/dependency-map --team Chronicle --scope all         # Full analysis
-/project-shuffle --resolve-blocks                    # Fix blockers
-/sprint-plan --respect-dependencies                  # Plan with deps
-/sprint-execute --validate-dependencies              # Execute safely
+/dependency-map Chronicle all                        # Full analysis
+/project-shuffle [team] resolve-blocks               # Fix blockers
+/sprint-plan [team] [epic] [max-sprints]             # Plan with deps
+/sprint-execute [project-name]                       # Execute safely
 ```
 
 ---

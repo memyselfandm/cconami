@@ -1,6 +1,6 @@
 ---
 allowed-tools: Task, mcp__linear__*, TodoWrite, WebFetch
-argument-hint: --team <team-name> [--horizon <months>] [--version <starting-version>] [--dry-run]
+argument-hint: <team-name> [horizon-months] [starting-version] [dry-run]
 description: Plan multiple major and minor releases from backlog, distributing epics and features across version milestones
 ---
 
@@ -9,12 +9,10 @@ description: Plan multiple major and minor releases from backlog, distributing e
 Design and create a comprehensive release roadmap with multiple major and minor versions, distributing epics and features across releases while considering dependencies, team capacity, and strategic goals.
 
 ## Usage
-- `--team <name>`: (Required) Linear team name to plan releases for
-- `--horizon <months>`: Planning horizon in months (default: 6)
-- `--version <starting>`: Starting version number (default: v1.0)
-- `--dry-run`: Preview release plan without creating issues
-- `--strategy <type>`: Release strategy: quarterly, monthly, continuous (default: quarterly)
-- `--capacity <percentage>`: Team capacity to allocate (default: 80%)
+- `$1` (team-name): (Required) Linear team name to plan releases for
+- `$2` (horizon-months): (Optional) Planning horizon in months (default: 6)
+- `$3` (starting-version): (Optional) Starting version number (default: v1.0)
+- `$4` (dry-run): (Optional) Pass "yes" or "true" to preview release plan without creating issues
 
 ## Release Planning Strategy
 
@@ -292,10 +290,10 @@ No changes made - use without --dry-run to execute
 
 ```bash
 # Full release planning workflow
-/release-plan --team Chronicle --horizon 6        # Plan releases
-/dependency-map --release v1.0                    # Verify dependencies
-/sprint-plan --release v1.0 --max-sprints 4       # Break into sprints
-/release-execute --version v1.0                   # Execute release
+/release-plan Chronicle 6                         # Plan releases
+/dependency-map Chronicle v1.0                   # Verify dependencies
+/sprint-plan [team] [epic] 4                      # Break into sprints
+/release-execute v1.0                             # Execute release
 ```
 
 ## Best Practices

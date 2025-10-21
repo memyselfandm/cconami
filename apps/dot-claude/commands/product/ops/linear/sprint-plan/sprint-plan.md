@@ -1,6 +1,6 @@
 ---
 allowed-tools: mcp__linear__*
-argument-hint: --team <team-name> --epic <epic-id> [--max-sprints <number>] [--dry-run]
+argument-hint: <team-name> <epic-id> [max-sprints] [dry-run]
 description: (*Run from PLAN mode*) Break down a Linear epic into focused sprint projects, prioritizing parallelization and avoiding dependency clashes
 ---
 
@@ -31,10 +31,10 @@ This command prioritizes:
 - **For workload balancing**: Distribute issues across time and resources effectively
 
 ## Command Arguments
-- `--team <name>`: (Required) Linear team name containing the epic
-- `--epic <epic-id>`: (Required) Epic ID to break down into sprints (e.g., CHR-123)
-- `--max-sprints <number>`: (Optional) Maximum number of sprints to create. Default: 6
-- `--dry-run`: (Optional) Preview sprint breakdown without creating Linear projects
+- `$1` (team-name): (Required) Linear team name containing the epic
+- `$2` (epic-id): (Required) Epic ID to break down into sprints (e.g., CHR-123)
+- `$3` (max-sprints): (Optional) Maximum number of sprints to create. Default: 6
+- `$4` (dry-run): (Optional) Pass "true" or "yes" to preview sprint breakdown without creating Linear projects
 </context>
 
 <instructions>
@@ -541,7 +541,7 @@ This requires careful sequencing and error handling.
 
    ## Execution Command
    ```
-   /sprint-execute --project "[EPIC-ID].S[NN]"
+   /sprint-execute "[EPIC-ID].S[NN]"
    ```
    ```
 
@@ -670,10 +670,10 @@ Both should be comprehensive and actionable.
 📋 Next Steps:
   ✅ Review sprint breakdown above
   ✅ Validate dependencies and groupings
-  ✅ Run without --dry-run to create projects:
-     /sprint-plan --team [team] --epic [epic-id]
+  ✅ Run without dry-run to create projects:
+     /sprint-plan [team] [epic-id]
   ✅ Or adjust and re-run dry-run:
-     /sprint-plan --team [team] --epic [epic-id] --max-sprints [N] --dry-run
+     /sprint-plan [team] [epic-id] [N] yes
 ```
 
 **For Actual Execution** (Projects Created):
@@ -717,7 +717,7 @@ Both should be comprehensive and actionable.
   1. Review sprint projects in Linear
   2. Validate issue assignments and dependencies
   3. Execute first sprint:
-     /sprint-execute --project "[EPIC-ID].S01"
+     /sprint-execute "[EPIC-ID].S01"
   4. After S01 completes, execute S02, and so on...
 ```
 
@@ -747,7 +747,7 @@ Both should be comprehensive and actionable.
   3. Or retry command after addressing errors
 
 🚀 For successful sprints, proceed with execution:
-   /sprint-execute --project "[EPIC-ID].S01"
+   /sprint-execute "[EPIC-ID].S01"
 ```
 
 **For Complete Failure**:
@@ -774,7 +774,7 @@ Error: [Primary error message]
   2. [Another specific step]
   3. Retry command after addressing issues
   4. Or use --dry-run to validate plan:
-     /sprint-plan --team [team] --epic [epic-id] --dry-run
+     /sprint-plan [team] [epic-id] 6 yes
 ```
 </details>
 
@@ -896,7 +896,7 @@ Optimization Techniques:
 
 **Input**:
 ```
-/sprint-plan --team Chronicle --epic CHR-100
+/sprint-plan Chronicle CHR-100
 ```
 
 **Context**:
@@ -984,7 +984,7 @@ Optimization Techniques:
 
 🚀 Next Steps:
   1. Review sprint projects in Linear
-  2. Execute first sprint: /sprint-execute --project "CHR-100.S01"
+  2. Execute first sprint: /sprint-execute "CHR-100.S01"
   3. After S01 completes, execute S02, and so on...
 ```
 
@@ -992,7 +992,7 @@ Optimization Techniques:
 
 **Input**:
 ```
-/sprint-plan --team Chronicle --epic CHR-200 --max-sprints 3
+/sprint-plan Chronicle CHR-200 3
 ```
 
 **Context**:
@@ -1053,14 +1053,14 @@ Optimization Techniques:
 ⚠️  Execution Recommendations:
   - Consider internal phasing within each sprint
   - Monitor closely for complexity and coordination issues
-  - May want to increase --max-sprints to 6 for more focused sprints
+  - May want to increase max-sprints parameter to 6 for more focused sprints
 ```
 
 ## Example 3: Dry-Run Preview
 
 **Input**:
 ```
-/sprint-plan --team Chronicle --epic CHR-150 --dry-run
+/sprint-plan Chronicle CHR-150 6 yes
 ```
 
 **Context**:
@@ -1136,17 +1136,17 @@ Optimization Techniques:
 📋 Next Steps:
   ✅ Review sprint breakdown above
   ✅ Validate dependencies and groupings
-  ✅ Run without --dry-run to create projects:
-     /sprint-plan --team Chronicle --epic CHR-150
+  ✅ Run without dry-run to create projects:
+     /sprint-plan Chronicle CHR-150
   ✅ Or adjust sprint count and re-preview:
-     /sprint-plan --team Chronicle --epic CHR-150 --max-sprints 4 --dry-run
+     /sprint-plan Chronicle CHR-150 4 yes
 ```
 
 ## Example 4: Epic with Circular Dependencies (Error Case)
 
 **Input**:
 ```
-/sprint-plan --team Chronicle --epic CHR-300
+/sprint-plan Chronicle CHR-300
 ```
 
 **Context**:
@@ -1196,17 +1196,17 @@ Option 3: Restructure issues
   2. Remove or adjust blocking relationships
 
   3. Retry sprint planning:
-     /sprint-plan --team Chronicle --epic CHR-300
+     /sprint-plan Chronicle CHR-300
 
   4. Or preview with dry-run after fixing:
-     /sprint-plan --team Chronicle --epic CHR-300 --dry-run
+     /sprint-plan Chronicle CHR-300 6 yes
 ```
 
 ## Example 5: Single-Sprint Epic (Simple Case)
 
 **Input**:
 ```
-/sprint-plan --team Chronicle --epic CHR-50
+/sprint-plan Chronicle CHR-50
 ```
 
 **Context**:
@@ -1248,7 +1248,7 @@ Option 3: Restructure issues
 
 🚀 Next Steps:
   1. Review sprint project in Linear
-  2. Execute sprint: /sprint-execute --project "CHR-50.S01"
+  2. Execute sprint: /sprint-execute "CHR-50.S01"
   3. All issues can be parallelized - expect fast completion!
 ```
 </examples>
@@ -1291,7 +1291,7 @@ Option 3: Restructure issues
 
 🚀 Next Steps:
   1. Review sprint projects in Linear
-  2. Execute first sprint: /sprint-execute --project "[EPIC-ID].S01"
+  2. Execute first sprint: /sprint-execute "[EPIC-ID].S01"
   3. After S01 completes, execute subsequent sprints in order
 ```
 
@@ -1334,10 +1334,10 @@ Option 3: Restructure issues
 📋 Next Steps:
   ✅ Review sprint breakdown above
   ✅ Validate dependencies and groupings
-  ✅ Run without --dry-run to create projects:
-     /sprint-plan --team [team] --epic [epic-id]
+  ✅ Run without dry-run to create projects:
+     /sprint-plan [team] [epic-id]
   ✅ Or adjust and re-run dry-run:
-     /sprint-plan --team [team] --epic [epic-id] --max-sprints [N] --dry-run
+     /sprint-plan [team] [epic-id] [N] yes
 ```
 
 ## Error Output (Failure Cases)
@@ -1385,7 +1385,7 @@ Error: [Specific error message]
   [Specific instructions to complete failed items]
 
 🚀 For successful sprints, proceed with:
-   /sprint-execute --project "[EPIC-ID].S01"
+   /sprint-execute "[EPIC-ID].S01"
 ```
 </output_format>
 
@@ -1457,7 +1457,7 @@ The sprint-plan command is considered successful when:
 
 ### Downstream Commands (Run After sprint-plan)
 - **`/sprint-execute`**: Executes a single sprint project
-  - Takes `--project "[EPIC-ID].S[NN]"` parameter
+  - Takes project name as first positional parameter
   - Launches AI agents to implement sprint work
   - Posts progress to Linear comments
   - Updates issue statuses automatically
@@ -1483,26 +1483,26 @@ The sprint-plan command is considered successful when:
 ### Complete Workflow Example
 ```bash
 # 1. Prepare epic structure
-/epic-prep --team Chronicle --epic CHR-100 --execute
+/epic-prep Chronicle CHR-100 yes
 
 # 2. Break down epic into features (optional but recommended)
-/epic-breakdown --team Chronicle --epic CHR-100
+/epic-breakdown Chronicle CHR-100
 
 # 3. Visualize dependencies (optional)
-/dependency-map --epic CHR-100
+/dependency-map Chronicle CHR-100
 
 # 4. Plan sprint breakdown (THIS COMMAND)
-/sprint-plan --team Chronicle --epic CHR-100 --dry-run  # Preview first
-/sprint-plan --team Chronicle --epic CHR-100             # Create projects
+/sprint-plan Chronicle CHR-100 6 yes  # Preview first
+/sprint-plan Chronicle CHR-100        # Create projects
 
 # 5. Execute sprints sequentially
-/sprint-execute --project "CHR-100.S01"
+/sprint-execute "CHR-100.S01"
 # Wait for S01 completion, then:
-/sprint-execute --project "CHR-100.S02"
+/sprint-execute "CHR-100.S02"
 # Continue for remaining sprints...
 
 # 6. Monitor progress throughout
-/sprint-status --project "CHR-100.S01" --detailed
+/sprint-status "CHR-100.S01" yes
 ```
 
 ### Data Flow Between Commands
@@ -1522,24 +1522,24 @@ sprint-status → monitors execution
 
 **Pattern 1: Full Epic Lifecycle**
 ```bash
-/epic-prep --execute → /epic-breakdown → /sprint-plan → /sprint-execute (×N)
+/epic-prep <team> <epic> yes → /epic-breakdown <team> <epic> → /sprint-plan <team> <epic> → /sprint-execute (×N)
 ```
 
 **Pattern 2: Quick Sprint from Existing Epic**
 ```bash
-/sprint-plan --dry-run → review → /sprint-plan → /sprint-execute
+/sprint-plan <team> <epic> 6 yes → review → /sprint-plan <team> <epic> → /sprint-execute
 ```
 
 **Pattern 3: Dependency-Aware Planning**
 ```bash
-/dependency-map → /sprint-plan --dry-run → adjust → /sprint-plan
+/dependency-map <team> <epic> → /sprint-plan <team> <epic> 6 yes → adjust → /sprint-plan <team> <epic>
 ```
 
 **Pattern 4: Iterative Planning**
 ```bash
-/sprint-plan --dry-run --max-sprints 3 → review
-/sprint-plan --dry-run --max-sprints 5 → compare
-/sprint-plan --max-sprints 4 → execute chosen plan
+/sprint-plan <team> <epic> 3 yes → review
+/sprint-plan <team> <epic> 5 yes → compare
+/sprint-plan <team> <epic> 4 → execute chosen plan
 ```
 </integration_notes>
 

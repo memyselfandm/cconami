@@ -1,6 +1,6 @@
 ---
 allowed-tools: Task, mcp__linear__*, TodoWrite, Bash(git:*), Bash(date:*)
-argument-hint: --version <release-version> [--team <team-name>] [--mode <sequential|parallel>]
+argument-hint: <release-version> [team-name] [mode]
 description: Execute an entire release with multiple sprints, coordinating cross-team work and managing inter-sprint dependencies
 ---
 
@@ -9,12 +9,9 @@ description: Execute an entire release with multiple sprints, coordinating cross
 Orchestrate the execution of an entire release containing multiple sprints, managing cross-team coordination, inter-sprint dependencies, and providing comprehensive progress tracking across all release activities.
 
 ## Usage
-- `--version <release>`: (Required) Release version to execute (e.g., v1.0, v2.0)
-- `--team <name>`: Team name (required if multiple teams have same release)
-- `--mode <type>`: Execution mode: sequential, parallel (default: sequential)
-- `--skip-validation`: Skip dependency validation before execution
-- `--auto-commit`: Automatically commit after each sprint phase
-- `--generate-notes`: Create release notes during execution
+- `$1` (release-version): (Required) Release version to execute (e.g., v1.0, v2.0)
+- `$2` (team-name): (Optional) Team name (required if multiple teams have same release)
+- `$3` (mode): (Optional) Execution mode: sequential or parallel (default: sequential)
 
 ## Release Execution Strategy
 
@@ -503,13 +500,13 @@ Starting Sprint 1...
 
 ```bash
 # Complete release workflow
-/release-plan --team Chronicle --version v1.0        # Plan release
-/dependency-map --scope release --scope-id v1.0      # Verify dependencies
-/release-execute --version v1.0 --mode sequential    # Execute release
-/sprint-status --release v1.0                        # Monitor progress
+/release-plan Chronicle 6 v1.0                       # Plan release
+/dependency-map Chronicle v1.0                       # Verify dependencies
+/release-execute v1.0 Chronicle sequential          # Execute release
+/sprint-status v1.0                                  # Monitor progress
 
 # Parallel execution for experienced teams
-/release-execute --version v2.0 --mode parallel --auto-commit
+/release-execute v2.0 Chronicle parallel
 ```
 
 ## Advanced Features
@@ -546,7 +543,7 @@ teams:
 ### Release Rollback
 ```bash
 # If release fails
-/release-execute --version v1.0 --rollback
+/release-execute v1.0 Chronicle rollback
 # Reverts all changes, resets issue states
 ```
 

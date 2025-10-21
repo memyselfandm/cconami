@@ -1,6 +1,6 @@
 ---
 allowed-tools: Task, mcp__linear__*, TodoWrite
-argument-hint: --team <team-name> --action <rebalance|reschedule|reorganize|escalate> [options]
+argument-hint: <team-name> <action> [options]
 description: Reorganize Linear issues when priorities change - move between releases, rebalance workload, update dependencies
 ---
 
@@ -9,14 +9,9 @@ description: Reorganize Linear issues when priorities change - move between rele
 Comprehensive project reorganization tool that handles priority changes, scope adjustments, and timeline shifts while maintaining project integrity and dependency relationships.
 
 ## Usage
-- `--team <name>`: (Required) Linear team name
-- `--action <type>`: (Required) Action type: rebalance, reschedule, reorganize, escalate
-- `--source <id>`: Source release/epic/sprint to move from
-- `--target <id>`: Target release/epic/sprint to move to
-- `--issues <ids>`: Specific issue IDs to move (comma-separated)
-- `--criteria <filter>`: Filter criteria for automatic selection
-- `--dry-run`: Preview changes without applying
-- `--preserve-deps`: Maintain dependency relationships (default: true)
+- `$1` (team-name): (Required) Linear team name
+- `$2` (action): (Required) Action type: rebalance, reschedule, reorganize, escalate
+- `$3` (options): (Optional) JSON string with options like: `{"source":"v1.0","target":"v2.0","issues":["ISS-1","ISS-2"],"dry_run":true}`
 
 ## Action Types
 
@@ -396,11 +391,11 @@ def escalate_issues(issue_ids, reason):
 
 ```bash
 # Complete shuffle workflow
-/dependency-map --team Chronicle                     # Understand current state
-/project-shuffle --action rebalance --dry-run        # Preview changes
-/project-shuffle --action rebalance                  # Execute shuffle
-/dependency-map --team Chronicle                     # Verify new state
-/sprint-plan --team Chronicle --respect-shuffle      # Replan sprints
+/dependency-map Chronicle                            # Understand current state
+/project-shuffle Chronicle rebalance '{"dry_run":true}'  # Preview changes
+/project-shuffle Chronicle rebalance                      # Execute shuffle
+/dependency-map Chronicle                            # Verify new state
+/sprint-plan Chronicle [epic-id]                     # Replan sprints
 ```
 
 ---

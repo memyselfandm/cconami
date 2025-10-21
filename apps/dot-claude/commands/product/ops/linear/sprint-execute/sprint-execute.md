@@ -1,6 +1,6 @@
 ---
 allowed-tools: Bash(date:*), Bash(git status:*), Bash(git commit:*), Bash(mkdir:*), Bash(rg:*), Todo, Task, Write, Glob, Grep, MultiEdit, mcp__linear__*
-argument-hint: --project <project-name> [--epic <epic-id>]
+argument-hint: <project-name> [epic-id]
 description: (*Run from PLAN mode*) Review Linear project/epic, select sprint work, and execute with subagents maximizing concurrency
 ---
 
@@ -10,14 +10,14 @@ Query Linear for the specified sprint project, analyze the issues in the sprint,
 The command will intelligently parallelize implementation where safe and appropriate, carefully identifying independent work streams while rigorously validating for file conflicts and dependencies.
 
 ## Variables
-- `--project <name>`: (Required) Linear project name to query for issues
-- `--epic <id>`: (Optional) Specific epic ID to build sprint from. If not provided, analyzes project backlog
+- `$1` (project-name): (Required) Linear project name to query for issues
+- `$2` (epic-id): (Optional) Specific epic ID to build sprint from. If not provided, analyzes project backlog
 
 
 ## Workflow
 
 ### Step 1: Setup
-1. Parse command arguments to extract linear project identifier
+1. Parse command arguments: `$1` contains the project name, `$2` contains optional epic ID
 
 ### Step 2: Issue Analysis
 1. Use the Task tool to execute the `project_context_subagent_prompt` below, replacing `$IDENTIFIER` with the project identifier
@@ -390,7 +390,7 @@ For each failed agent:
 ## Example Execution Flow
 
 ```
-$ /sprint-execute --project "Sprint 2024-12-001: Authentication"
+$ /sprint-execute "Sprint 2024-12-001: Authentication"
 
 🔍 Fetching sprint from Linear...
 📋 Found 20 issues in sprint project

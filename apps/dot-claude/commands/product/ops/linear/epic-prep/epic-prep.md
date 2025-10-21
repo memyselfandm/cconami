@@ -1,16 +1,16 @@
 ---
 allowed-tools: mcp__linear__*, Write
-argument-hint: --team <team-name> --epic <epic-id> [--execute]
+argument-hint: <team-name> <epic-id> [execute]
 description: (**DEPRECATED**) Use /epic-breakdown instead - it includes all epic-prep functionality as the first phase
 ---
 
 # ⚠️ DEPRECATED: Epic Preparation Command
 
-> **⚠️ This command has been deprecated and consolidated into `/epic-breakdown`.**  
-> The epic-breakdown command now includes all epic preparation functionality as its first phase.  
-> Use `/epic-breakdown --team <team-name> --epic <epic-id>` instead.
-> 
-> To skip preparation and go directly to breakdown, use: `/epic-breakdown --team <team-name> --epic <epic-id> --skip-prep`
+> **⚠️ This command has been deprecated and consolidated into `/epic-breakdown`.**
+> The epic-breakdown command now includes all epic preparation functionality as its first phase.
+> Use `/epic-breakdown <team-name> <epic-id>` instead.
+>
+> To skip preparation and go directly to breakdown, use: `/epic-breakdown <team-name> <epic-id> yes`
 
 ---
 
@@ -19,9 +19,9 @@ description: (**DEPRECATED**) Use /epic-breakdown instead - it includes all epic
 Analyze a Linear epic to ensure it's properly structured with features and tasks, fix metadata gaps, match orphan features, and report readiness for sprint execution.
 
 ## Usage
-- `--team <name>`: (Required) Linear team name
-- `--epic <id>`: (Required) Epic issue ID to prepare
-- `--execute`: (Optional) Apply changes (default is dry-run mode showing planned changes)
+- `$1` (team-name): (Required) Linear team name
+- `$2` (epic-id): (Required) Epic issue ID to prepare
+- `$3` (execute): (Optional) Pass "yes" or "true" to apply changes (default is dry-run mode showing planned changes)
 
 ## Instructions
 
@@ -281,7 +281,7 @@ Analyze a Linear epic to ensure it's properly structured with features and tasks
    - Estimated agent count: X
    - Parallelization potential: High/Medium/Low
    
-   Next step: Run `/lsprint --team [team] --epic [epic-id]`
+   Next step: Run `/sprint-plan [team] [epic-id]`
    
    [If NO]:
    ❌ Epic needs further preparation
@@ -386,17 +386,17 @@ This functionality has been fully integrated into the `/epic-breakdown` command:
 
 **Old workflow:**
 ```bash
-/epic-prep --team "Chronicle" --epic EPIC-123 --execute
-/epic-breakdown --team "Chronicle" --epic EPIC-123
+/epic-prep Chronicle EPIC-123 yes
+/epic-breakdown Chronicle EPIC-123
 ```
 
 **New workflow:**
 ```bash
-/epic-breakdown --team "Chronicle" --epic EPIC-123
+/epic-breakdown Chronicle EPIC-123
 # Preparation + breakdown in one command
 ```
 
 **To skip preparation phase:**
 ```bash
-/epic-breakdown --team "Chronicle" --epic EPIC-123 --skip-prep
+/epic-breakdown Chronicle EPIC-123 --skip-prep
 ```
