@@ -17,6 +17,38 @@ The Linear command suite provides end-to-end sprint management capabilities:
 | **sprint-execute** | Execute sprint with parallel AI agents | Execution |
 | **sprint-status** | Monitor sprint progress and agent activity | Monitoring |
 
+## Understanding Linear Command Arguments
+
+Linear commands use a mix of **positional arguments** and **natural language patterns** depending on command complexity.
+
+### Positional Argument Commands
+Commands like `/sprint-execute`, `/sprint-plan`, and `/epic-breakdown` use fixed positional parameters:
+
+```bash
+/sprint-execute <project-name> [epic-id]
+/sprint-plan <team-name> <epic-id> [max-sprints] [dry-run]
+```
+
+These work like function calls - parameters must be in the specified order.
+
+### Natural Language Commands
+Commands like `/refine-epic`, `/refine-issue`, and `/issue-execute` use flexible natural language:
+
+```bash
+/refine-epic CCC-123 lite analyze codebase
+/issue-execute CCC-101,CCC-102 force dry-run team Chronicle
+/sprint-status Chronicle active detailed
+```
+
+These detect keywords and patterns in your input, allowing flexible ordering.
+
+### Reading Command Signatures
+
+- `<required>` = required parameter
+- `[optional]` = optional parameter
+- `<id1,id2>` = comma-separated list
+- Keywords like `[force]`, `[lite]` = optional flags to include
+
 ## 🔄 Workflow
 
 ```mermaid
@@ -77,8 +109,8 @@ graph TD
 
 **Usage**:
 ```bash
-/epic-breakdown --team <team-name> --epic <epic-id>
-/epic-breakdown --team <team-name> --epic <epic-id> --skip-prep  # Skip preparation phase
+/epic-breakdown <team-name> <epic-id>
+/epic-breakdown <team-name> <epic-id> yes  # Skip preparation phase
 ```
 
 **Key Features**:
@@ -142,11 +174,11 @@ graph TD
 **Migration**:
 ```bash
 # Old workflow:
-/epic-prep --team "Chronicle" --epic EPIC-123 --execute
-/epic-breakdown --team "Chronicle" --epic EPIC-123
+/epic-prep Chronicle EPIC-123 yes
+/epic-breakdown Chronicle EPIC-123
 
 # New consolidated workflow:
-/epic-breakdown --team "Chronicle" --epic EPIC-123
+/epic-breakdown Chronicle EPIC-123
 ```
 
 **Legacy Purpose**: Ensured epic was properly structured with features, tasks, and metadata.
@@ -174,7 +206,7 @@ graph TD
 
 **Usage**:
 ```bash
-/sprint-plan --team <team-name> --epic <epic-id> [--max-sprints <number>] [--dry-run]
+/sprint-plan <team-name> <epic-id> [max-sprints] [dry-run]
 ```
 
 **Key Changes**:
@@ -201,7 +233,7 @@ graph TD
 
 **Usage**:
 ```bash
-/sprint-execute --project <project-name>
+/sprint-execute <project-name>
 ```
 
 **Execution Phases**:
@@ -266,10 +298,10 @@ graph TD
 ### Step 2: Prepare and Break Down Epic
 ```bash
 # Prepare structure and create features/tasks (all-in-one)
-/epic-breakdown --team Chronicle --epic EPIC-123
+/epic-breakdown Chronicle EPIC-123
 
 # If epic structure is already perfect, skip preparation
-/epic-breakdown --team Chronicle --epic EPIC-123 --skip-prep
+/epic-breakdown Chronicle EPIC-123 yes
 
 # This does:
 # - Structure preparation (missing features, orphan matching, metadata fixes)
@@ -283,7 +315,7 @@ graph TD
 ### Step 3: Plan Sprints
 ```bash
 # Break epic into multiple sprint projects
-/sprint-plan --team Chronicle --epic EPIC-123
+/sprint-plan Chronicle EPIC-123
 
 # Output:
 # Created 6 sprint projects:
@@ -298,10 +330,10 @@ graph TD
 ### Step 4: Execute Sprints Sequentially
 ```bash
 # Execute first sprint
-/sprint-execute --project "CHR-123.S01"
+/sprint-execute "CHR-123.S01"
 
 # After S01 completes, execute next sprint
-/sprint-execute --project "CHR-123.S02"
+/sprint-execute "CHR-123.S02"
 
 # Continue through all sprints in order
 # Each sprint execution:
@@ -434,8 +466,8 @@ The commands use standardized labels:
 
 ### Debug Commands
 ```bash
-# Check epic structure
-/epic-prep --team <team> --epic <epic>
+# Check epic structure (use epic-breakdown instead, epic-prep is deprecated)
+/epic-breakdown <team> <epic>
 
 # View sprint composition
 /sprint-status --project <project> --detailed

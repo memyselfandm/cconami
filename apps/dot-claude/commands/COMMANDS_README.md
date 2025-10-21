@@ -242,6 +242,58 @@ For commands with file references:
 /sprint @backlog.md
 ```
 
+## Argument Patterns
+
+Claude Code commands support two argument handling patterns:
+
+### Pattern 1: Positional Arguments ($1, $2, $3)
+Best for commands with 1-4 simple parameters in a fixed order.
+
+**How it works:**
+- `argument-hint: <param1> [param2]` shows the expected order
+- Command body uses `$1`, `$2`, `$3` to access arguments
+- Users type: `/command value1 value2`
+
+**When to use:**
+- Simple commands with few parameters
+- Parameters have obvious order
+- No optional flags or complex options
+
+**Examples:**
+- `/sprint-execute <project-name> [epic-id]`
+- `/epic-breakdown <team-name> <epic-id> [skip-prep]`
+
+### Pattern 2: Natural Language ($ARGUMENTS)
+Best for commands with flexible input, variable parameters, or keyword detection.
+
+**How it works:**
+- `argument-hint: <main-input> [keywords]` shows general format
+- Command body receives full string via `$ARGUMENTS`
+- Command instructions tell Claude how to parse the input
+- Supports natural language keywords like "force", "dry-run", "lite"
+
+**When to use:**
+- Variable number of inputs (comma-separated IDs)
+- Multiple optional keywords
+- Create OR refine modes
+- Complex parameter combinations
+
+**Examples:**
+- `/issue-execute <issue-ids> [force] [dry-run]`
+- `/refine-epic [issue-id-or-description] [lite] [analyze codebase]`
+- `/sprint-status [team-or-project] [active] [detailed]`
+
+### Pattern Selection Guide
+
+| Scenario | Pattern | Example |
+|----------|---------|---------|
+| 1-4 fixed params | Positional | `/sprint-plan <team> <epic> [max-sprints]` |
+| Variable # of inputs | $ARGUMENTS | `/issue-execute <id1,id2,id3> [options]` |
+| Optional keywords | $ARGUMENTS | `/refine-epic [id] [lite] [analyze]` |
+| Create OR refine modes | $ARGUMENTS | `/refine-feature [id-or-description]` |
+
+**Key Principle:** Choose the pattern that makes your command most intuitive for users.
+
 ## Security & Best Practices
 
 ### Security Considerations

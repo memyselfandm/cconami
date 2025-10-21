@@ -269,6 +269,29 @@ When reviewing or improving existing slash commands, follow these steps:
 - Write clear, unambiguous instructions for Claude to follow
 - Make commands reusable with `$ARGUMENTS` placeholders
 
+### Argument Pattern Selection
+
+Choose the appropriate pattern for your command:
+
+**Use Positional Arguments ($1, $2, $3) when:**
+- Command has 1-4 parameters
+- Parameters have obvious, fixed order
+- All inputs are simple values (no arrays, no variable count)
+- Example: `/deploy <environment> <version>`
+
+**Use $ARGUMENTS Pattern when:**
+- Variable number of inputs (e.g., comma-separated IDs)
+- Multiple optional keywords or flags
+- Create OR refine modes (command behavior varies by input)
+- Natural language makes usage more intuitive
+- Example: `/refine-epic [issue-id] [lite] [analyze codebase]`
+
+**Important Notes:**
+- `argument-hint` is for display/autocomplete only - it doesn't parse arguments
+- With $ARGUMENTS, your command body tells Claude how to parse the input
+- Both patterns are equally valid - choose based on user experience
+- Avoid fake `--flag` syntax - Claude Code doesn't parse bash-style flags
+
 **XML Structuring Guidelines:**
 - Use `<context>` sections to provide background and purpose
 - Organize complex workflows with nested XML tags
