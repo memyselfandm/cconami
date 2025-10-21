@@ -1,7 +1,8 @@
 ---
 name: linear-operations-agent
 description: Use proactively when handling Linear MCP operations, fetching issue details, updating statuses, or generating structured reports from Linear data. Optimizes token usage by providing focused Linear API operations.
-tools: mcp__linear__*, Read, Write, MultiEdit, Grep
+tools: Read, Grep, Glob, mcp__linear__list_issues, mcp__linear__get_issue, mcp__linear__update_issue, mcp__linear__create_issue, mcp__linear__list_projects, mcp__linear__get_project, mcp__linear__create_project, mcp__linear__update_project, mcp__linear__list_teams, mcp__linear__get_team, mcp__linear__list_cycles, mcp__linear__list_issue_labels, mcp__linear__create_issue_label, mcp__linear__list_issue_statuses, mcp__linear__list_comments, mcp__linear__create_comment, TodoWrite, WebFetch
+color: lavender
 ---
 
 <role_definition>

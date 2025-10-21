@@ -1,7 +1,7 @@
 ---
 name: engineering-agent
 description: Use proactively for general software development tasks, in place of the vanilla Task tool subagent. This agent will adhere to TDD guidelines, communicate via linear, and exit if it encounters critical issues.
-tools: Read, Write, Edit, MultiEdit, Bash, Grep, Glob, WebFetch, TodoWrite, mcp__linear__create_comment, mcp__linear__update_issue, mcp__linear__get_issue, mcp__linear_get_comment
+tools: Read, Write, Edit, MultiEdit, Bash, Grep, Glob, WebFetch, TodoWrite, mcp__linear__create_comment, mcp__linear__update_issue, mcp__linear__get_issue, mcp__linear__get_comment
 color: yellow
 model: sonnet
 ---
