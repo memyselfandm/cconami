@@ -1,5 +1,5 @@
 ---
-allowed-tools: mcp__linear__get_issue, mcp__linear__create_issue, mcp__linear__update_issue, mcp__linear__list_teams, mcp__linear__list_issue_labels, WebFetch
+allowed-tools: Bash, WebFetch
 argument-hint: [issue-id-or-url] [team name] [type task|bug|chore] [template path-or-url]
 description: Generic issue refinement for tasks, bugs, and chores - refine existing or create new from ideas
 ---
@@ -38,7 +38,7 @@ Parse natural language input from $ARGUMENTS to extract:
 if issue_id_provided:
     # REFINE MODE - enhance existing issue
     mode = "refine"
-    issue = mcp__linear__get_issue(issue_id)
+    # Get issue using linctl
 else:
     # CREATE MODE - build from scratch
     mode = "create"
@@ -49,7 +49,7 @@ else:
 ### Step 1A: Refine Mode (Existing Issue)
 
 **Fetch and analyze:**
-- Get issue via `mcp__linear__get_issue`
+- Get issue using linctl: `linctl issue get [ID] --json`
 - Detect type from labels or content
 - Check current completeness
 - Apply appropriate template
@@ -200,27 +200,22 @@ Missing: Priority
 ### Step 5: Create or Update Issue
 
 **For Create Mode:**
-```python
-new_issue = mcp__linear__create_issue(
-    team=team_name,
-    title=refined_title,
-    description=refined_description,
-    labels=[issue_type, "refined"],
-    priority=priority
-)
-print(f"✅ Created: {new_issue.identifier}")
-print(f"🔗 View: {new_issue.url}")
+Create the new issue using linctl:
+```bash
+linctl issue create --team "[TEAM]" --title "[TITLE]" --description "[DESCRIPTION]" --priority [P0-P4]
+linctl label add [NEW-ID] [issue-type] refined
 ```
 
+Display the created issue identifier and URL.
+
 **For Refine Mode:**
-```python
-mcp__linear__update_issue(
-    id=issue_id,
-    description=refined_description,
-    labels=updated_labels
-)
-print(f"✅ Refined: {issue.identifier}")
+Update the existing issue using linctl:
+```bash
+linctl issue update [ID] --description "[REFINED-DESCRIPTION]"
+linctl label add [ID] [updated-labels]
 ```
+
+Display confirmation that the issue was refined.
 
 ## Command Output Examples
 
@@ -339,7 +334,7 @@ Success criteria?
 
 ```
 ❌ "Team not found"
-   → List available teams with mcp__linear__list_teams
+   → List available teams using linctl
    → Prompt to select from list
 
 ❌ "No content provided"

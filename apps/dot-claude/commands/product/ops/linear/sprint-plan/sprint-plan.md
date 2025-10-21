@@ -1,5 +1,5 @@
 ---
-allowed-tools: mcp__linear__*
+allowed-tools: Bash
 argument-hint: <team-name> <epic-id> [max-sprints] [dry-run]
 description: (*Run from PLAN mode*) Break down a Linear epic into focused sprint projects, prioritizing parallelization and avoiding dependency clashes
 ---
@@ -53,20 +53,26 @@ Before creating sprints, we need to understand:
 **Query Epic and Team Details**:
 
 1. **Fetch Epic Metadata**
-   - Use `mcp__linear__get_issue` with epic ID to retrieve:
-     - Epic title, description, and current state
-     - Priority level and labels
-     - Any existing parent/child relationships
+   - Use linctl to retrieve epic details:
+     ```bash
+     linctl issue get [epic-id] --json
+     ```
+   - Extract epic title, description, current state, priority, and labels
    - Validate epic is accessible and in appropriate state for sprint planning
 
 2. **Get Team Context**
-   - Use `mcp__linear__get_team` to fetch team information:
-     - Team ID and team name
-     - Workspace information
+   - Use linctl to fetch team information:
+     ```bash
+     linctl team get [team-name] --json
+     ```
+   - Get team ID, team name, and workspace information
    - Validate user has necessary permissions for project creation
 
 3. **Discover Existing Sprint Numbering**
-   - Use `mcp__linear__list_projects` to find existing sprint projects
+   - Use linctl to list existing projects:
+     ```bash
+     linctl project list --team [team-name] --json
+     ```
    - Look for pattern: `[EPIC-ID].S[NN]` (e.g., CHR-25.S01, CHR-25.S02)
    - Extract highest NN value from existing sprints
    - Start new sprints from NN+1 (or S01 if no existing sprints found)
@@ -74,17 +80,15 @@ Before creating sprints, we need to understand:
 **Get Epic Children (WITH PAGINATION)**:
 
 4. **Retrieve All Epic Issues**
-   - Use `mcp__linear__list_issues` with parameters:
+   - Use linctl to list epic children:
+     ```bash
+     linctl issue list --parent [epic-id] --json
      ```
-     parentId: [epic-id]  // ONLY direct children of the epic
-     limit: 50            // Use pagination to avoid token limits
-     after: [pageToken]   // Pagination cursor (null for first request)
-     ```
-   - Loop through all pages until `nextPageToken` is null
-   - Collect all issues into a single array for analysis
+   - Collect all direct children of the epic
+   - Note: linctl handles pagination automatically
 
 5. **Validate Retrieved Issues**
-   - Verify each issue's `parentId` exactly matches the epic ID
+   - Verify each issue's parent ID matches the epic ID
    - Filter out any incorrectly retrieved issues
    - Log warning if any issues were incorrectly included
    - Confirm total count matches expected epic scope
@@ -476,10 +480,12 @@ This requires careful sequencing and error handling.
    ```
    For each sprint in the breakdown plan:
 
-   a) Use mcp__linear__create_project with:
-      - name: "[EPIC-ID].S[NN]" (e.g., "CHR-25.S02")
-      - teamId: [from team query in Step 1]
-      - description: [Full sprint description template below]
+   a) Use linctl to create project:
+      linctl project create \
+        --team [team-id] \
+        --name "[EPIC-ID].S[NN]" \
+        --description "[sprint description]" \
+        --json
 
    b) Capture returned project ID for issue assignment
 
@@ -549,10 +555,10 @@ This requires careful sequencing and error handling.
    ```
    For each issue in sprint:
 
-   a) Use mcp__linear__update_issue with:
-      - id: [issue UUID, not identifier]
-      - projectId: [sprint project ID from creation]
-      - status: "Planned" (if not already in flight)
+   a) Use linctl to update issue:
+      linctl issue update [issue-id] \
+        --project [project-id] \
+        --state "Planned"
 
    b) Batch updates in groups of 10 (rate limiting)
 
@@ -808,36 +814,36 @@ After generating final report, verify:
 </instructions>
 
 <tool_usage_strategy>
-## Linear MCP Tools
+## linctl CLI Usage
 
-This command uses Linear MCP tools strategically:
+This command uses linctl CLI strategically:
 
 ### Step 1: Context Gathering
-- **mcp__linear__get_issue**: Fetch epic details (title, description, state, priority)
+- **linctl issue get**: Fetch epic details (title, description, state, priority)
   - Single call per epic
   - Returns complete epic metadata
 
-- **mcp__linear__get_team**: Get team ID and workspace info
+- **linctl team get**: Get team ID and workspace info
   - Single call per team
   - Required for project creation permissions
 
-- **mcp__linear__list_projects**: Find existing sprint projects
+- **linctl project list**: Find existing sprint projects
   - Query with team filter
   - Extract sprint numbering pattern [EPIC-ID].S[NN]
 
-- **mcp__linear__list_issues**: Retrieve epic children WITH PAGINATION
-  - Parameters: `parentId=[epic-id]`, `limit=50`, `after=[token]`
-  - Loop until `nextPageToken` is null
-  - Validate each issue's parentId matches epic
+- **linctl issue list**: Retrieve epic children
+  - Use `--parent [epic-id]` filter
+  - linctl handles pagination automatically
+  - Validate each issue's parent ID matches epic
 
 ### Step 5: Project Creation (SKIP IF DRY-RUN)
-- **mcp__linear__create_project**: Create each sprint project
-  - Parameters: `name`, `teamId`, `description`
+- **linctl project create**: Create each sprint project
+  - Parameters: `--name`, `--team`, `--description`
   - Returns project ID for issue assignment
   - Add 200ms delay between calls (rate limiting)
 
-- **mcp__linear__update_issue**: Assign issues to sprint projects
-  - Parameters: `id` (UUID), `projectId`, `status="Planned"`
+- **linctl issue update**: Assign issues to sprint projects
+  - Parameters: issue-id, `--project`, `--state`
   - Batch updates in groups of 10
   - Add 100ms delay between batches
 

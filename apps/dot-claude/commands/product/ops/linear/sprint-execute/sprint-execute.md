@@ -1,5 +1,5 @@
 ---
-allowed-tools: Bash(date:*), Bash(git status:*), Bash(git commit:*), Bash(mkdir:*), Bash(rg:*), Todo, Task, Write, Glob, Grep, MultiEdit, mcp__linear__*
+allowed-tools: Bash(date:*), Bash(git status:*), Bash(git commit:*), Bash(mkdir:*), Bash(rg:*), Bash(linctl:*), Todo, Task, Write, Glob, Grep, MultiEdit
 argument-hint: <project-name> [epic-id]
 description: (*Run from PLAN mode*) Review Linear project/epic, select sprint work, and execute with subagents maximizing concurrency
 ---
@@ -23,16 +23,16 @@ The command will intelligently parallelize implementation where safe and appropr
 1. Use the Task tool to execute the `project_context_subagent_prompt` below, replacing `$IDENTIFIER` with the project identifier
    <project_context_subagent_prompt>
       Execute the following steps:
-      1. Use `mcp__linear__get_team` to get team context
-      2. Use `mcp__linear__list_projects` to find the project with the identifier $IDENTIFIER
+      1. Use `linctl team list --json` to get team context
+      2. Use `linctl project list --json` to find the project with the identifier $IDENTIFIER
       3. Extract project ID from the matching sprint project
-      4. Use `mcp__linear__list_issues` with project filter to fetch details about all issues in the sprint project, including:
+      4. Use `linctl issue list --project <project-id> --json` to fetch details about all issues in the sprint project, including:
          - Description and acceptance criteria
          - Labels (especially phase:* and area:* labels)
          - Priority level
          - Dependencies (blocks/blocked by relationships)
-         - Parent/child relationships (use `mcp__linear__list_issues`, passing the issue Id (not the identifier) as `parentId` parameter to fetch child issues)
-         - Any existing comments for context
+         - Parent/child relationships (use `linctl issue list --parent <issue-id> --json` to fetch child issues)
+         - Any existing comments for context (use `linctl comment list --issue <issue-id> --json`)
       5. Return a report of the sprint's issues to main agent in the following format:
          ```markdown
          # Sprint [SprintProjectIdentifier] Issue Details
@@ -196,8 +196,8 @@ You are Agent-[ASSIGNED NUMBER], a principal software engineering agent speciali
 [OPTIONAL: RELEVANT DOCUMENTATION FILES OR URLS]
 
 # Tools:
-- `mcp__linear__create_comment`: use to note progress on issues
-- `mcp__linear__update_issue`: use to update properties (status, labels, etc) of your assigned issues
+- `linctl comment create <issue-id> --body "<message>"`: use to note progress on issues
+- `linctl issue update <issue-id> --state <state>`: use to update properties (status, labels, etc) of your assigned issues
 
 # Workflow:
 ## Step 1: Write Unit Tests (TDD)
@@ -206,10 +206,10 @@ You are Agent-[ASSIGNED NUMBER], a principal software engineering agent speciali
 
 ## Step 2: Implement the Feature(s) and Track Progress
 1. Implement the assigned feature(s) completely and honestly, ensuring that your tests pass as you implement the functionality.
-2. As you implement the feature, use the linear mcp tools to track your progress:
+2. As you implement the feature, use linctl to track your progress:
    - Comment "🤖 Agent-$agentnumber starting work" when beginning to work on an issue
    - Comment progress updates as you complete major milestones
-   - Update status of sub-issues (parentId: $mainIssueUUID) to "Done" as you complete subtasks
+   - Update status of sub-issues to "Done" as you complete subtasks
    - Comment final summary with files modified when complete
 
 ## Step 3: Test, Test, Test

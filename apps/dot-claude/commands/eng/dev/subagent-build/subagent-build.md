@@ -1,5 +1,5 @@
 ---
-allowed-tools: Task, Read, Write, MultiEdit, Bash(mkdir:*), mcp__linear__*, Glob, Grep
+allowed-tools: Task, Read, Write, MultiEdit, Bash, Glob, Grep
 argument-hint: <spec> [context ref-url] [depth light|normal|deep] [research urls] [dry-run]
 description: Executes phased building of subagents with extensive context research using a 2-pass drafting system
 ---
@@ -50,7 +50,7 @@ Parse natural language input from $ARGUMENTS to extract:
    if input.startsWith('@'):
        specs = parse_markdown_file(input)
    elif input.matches('CCC-\d+'):
-       specs = fetch_linear_issues(input.split(','))
+       specs = parse_linctl_output(bash(f"linctl issue get {issue_id} --json"))
    else:
        specs = parse_natural_language(input)
    ```
@@ -230,11 +230,8 @@ Parse natural language input from $ARGUMENTS to extract:
 4. **Update Linear Issues** (if applicable):
    ```python
    for issue_id in linear_issues:
-       mcp__linear__update_issue(
-           id: issue_id,
-           state: "Done",
-           comment: "✅ Subagent created via subagent-build command"
-       )
+       bash(f'linctl issue update {issue_id} --state "Done"')
+       bash(f'linctl comment create {issue_id} --body "✅ Subagent created via subagent-build command"')
    ```
 
 5. **Generate Summary Report**:

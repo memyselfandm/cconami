@@ -479,11 +479,17 @@ The commands use standardized labels:
 ## 🔗 Integration Points
 
 ### Linear API
-All commands use Linear MCP tools:
-- `mcp__linear__list_issues` - Query issues
-- `mcp__linear__create_issue` - Create features/tasks
-- `mcp__linear__update_issue` - Update states/metadata
-- `mcp__linear__create_comment` - Add progress notes
+All commands use the `linctl` CLI tool via Bash:
+- `linctl issue list` - Query issues with flexible filters
+- `linctl issue create` - Create features/tasks with templates
+- `linctl issue update` - Update states/metadata/relationships
+- `linctl comment create` - Add progress notes and updates
+
+The linctl CLI provides:
+- Native CLI interface matching Linear's data model
+- Structured JSON output for parsing with `--json` flag
+- Full access to Linear's API capabilities
+- Reliable execution without token overhead
 
 ### Git Integration
 Sprint-execute creates commits with:

@@ -1,5 +1,5 @@
 ---
-allowed-tools: mcp__linear__*, filesystem:*, Task, Write
+allowed-tools: Bash, filesystem:*, Task, Write
 argument-hint: <team-name> <epic-id> [skip-prep]
 description: (*Run from PLAN mode*) Prepare, analyze, and break down a Linear epic into features and tasks with parallel codebase analysis
 ---
@@ -30,17 +30,17 @@ Prepare, analyze, and break down a Linear epic into a complete hierarchy of feat
 
 2. **Gather Epic Context** (Same as epic-prep Step 1):
    ```python
-   # Fetch Epic Details
-   epic = mcp__linear__get_issue(epic_id)
-   
+   # Fetch Epic Details using linctl
+   epic = linctl issue get epic_id --json
+
    # Get Team Context
-   team = mcp__linear__get_team(team_name)
-   available_labels = mcp__linear__list_issue_labels(team=team_name)
-   issue_statuses = mcp__linear__list_issue_statuses(team=team_name)
-   
+   team = linctl team get team_name --json
+   available_labels = linctl label list --team team_name --json
+   issue_statuses = linctl state list --team team_name --json
+
    # Analyze Current Epic Structure
-   child_issues = mcp__linear__list_issues(parentId=epic_id)
-   
+   child_issues = linctl issue list --parent epic_id --json
+
    # Build hierarchy: Epic → Features → Tasks
    features = [issue for issue in child_issues if has_child_issues(issue)]
    orphan_tasks = [issue for issue in child_issues if not has_child_issues(issue)]
@@ -66,14 +66,16 @@ Prepare, analyze, and break down a Linear epic into a complete hierarchy of feat
 
 4. **Orphan Feature Discovery** (From epic-prep Step 3):
    ```python
-   # Query Potential Orphans
-   orphan_candidates = mcp__linear__list_issues(
-       team=team_name,
-       parentId__null=True,  # No parent
-       state="Backlog",
-       hasChildren=True  # Has child issues (indicates feature-level)
-   )
-   
+   # Query Potential Orphans using linctl
+   # Note: Use appropriate linctl filters to find orphan candidates
+   orphan_candidates = linctl issue list \
+       --team team_name \
+       --state "Backlog" \
+       --json
+
+   # Filter for orphans (no parent, has children)
+   orphan_candidates = [i for i in orphan_candidates if not i.get('parent') and i.get('children')]
+
    # Conservative Alignment Analysis
    orphan_matches = []
    for orphan in orphan_candidates:
@@ -122,41 +124,33 @@ Prepare, analyze, and break down a Linear epic into a complete hierarchy of feat
    
    if prep_actions:
        print("\nApplying structural fixes...")
-       
+
        for action in prep_actions:
            if action["type"] == "create_feature":
-               new_feature = mcp__linear__create_issue(
-                   team=team.id,
-                   title=action["feature"]["title"],
-                   description=action["feature"]["description"],
-                   labels=action["feature"]["labels"],
-                   parentId=epic.id,
-                   priority=epic.priority
-               )
-               print(f"✅ Created feature: {new_feature.identifier}")
-               
+               # Create new feature using linctl
+               new_feature = linctl issue create \
+                   --team team.id \
+                   --title action["feature"]["title"] \
+                   --description action["feature"]["description"] \
+                   --parent epic.id \
+                   --priority epic.priority \
+                   --json
+               print(f"✅ Created feature: {new_feature['identifier']}")
+
            elif action["type"] == "match_orphan":
-               mcp__linear__update_issue(
-                   id=action["orphan"].id,
-                   parentId=epic.id
-               )
+               # Update orphan to set parent using linctl
+               linctl issue update action["orphan"].id \
+                   --parent epic.id
+
                # Add comment explaining match
-               mcp__linear__create_comment(
-                   parent={"page_id": action["orphan"].id},
-                   rich_text=[{
-                       "type": "text",
-                       "text": {
-                           "content": f"Matched to epic {epic.identifier} with {action['confidence']}% confidence by epic-breakdown prep phase."
-                       }
-                   }]
-               )
+               linctl comment create action["orphan"].id \
+                   --body f"Matched to epic {epic.identifier} with {action['confidence']}% confidence by epic-breakdown prep phase."
                print(f"✅ Matched orphan: {action['orphan'].identifier}")
-               
+
            elif action["type"] == "fix_metadata":
-               mcp__linear__update_issue(
-                   id=action["issue"].id,
+               # Update issue metadata using linctl
+               linctl issue update action["issue"].id \
                    **action["fixes"]
-               )
                print(f"✅ Fixed metadata: {action['issue'].identifier}")
    
    else:
@@ -169,16 +163,16 @@ Prepare, analyze, and break down a Linear epic into a complete hierarchy of feat
 
 1. **Fetch Epic Details**:
    ```python
-   # Get epic from Linear
-   epic = mcp__linear__get_issue(epic_id)
-   
+   # Get epic from Linear using linctl
+   epic = linctl issue get epic_id --json
+
    # Extract and parse epic description
    epic_content = {
-       "title": epic.title,
-       "description": epic.description,
-       "labels": epic.labels,
-       "priority": epic.priority,
-       "acceptance_criteria": extract_acceptance_criteria(epic.description)
+       "title": epic['title'],
+       "description": epic['description'],
+       "labels": epic['labels'],
+       "priority": epic['priority'],
+       "acceptance_criteria": extract_acceptance_criteria(epic['description'])
    }
    ```
 
@@ -393,41 +387,30 @@ Prepare, analyze, and break down a Linear epic into a complete hierarchy of feat
    ```python
    created_features = {}
    for feature in features:
-       # Use feature template format
-       linear_feature = mcp__linear__create_issue(
-           team=team_id,
-           title=feature.title,
-           description=format_feature_description(feature),
-           labels=[
-               "type:feature",
-               f"area:{feature.technical_area}",
-               f"phase:{feature.phase}",
-               f"priority:{epic.priority}",
-               f"complexity:{feature.complexity}"
-           ],
-           parentId=epic.id,
-           state="Backlog"
-       )
-       created_features[feature.id] = linear_feature.id
+       # Use feature template format and linctl to create issues
+       linear_feature = linctl issue create \
+           --team team_id \
+           --title feature.title \
+           --description format_feature_description(feature) \
+           --parent epic.id \
+           --state "Backlog" \
+           --json
+       created_features[feature.id] = linear_feature['id']
    ```
 
 2. **Create Tasks**:
    ```python
    created_tasks = {}
    for task in all_tasks:
-       linear_task = mcp__linear__create_issue(
-           team=team_id,
-           title=task.title,
-           description=format_task_description(task),
-           labels=[
-               "type:task",
-               f"area:{task.technical_area}",
-               f"complexity:{task.complexity}"
-           ],
-           parentId=created_features[task.parent_feature],
-           state="Backlog"
-       )
-       created_tasks[task.id] = linear_task.id
+       # Create task using linctl
+       linear_task = linctl issue create \
+           --team team_id \
+           --title task.title \
+           --description format_task_description(task) \
+           --parent created_features[task.parent_feature] \
+           --state "Backlog" \
+           --json
+       created_tasks[task.id] = linear_task['id']
    ```
 
 3. **Format Templates**:
@@ -506,11 +489,10 @@ Prepare, analyze, and break down a Linear epic into a complete hierarchy of feat
 2. **Update Linear Issues with Dependencies**:
    ```python
    for dep in dependencies:
-       # Update blocked issue with blocking relationship
-       mcp__linear__update_issue(
-           id=created_features[dep.blocked],
-           blockedByIds=[created_features[dep.blocker]]
-       )
+       # Update blocked issue with blocking relationship using linctl
+       # Note: linctl may require specific syntax for relationship updates
+       linctl issue update created_features[dep.blocked] \
+           --blocked-by created_features[dep.blocker]
    ```
 
 3. **Validate No Circular Dependencies**:

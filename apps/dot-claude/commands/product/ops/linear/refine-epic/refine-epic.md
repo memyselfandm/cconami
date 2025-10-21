@@ -1,5 +1,5 @@
 ---
-allowed-tools: mcp__linear__get_issue, mcp__linear__list_issues, mcp__linear__create_issue, mcp__linear__update_issue, mcp__linear__list_comments, mcp__linear__list_teams, mcp__linear__list_issue_labels, Task, Glob, Grep
+allowed-tools: Bash, Task, Glob, Grep
 argument-hint: [issue-id-or-url] [lite] [analyze-codebase] [interactive] [team name] [title text]
 description: Transform a Linear issue into a comprehensive epic using full PRD or lite 1-pager template, with optional codebase analysis
 ---
@@ -57,14 +57,14 @@ Based on parsed arguments from Step 1:
 
 ### Step 3: Issue Analysis & Context Gathering
 **Retrieve and analyze the source Linear issue:**
-- Fetch issue details using Linear MCP `get_issue` 
+- Fetch issue details using linctl: `linctl issue get [ID] --json`
 - Extract current title, description, labels, and comments
 - Identify the team, project, and current status
 - Gather any linked issues, PRs, or dependencies
 - Check for existing epic relationships
 
 **Context expansion:**
-- Search for related issues in the same team/project using `list_issues`
+- Search for related issues in the same team/project using linctl
 - Look for similar features or components already implemented
 - Identify relevant team members and stakeholders from issue history
 - Extract any technical constraints from existing codebase context
@@ -353,8 +353,7 @@ Create comprehensive Linear issue:
 ```
 
 **For Lite Template (lite keyword):**
-```python
-refined_description = f"""
+```markdown
 # Epic: {title}
 
 ## 🎯 Problem
@@ -378,14 +377,12 @@ refined_description = f"""
 
 ---
 *Refined with /refine-epic lite for quick epic definition*
-"""
+```
 
-mcp__linear__update_issue(
-    id=issue_id,
-    title=f"Epic: {title}",
-    description=refined_description,
-    labels=["epic", "epic-lite"] + existing_labels
-)
+Update the Linear issue using linctl:
+```bash
+linctl issue update [ID] --title "Epic: {title}" --description "[refined description]"
+linctl label add [ID] epic epic-lite
 ```
 
 #### **Alternative Output Formats**

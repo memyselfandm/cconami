@@ -1,5 +1,5 @@
 ---
-allowed-tools: Task, mcp__linear__*, TodoWrite, Bash(git:*), Bash(date:*)
+allowed-tools: Task, Bash(linctl:*), TodoWrite, Bash(git:*), Bash(date:*)
 argument-hint: <release-version> [team-name] [mode]
 description: Execute an entire release with multiple sprints, coordinating cross-team work and managing inter-sprint dependencies
 ---
@@ -56,23 +56,15 @@ Release v1.0
 2. **Gather Release Data**:
    ```python
    # Find release issue
-   release = mcp__linear__list_issues(
-     team: team,
-     label: f"release:{version}",
-     type: "release"
-   )[0]
-   
+   release = linctl issue list --team team --label f"release:{version}" --json
+   # Filter for type "release" from results
+
    # Get all sprints in release
-   sprints = mcp__linear__list_projects(
-     team: team,
-     name_pattern: f"{version}.S*"
-   )
-   
+   sprints = linctl project list --team team --json
+   # Filter projects matching name pattern f"{version}.S*"
+
    # Get all issues in release
-   release_issues = mcp__linear__list_issues(
-     team: team,
-     label: f"release:{version}"
-   )
+   release_issues = linctl issue list --team team --label f"release:{version}" --json
    ```
 
 ### Step 2: Validate Release Readiness
@@ -87,7 +79,7 @@ Release v1.0
        sprint_issues = get_sprint_issues(sprint)
        for issue in sprint_issues:
          for dep_id in issue.blockedBy:
-           dep = mcp__linear__get_issue(dep_id)
+           dep = linctl issue get dep_id --json
            if dep.sprint and dep.sprint.order > sprint.order:
              violations.append({
                "issue": issue.id,
@@ -191,10 +183,7 @@ def execute_sequential_release(plan):
     sprint = phase["sprint"]
     
     # Update Linear status
-    mcp__linear__create_comment(
-      issueId: release.id,
-      body: f"🚀 Starting Sprint {sprint}"
-    )
+    linctl comment create release.id --body f"🚀 Starting Sprint {sprint}"
     
     # Execute sprint using sprint-execute command (max 4 parallel agents per sprint)
     result = execute_sprint(
@@ -371,13 +360,10 @@ def execute_parallel_release(plan):
      
      # Save report
      save_release_report(version, report)
-     
+
      # Update Linear release issue
-     mcp__linear__update_issue(
-       id: release.id,
-       state: "Done",
-       description: append_report_summary(report)
-     )
+     linctl issue update release.id --state "Done"
+     # Note: Description updates require separate handling or file input
    ```
 
 ## Output Examples

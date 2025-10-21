@@ -1,5 +1,5 @@
 ---
-allowed-tools: mcp__linear__get_issue, mcp__linear__list_issues, mcp__linear__update_issue, mcp__linear__create_issue, mcp__linear__list_comments, mcp__linear__list_teams, mcp__linear__list_issue_labels
+allowed-tools: Bash
 argument-hint: [feature-id-or-url] [team name] [parent-epic id] [interactive] [create-subtasks]
 description: Refine Linear features with AI templates and right-sizing - refine existing or create new from ideas
 ---
@@ -39,7 +39,7 @@ Parse natural language input from $ARGUMENTS to extract:
 if feature_id_provided:
     # REFINE MODE - enhance existing feature
     mode = "refine"
-    feature = mcp__linear__get_issue(feature_id)
+    # Get feature using linctl
 else:
     # CREATE MODE - build new feature from scratch
     mode = "create"
@@ -50,7 +50,7 @@ else:
 ### 1A. Refine Mode: Feature Analysis & Readiness
 
 **Retrieve and analyze the source Linear feature:**
-- Fetch feature details using Linear MCP `get_issue`
+- Fetch feature details using linctl: `linctl issue get [ID] --json`
 - Extract current title, description, labels, and comments
 - Identify parent epic (if exists) for context
 - Check for existing subtasks or related issues
@@ -231,34 +231,24 @@ Subtask Analysis:
 ### 5. Output Generation & Updates
 
 #### **For Create Mode:**
-```python
-new_feature = mcp__linear__create_issue(
-    team=team_name,
-    title=feature_title,
-    description=refined_description,
-    labels=["type:feature", f"complexity:{size}"],
-    parentId=parent_epic_id if provided else None,
-    priority=priority
-)
-print(f"✅ Created feature: {new_feature.identifier}")
-print(f"🔗 View: {new_feature.url}")
-
-if create_subtasks:
-    create_subtasks_for_feature(new_feature.id)
+Create the new feature using linctl:
+```bash
+linctl issue create --team "[TEAM]" --title "[TITLE]" --description "[DESCRIPTION]" --priority [P0-P4]
+linctl label add [NEW-ID] type:feature complexity:[size]
+# If parent epic provided:
+linctl issue update [NEW-ID] --parent [EPIC-ID]
 ```
+
+If create-subtasks was requested, generate and create subtasks for the new feature.
 
 #### **For Refine Mode:**
-```python
-mcp__linear__update_issue(
-    id=feature_id,
-    description=refined_description,
-    labels=updated_labels
-)
-print(f"✅ Refined feature: {feature.identifier}")
-
-if create_subtasks:
-    create_subtasks_for_feature(feature_id)
+Update the existing feature using linctl:
+```bash
+linctl issue update [ID] --description "[REFINED-DESCRIPTION]"
+linctl label add [ID] [updated-labels]
 ```
+
+If create-subtasks was requested, generate and create subtasks for the feature.
 
 ## Command Output Examples
 

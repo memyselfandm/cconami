@@ -1,5 +1,5 @@
 ---
-allowed-tools: Task, mcp__linear__*, TodoWrite, Read, Write
+allowed-tools: Task, Bash, TodoWrite, Read, Write
 argument-hint: <team-name> [scope] [format]
 description: Analyze and visualize dependencies across Linear issues, identifying blockers, critical paths, and circular dependencies
 ---
@@ -53,23 +53,26 @@ Comprehensive dependency analysis tool that maps relationships across all Linear
 1. **Gather Issues by Scope**:
    ```python
    if scope == "release":
-     issues = mcp__linear__list_issues(
-       team: team,
-       label: f"release:{scope_id}"
-     )
+     # List issues with release label using linctl
+     issues = linctl issue list \
+       --team team \
+       --label f"release:{scope_id}" \
+       --json
    elif scope == "epic":
-     epic = mcp__linear__get_issue(scope_id)
-     issues = get_epic_children(epic)
+     # Get epic and its children
+     epic = linctl issue get scope_id --json
+     issues = linctl issue list --parent scope_id --json
    elif scope == "sprint":
-     issues = mcp__linear__list_issues(
-       team: team,
-       project: scope_id
-     )
+     # List issues in project
+     issues = linctl issue list \
+       --team team \
+       --project scope_id \
+       --json
    else:  # all
-     issues = mcp__linear__list_issues(
-       team: team,
-       includeArchived: false
-     )
+     # List all non-archived issues
+     issues = linctl issue list \
+       --team team \
+       --json
    ```
 
 2. **Extract Relationships**:
@@ -88,9 +91,10 @@ Comprehensive dependency analysis tool that maps relationships across all Linear
    ```python
    if show_external:
      for issue in issues:
-       for blocked_id in issue.blockedBy:
-         if blocked_id not in issues:
-           external_issue = mcp__linear__get_issue(blocked_id)
+       for blocked_id in issue.get('blockedBy', []):
+         if blocked_id not in [i['id'] for i in issues]:
+           # Fetch external issue using linctl
+           external_issue = linctl issue get blocked_id --json
            external_deps.append(external_issue)
    ```
 

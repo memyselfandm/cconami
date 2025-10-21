@@ -1,5 +1,5 @@
 ---
-allowed-tools: mcp__linear__*
+allowed-tools: Bash(linctl:*)
 argument-hint: [team name] [project name] [active] [detailed]
 description: Check status of Linear sprints, showing progress, active agents, and blocked issues
 ---
@@ -52,24 +52,24 @@ Based on parsed arguments from Step 1:
 
 #### For Single Project Status
 ```python
-1. Use mcp__linear__list_projects to find project
-2. Use mcp__linear__list_issues with project filter
+1. Use linctl project list --json to find project
+2. Use linctl issue list --project <project-id> --json to get all issues
 3. Get all issues regardless of state
-4. Use mcp__linear__list_comments for recent activity (if --detailed)
+4. Use linctl comment list --issue <issue-id> --json for recent activity (if --detailed)
 ```
 
 #### For Team Sprints
 ```python
-1. Use mcp__linear__get_team to get team ID
-2. Use mcp__linear__list_projects with team filter
+1. Use linctl team get <team-name> --json to get team ID
+2. Use linctl project list --team <team-id> --json to get team projects
 3. Filter projects matching "Sprint YYYY-MM-NNN" pattern
-4. For each sprint project, get issue counts by state
+4. For each sprint project, get issue counts by state using linctl issue list --project <project-id> --json
 ```
 
 #### For All Active Sprints
 ```python
-1. Use mcp__linear__list_teams to get all teams
-2. For each team, list projects
+1. Use linctl team list --json to get all teams
+2. For each team, use linctl project list --team <team-id> --json
 3. Filter for sprint projects with active issues
 4. Aggregate statistics across teams
 ```

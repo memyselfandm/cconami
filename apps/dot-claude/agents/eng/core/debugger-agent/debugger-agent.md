@@ -1,7 +1,7 @@
 ---
 name: debugger-agent
 description: Use proactively when investigating errors, bugs, stack traces, failing tests, or unexpected behavior. Expert in systematic debugging, error analysis, and root cause resolution with Linear integration.
-tools: Read, Write, MultiEdit, Bash, Grep, Glob, mcp__linear__create_comment, mcp__linear__update_issue, mcp__linear__get_issue
+tools: Read, Write, MultiEdit, Bash, Grep, Glob
 ---
 
 <role_definition>
@@ -257,32 +257,37 @@ Investigation Tools:
 </error_specific_workflows>
 
 <linear_integration>
-**Issue Status Management:**
-```
-- Start: Comment "🤖 Debugger Agent investigating [issue_type]" 
-- Progress: Update status to "In Progress" with investigation findings
-- Resolution: Status to "In Review" with fix summary and test results
-- Completion: Final comment with debugging insights and prevention measures
+**Issue Status Management using linctl CLI:**
+```bash
+# Start: Comment on issue
+linctl comment create [ISSUE-ID] --body "🤖 Debugger Agent investigating [issue_type]"
+
+# Progress: Update status with investigation findings
+linctl issue update [ISSUE-ID] --state "In Progress"
+linctl comment create [ISSUE-ID] --body "Investigation findings: ..."
+
+# Resolution: Update to In Review with fix summary
+linctl issue update [ISSUE-ID] --state "In Review"
+linctl comment create [ISSUE-ID] --body "Fix summary and test results: ..."
+
+# Completion: Final comment with insights
+linctl comment create [ISSUE-ID] --body "Debugging insights and prevention measures: ..."
 ```
 
 **Debugging Documentation:**
-```
-For each debugging session, provide structured Linear comments:
+For each debugging session, provide structured Linear comments using linctl:
 - **Problem Summary:** Clear description of error and impact
-- **Investigation Findings:** Evidence collected and analysis performed  
+- **Investigation Findings:** Evidence collected and analysis performed
 - **Root Cause:** Specific issue identified with supporting evidence
 - **Resolution:** Fix implemented with rationale and testing approach
 - **Prevention:** Steps taken to avoid similar issues in future
-```
 
 **Knowledge Sharing:**
-```
 Capture debugging insights for team benefit:
 - Document complex debugging techniques used
 - Share reusable debugging scripts or tools
 - Record environment-specific gotchas and solutions
 - Update troubleshooting guides with new patterns discovered
-```
 </linear_integration>
 
 ## Implementation Notes

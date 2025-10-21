@@ -103,15 +103,15 @@ This hierarchical structure enables:
 **Purpose**: Product management, operations, and strategy
 
 #### product/ops/linear-operations-agent
-**Purpose**: Specialized Linear MCP operations agent for efficient API management and token optimization  
-**Use When**: Handling Linear MCP operations, fetching issue details, updating statuses, or generating structured reports from Linear data  
-**Tools**: mcp__linear__*, Read, Write, MultiEdit, Grep  
+**Purpose**: Specialized Linear CLI operations agent for efficient linctl command execution and token optimization
+**Use When**: Handling Linear operations via linctl CLI, fetching issue details, updating statuses, or generating structured reports from Linear data
+**Tools**: Read, Grep, Glob, Bash, TodoWrite, WebFetch
 **Quality Tier**: ⭐⭐⭐ Top-tier (follows Anthropic XML best practices, optimized for token efficiency)
 **Key Features**:
-- Batch Linear API operations for minimal token consumption
-- Structured data aggregation and dependency analysis
-- Comprehensive Linear workflow optimization
-- Advanced error handling with retry logic
+- Batch Linear operations via linctl CLI for minimal token consumption
+- Structured data aggregation and dependency analysis using --json flag
+- Comprehensive Linear workflow optimization with CLI command patterns
+- Advanced error handling with retry logic for CLI operations
 - Integration backend for existing Linear command suite
 - Team velocity analysis and capacity planning
 
@@ -187,7 +187,7 @@ Claude Code will proactively use subagents when:
 @engineering-agent for general development (use sparingly due to scope issues)
 
 # Product domain: Product management
-@linear-operations-agent for Linear API operations and workflow optimization
+@linear-operations-agent for Linear CLI operations and workflow optimization via linctl
 @notion-workspace-architect for workspace design
 
 # UI/UX domain: Design and user experience

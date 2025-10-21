@@ -1,5 +1,5 @@
 ---
-allowed-tools: Task, mcp__linear__*, TodoWrite, WebFetch
+allowed-tools: Task, Bash, TodoWrite, WebFetch
 argument-hint: <team-name> [horizon-months] [starting-version] [dry-run]
 description: Plan multiple major and minor releases from backlog, distributing epics and features across version milestones
 ---
@@ -53,13 +53,13 @@ Design and create a comprehensive release roadmap with multiple major and minor 
 
 ### Step 2: Analyze Backlog
 1. **Fetch Unplanned Work**:
-   ```
-   mcp__linear__list_issues(
-     team: $TEAM,
-     state: ["Backlog", "Todo", "Planned"],
-     no_release: true,
-     includeArchived: false
-   )
+   ```bash
+   # List issues without release assignments using linctl
+   linctl issue list \
+     --team $TEAM \
+     --state "Backlog,Todo,Planned" \
+     --json
+   # Filter for issues without release labels in post-processing
    ```
 
 2. **Categorize by Type**:
@@ -103,37 +103,31 @@ Design and create a comprehensive release roadmap with multiple major and minor 
 ### Step 4: Create Release Plan
 
 1. **Generate Release Issues**:
-   ```python
+   ```bash
    for release in releases:
-     mcp__linear__create_issue(
-       team: team_id,
-       title: f"Release {release.version}: {release.theme}",
-       description: release_template,
-       labels: ["type:release", f"release:{release.version}"],
-       dueDate: release.target_date,
-       priority: 1
-     )
+     linctl issue create \
+       --team team_id \
+       --title "Release ${release.version}: ${release.theme}" \
+       --description "${release_template}" \
+       --priority 1 \
+       --json
    ```
 
 2. **Assign Epics to Releases**:
-   ```python
+   ```bash
    for epic in epics:
-     mcp__linear__update_issue(
-       id: epic.id,
-       labels: add(f"release:{assigned_version}"),
-       parentId: release_issue.id
-     )
+     # Update epic with release parent/label using linctl
+     linctl issue update ${epic.id} \
+       --parent ${release_issue.id}
    ```
 
 3. **Create Release Projects**:
-   ```python
-   mcp__linear__create_project(
-     team: team_id,
-     name: f"{release.version} - {release.theme}",
-     description: project_template,
-     targetDate: release.date,
-     leadId: team_lead_id
-   )
+   ```bash
+   linctl project create \
+     --team team_id \
+     --name "${release.version} - ${release.theme}" \
+     --description "${project_template}" \
+     --json
    ```
 
 ### Step 5: Validate and Optimize

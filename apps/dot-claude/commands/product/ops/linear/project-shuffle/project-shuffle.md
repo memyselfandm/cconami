@@ -1,5 +1,5 @@
 ---
-allowed-tools: Task, mcp__linear__*, TodoWrite
+allowed-tools: Task, Bash, TodoWrite
 argument-hint: <team-name> <action> [options]
 description: Reorganize Linear issues when priorities change - move between releases, rebalance workload, update dependencies
 ---
@@ -88,43 +88,37 @@ def rebalance_releases(source_release, target_release):
       if moved_effort >= (source_effort - target_effort_goal):
         break
   
-  # Execute moves
+  # Execute moves using linctl
   for issue in issues_to_move:
-    mcp__linear__update_issue(
-      id: issue.id,
-      labels: replace(f"release:{target_release}"),
-      projectId: target_release.projectId
-    )
+    linctl issue update ${issue.id} \
+      --project ${target_release.projectId}
 ```
 
 #### Reschedule Action
 ```python
 def reschedule_release(release_id, new_date, cascade=True):
-  release = mcp__linear__get_issue(release_id)
-  old_date = release.targetDate
+  # Get release using linctl
+  release = linctl issue get release_id --json
+  old_date = release['targetDate']
   delay_days = (new_date - old_date).days
-  
-  # Update release date
-  mcp__linear__update_issue(
-    id: release_id,
-    targetDate: new_date,
-    description: append(f"\n⏰ Rescheduled: {delay_days} days")
-  )
-  
+
+  # Update release date using linctl
+  updated_description = release['description'] + f"\n⏰ Rescheduled: {delay_days} days"
+  linctl issue update release_id \
+    --description "${updated_description}"
+
   # Cascade to dependent releases
   if cascade:
     dependent_releases = get_dependent_releases(release_id)
     for dep_release in dependent_releases:
-      new_dep_date = dep_release.targetDate + timedelta(days=delay_days)
-      reschedule_release(dep_release.id, new_dep_date, cascade=False)
-  
+      new_dep_date = dep_release['targetDate'] + timedelta(days=delay_days)
+      reschedule_release(dep_release['id'], new_dep_date, cascade=False)
+
   # Update all child issues
   for issue in get_release_issues(release_id):
-    if issue.dueDate:
-      mcp__linear__update_issue(
-        id: issue.id,
-        dueDate: issue.dueDate + timedelta(days=delay_days)
-      )
+    if issue.get('dueDate'):
+      # Update issue due date using linctl
+      linctl issue update ${issue['id']}
 ```
 
 #### Reorganize Action
@@ -133,48 +127,41 @@ def reorganize_hierarchy(issues, new_structure):
   # Validate new structure
   for change in new_structure:
     if change.type == "reparent":
-      mcp__linear__update_issue(
-        id: change.issue_id,
-        parentId: change.new_parent_id
-      )
+      # Update parent using linctl
+      linctl issue update ${change.issue_id} \
+        --parent ${change.new_parent_id}
     elif change.type == "merge":
       merge_issues(change.source_ids, change.target_id)
     elif change.type == "split":
       split_issue(change.issue_id, change.new_issues)
     elif change.type == "convert":
-      mcp__linear__update_issue(
-        id: change.issue_id,
-        labels: replace(f"type:{change.new_type}")
-      )
+      # Update issue type/labels using linctl
+      linctl issue update ${change.issue_id}
 ```
 
 #### Escalate Action
 ```python
 def escalate_issues(issue_ids, reason):
   current_sprint = get_current_sprint(team)
-  
+
   for issue_id in issue_ids:
-    issue = mcp__linear__get_issue(issue_id)
-    
-    # Update priority
-    mcp__linear__update_issue(
-      id: issue_id,
-      priority: 1,  # Urgent
-      projectId: current_sprint.id,
-      labels: add("escalated", "fast-track")
-    )
-    
+    # Get issue using linctl
+    issue = linctl issue get issue_id --json
+
+    # Update priority and project using linctl
+    linctl issue update issue_id \
+      --priority 1 \
+      --project ${current_sprint['id']}
+
     # Clear blockers if possible
-    for blocker_id in issue.blockedBy:
-      blocker = mcp__linear__get_issue(blocker_id)
+    for blocker_id in issue.get('blockedBy', []):
+      blocker = linctl issue get blocker_id --json
       if can_accelerate(blocker):
         escalate_issues([blocker_id], "dependency")
-    
-    # Add escalation comment
-    mcp__linear__create_comment(
-      issueId: issue_id,
-      body: f"🚨 Escalated: {reason}\nMoved to current sprint for immediate action."
-    )
+
+    # Add escalation comment using linctl
+    linctl comment create issue_id \
+      --body "🚨 Escalated: ${reason}\nMoved to current sprint for immediate action."
 ```
 
 ### Step 3: Validate Changes
@@ -187,7 +174,7 @@ def escalate_issues(issue_ids, reason):
      for issue in moved_issues:
        # Check if dependencies are satisfied
        for dep_id in issue.blockedBy:
-         dep = mcp__linear__get_issue(dep_id)
+         dep = json.loads(bash(f"linctl issue get {dep_id} --json"))
          if dep.targetDate > issue.targetDate:
            violations.append({
              "issue": issue.id,
@@ -260,10 +247,7 @@ def escalate_issues(issue_ids, reason):
 3. **Notify Stakeholders**:
    ```python
    for issue in affected_issues:
-     mcp__linear__create_comment(
-       issueId: issue.id,
-       body: f"📦 Shuffled: {change_description}"
-     )
+     bash(f'linctl comment create {issue.id} --body "📦 Shuffled: {change_description}"')
    ```
 
 ## Output Examples

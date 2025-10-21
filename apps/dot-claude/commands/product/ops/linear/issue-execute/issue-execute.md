@@ -1,5 +1,5 @@
 ---
-allowed-tools: Bash(date:*), Bash(git status:*), Bash(git commit:*), Bash(mkdir:*), Bash(rg:*), Todo, Task, Write, Glob, Grep, MultiEdit, mcp__linear__*
+allowed-tools: Bash(date:*), Bash(git status:*), Bash(git commit:*), Bash(mkdir:*), Bash(rg:*), Bash(linctl:*), Todo, Task, Write, Glob, Grep, MultiEdit
 argument-hint: <issue-ids> [team name] [force] [dry-run]
 description: (*Run from PLAN mode*) Execute one or more Linear issues using subagents with intelligent dependency analysis and maximum parallelization
 ---
@@ -35,7 +35,7 @@ Parse natural language input from $ARGUMENTS to extract:
 
 ### Step 2: Setup
 1. Validate extracted issue IDs (XXX-NNN pattern)
-2. Validate Linear MCP connectivity with `mcp__linear__list_teams`
+2. Validate linctl CLI is working with `linctl team list --json`
 3. If team name was provided, verify team exists
 
 ### Step 3: Issue Analysis
@@ -45,19 +45,19 @@ Parse natural language input from $ARGUMENTS to extract:
 
       1. **Fetch Primary Issue Details**:
          For each issue ID in $ISSUE_IDS:
-         - Use `mcp__linear__get_issue` to fetch complete issue details including:
+         - Use `linctl issue get <issue-id> --json` to fetch complete issue details including:
            - Description and acceptance criteria
            - Labels (especially phase:*, area:*, type:*)
            - Priority level and estimates
            - Current state and assignee
            - Parent/child relationships
            - Blocking/blocked by relationships
-           - Existing comments for additional context
+           - Existing comments for additional context (use `linctl comment list --issue <issue-id> --json`)
 
       2. **Resolve Dependencies**:
          For each primary issue:
-         - If issue has blocking issues (`blockedBy`), fetch those issues
-         - If issue has children (`hasChildren`), use `mcp__linear__list_issues` with `parentId` to fetch subtasks
+         - If issue has blocking issues (`blockedBy`), fetch those issues using `linctl issue get <issue-id> --json`
+         - If issue has children, use `linctl issue list --parent <issue-id> --json` to fetch subtasks
          - Build complete execution scope including all related issues
 
       3. **Validate Execution Readiness**:
@@ -281,8 +281,8 @@ You are Agent-[ASSIGNED NUMBER], a principal software engineering agent speciali
 [OPTIONAL: RELEVANT DOCUMENTATION FILES OR URLS]
 
 # Tools:
-- `mcp__linear__create_comment`: use to note progress on issues
-- `mcp__linear__update_issue`: use to update properties (status, labels, etc) of your assigned issues
+- `linctl comment create <issue-id> --body "<message>"`: use to note progress on issues
+- `linctl issue update <issue-id> --state <state>`: use to update properties (status, labels, etc) of your assigned issues
 
 # Workflow:
 ## Step 1: Write Unit Tests (TDD)
@@ -291,10 +291,10 @@ You are Agent-[ASSIGNED NUMBER], a principal software engineering agent speciali
 
 ## Step 2: Implement the Feature(s) and Track Progress
 1. Implement the assigned feature(s) completely and honestly, ensuring that your tests pass as you implement the functionality.
-2. As you implement the features, use the linear mcp tools to track your progress:
+2. As you implement the features, use linctl to track your progress:
    - Comment "🤖 Agent-$agentnumber starting work" when beginning to work on an issue
    - Comment progress updates as you complete major milestones
-   - Update status of sub-issues (parentId: $mainIssueUUID) to "Done" as you complete subtasks
+   - Update status of sub-issues to "Done" as you complete subtasks
    - Comment final summary with files modified when complete
 
 ## Step 3: Test, Test, Test
@@ -393,30 +393,28 @@ if not dry_run:
 1. **Verify Completion**:
    ```python
    for issue_id in execution_scope:
-       issue = mcp__linear__get_issue(issue_id)
+       # Fetch issue with linctl
+       issue = linctl issue get issue_id --json
 
        # Check main issue status
        if issue.state.type != "completed":
            incomplete_issues.append(issue_id)
 
        # Check subtasks
-       if issue.children:
-           for subtask in issue.children:
-               if subtask.state.type != "completed":
-                   incomplete_subtasks.append(subtask.id)
+       subtasks = linctl issue list --parent issue_id --json
+       for subtask in subtasks:
+           if subtask.state.type != "completed":
+               incomplete_subtasks.append(subtask.id)
    ```
 
 2. **Update Linear Status**:
    ```python
    for issue_id in completed_issues:
-       mcp__linear__update_issue(
-           id=issue_id,
-           state="Done"
-       )
-       mcp__linear__create_comment(
-           issueId=issue_id,
-           body=f"✅ Issue completed via issue-execute command\n\nAgent-{agent_number} Implementation Summary:\n- Files modified: {file_count}\n- Tests added: {test_count}\n- All tests passing: {tests_passing}"
-       )
+       # Update issue state
+       linctl issue update issue_id --state "Done"
+
+       # Add completion comment
+       linctl comment create issue_id --body f"✅ Issue completed via issue-execute command\n\nAgent-{agent_number} Implementation Summary:\n- Files modified: {file_count}\n- Tests added: {test_count}\n- All tests passing: {tests_passing}"
    ```
 
 3. **Generate Execution Report**:
@@ -473,7 +471,7 @@ for failed_agent in failed_agents:
 
         # Check Linear for any partial progress
         for issue_id in failed_agent['issues']:
-            comments = mcp__linear__list_comments(issueId=issue_id)
+            comments = linctl comment list --issue issue_id --json
             # Review progress and incorporate into retry
 
         # Relaunch agent with same assignment
@@ -481,21 +479,13 @@ for failed_agent in failed_agents:
 
         # Note retry in Linear comments
         for issue_id in failed_agent['issues']:
-            mcp__linear__create_comment(
-                issueId=issue_id,
-                body=f"🔄 Agent-{failed_agent['number']} retry {retry_count + 1}"
-            )
+            linctl comment create issue_id --body f"🔄 Agent-{failed_agent['number']} retry {retry_count + 1}"
     else:
         # Mark issues as blocked after max retries
         for issue_id in failed_agent['issues']:
-            mcp__linear__update_issue(
-                id=issue_id,
-                state="Blocked"
-            )
-            mcp__linear__create_comment(
-                issueId=issue_id,
-                body=f"❌ Execution failed after {retry_count} retries. Manual intervention required.\n\nLast error: {failed_agent['error']}"
-            )
+            linctl issue update issue_id --state "Blocked"
+
+            linctl comment create issue_id --body f"❌ Execution failed after {retry_count} retries. Manual intervention required.\n\nLast error: {failed_agent['error']}"
 ```
 
 ### Dependency Conflicts

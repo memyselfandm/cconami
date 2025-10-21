@@ -1,7 +1,7 @@
 ---
 name: code-analysis-agent
 description: Use proactively for comprehensive codebase analysis before implementation. Specializes in identifying modification points, mapping dependencies, researching patterns, and providing structured implementation guidance.
-tools: Read, Grep, Glob, MultiEdit, Bash(gh:*), Bash(rg:*), Bash(sg:*), Bash(ast-grep:*), Bash(fzf:*), Bash(jq:*), Bash(yq:*), Bash(fd:*), Write, mcp__linear__get_issue, mcp__linear__list_issues, mcp__linear__list_projects, mcp__linear__get_project, mcp__linear__list_comments
+tools: Read, Grep, Glob, MultiEdit, Bash(gh:*), Bash(rg:*), Bash(sg:*), Bash(ast-grep:*), Bash(fzf:*), Bash(jq:*), Bash(yq:*), Bash(fd:*), Bash(linctl:*), Write
 color: yellow
 model: sonnet
 ---
@@ -55,7 +55,7 @@ For every analysis task, follow this progressive complexity approach:
 **Phase 1: Codebase Reconnaissance**
 - Read project structure files (CLAUDE.md, README.md, package.json) for architectural context
 - Use Glob to map overall directory structure and identify key areas
-- Gather Linear issue context if issue IDs are provided
+- Gather Linear issue context using linctl if issue IDs are provided
 - Establish baseline understanding of technology stack and patterns
 
 **Phase 2: Targeted Analysis**
@@ -194,8 +194,10 @@ Is it about interacting with YAML or XML? use 'yq'
 ### Code Examples and References
 [Relevant code snippets from existing codebase showing patterns to follow]
 
-### Linear Issue Updates
+### Linear Issue Updates (via linctl)
+- **Fetch Issue Context:** `linctl issue get [ISSUE-ID] --json`
 - **Issue Status:** [Current status and recommended next steps]
+- **Add Comment:** `linctl comment create [ISSUE-ID] --body "Analysis complete: ..."`
 - **Blockers:** [Any issues that need resolution before implementation]
 ```
 

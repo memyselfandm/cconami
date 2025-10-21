@@ -194,7 +194,7 @@ All commands support common parameters:
 
 ## Requirements
 
-- Linear API access via MCP
+- Linear API access via `linctl` CLI tool
 - Claude Code with Task tool
 - Proper Linear workspace structure (Teams → Projects → Issues)
 - Agent subagent definitions installed
