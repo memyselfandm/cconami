@@ -1,6 +1,6 @@
 ---
 allowed-tools: Bash(date:*), Bash(git status:*), Bash(git commit:*), Bash(mkdir:*), Bash(rg:*), Todo, Task, Write, Glob, Grep, MultiEdit, mcp__linear__*
-argument-hint: --issue <issue-id> | --issues <issue-ids> [--team <team-name>] [--force] [--dry-run]
+argument-hint: <issue-ids> [team name] [force] [dry-run]
 description: (*Run from PLAN mode*) Execute one or more Linear issues using subagents with intelligent dependency analysis and maximum parallelization
 ---
 
@@ -11,22 +11,34 @@ The command intelligently analyzes dependencies, assigns execution phases, and m
 
 Perfect for ad-hoc development, hot fixes, or executing individual features outside of sprint cycles.
 
-## Variables
-- `--issue <id>`: Execute a single Linear issue by ID (e.g., CCC-123)
-- `--issues <ids>`: Execute multiple issues (comma-separated: CCC-123,CCC-124,CCC-125)
-- `--team <name>`: (Optional) Specify team context for issue lookup
-- `--force`: (Optional) Attempt execution even if blockers exist
-- `--dry-run`: (Optional) Preview execution plan without running agents
-
 ## Workflow
 
-### Step 1: Setup
-1. Parse command arguments to extract issue ID(s) from `--issue` or `--issues`
-2. Extract optional flags: `--team`, `--force`, `--dry-run`
-3. Validate Linear MCP connectivity with `mcp__linear__list_teams`
-4. Validate issue ID format (XXX-NNN pattern)
+### Step 1: Parse Arguments
+Parse natural language input from $ARGUMENTS to extract:
 
-### Step 2: Issue Analysis
+**Issue IDs** (required):
+- Look for patterns matching `XXX-NNN` format (e.g., CCC-123, PROJ-456)
+- Can be single ID or comma-separated list: `CCC-123,CCC-124,CCC-125`
+- Can also be space-separated: `CCC-123 CCC-124`
+
+**Keywords** (optional):
+- `force` - Attempt execution even if blockers exist
+- `dry-run` or `dry run` - Preview execution plan without running agents
+- `team` followed by a name - Specify team context for issue lookup
+
+**Examples of valid inputs:**
+- `CCC-123` - Single issue
+- `CCC-123,CCC-124,CCC-125` - Multiple issues, comma-separated
+- `CCC-123 CCC-124 dry-run` - Multiple issues with dry-run keyword
+- `CCC-123 team Chronicle force` - Single issue with team and force keywords
+- `CCC-123,CCC-124 dry run` - Multiple issues with dry-run (space variant)
+
+### Step 2: Setup
+1. Validate extracted issue IDs (XXX-NNN pattern)
+2. Validate Linear MCP connectivity with `mcp__linear__list_teams`
+3. If team name was provided, verify team exists
+
+### Step 3: Issue Analysis
 1. Use the Task tool to execute the `issue_context_subagent_prompt` below, replacing variables with actual issue IDs
    <issue_context_subagent_prompt>
       Execute the following steps to analyze the requested issues:
@@ -90,8 +102,8 @@ Perfect for ad-hoc development, hot fixes, or executing individual features outs
          ```
    </issue_context_subagent_prompt>
 
-### Step 3: Code Analysis
-1. Based on the analysis report from Step 2, use the Task tool to launch a subagent for each issue using the `code_analysis_subagent_prompt` prompt below. Launch the agents **concurrently**, making multiple Task tool calls in a single request.
+### Step 4: Code Analysis
+1. Based on the analysis report from Step 3, use the Task tool to launch a subagent for each issue using the `code_analysis_subagent_prompt` prompt below. Launch the agents **concurrently**, making multiple Task tool calls in a single request.
    <code_analysis_subagent_prompt>
       # ROLE
       You are an s-tier research engineer specializing in identifying relevant code for a given issue.
@@ -137,9 +149,9 @@ Perfect for ad-hoc development, hot fixes, or executing individual features outs
    - Maps file dependencies between issues
    - Identifies issues that must run sequentially vs can run in parallel
 
-### Step 4: Plan Execution
+### Step 5: Plan Execution
 
-Based on the issue analysis from Step 2 and the code analyses from Step 3, create a safe execution plan that balances parallelization with strict avoidance of file i/o and dependency conflicts.
+Based on the issue analysis from Step 3 and the code analyses from Step 4, create a safe execution plan that balances parallelization with strict avoidance of file i/o and dependency conflicts.
 
 1. **Distribute issues into execution phases**:
    Categorize issues into execution phases based on their phase labels, dependency chain, and file impact:
@@ -223,8 +235,8 @@ Based on the issue analysis from Step 2 and the code analyses from Step 3, creat
    Dependency Validation: [PASS/FAIL with details]
    ```
 
-6. **Dry-Run Exit** (if --dry-run flag):
-   If `--dry-run` flag was provided, output the execution plan and exit without executing:
+6. **Dry-Run Exit** (if dry-run keyword detected):
+   If `dry-run` keyword was found in $ARGUMENTS, output the execution plan and exit without executing:
    ```markdown
    ## Execution Plan (DRY-RUN MODE)
 
@@ -248,10 +260,10 @@ Based on the issue analysis from Step 2 and the code analyses from Step 3, creat
    Total Agents: 4 parallel (max)
    Estimated Parallel Execution: 75%
 
-   To execute: Run without --dry-run flag
+   To execute: Run without dry-run keyword
    ```
 
-### Step 5: Execute Issues
+### Step 6: Execute Issues
 
 <subagent_prompt_template>
 ```markdown
@@ -307,19 +319,19 @@ Before launching agents, perform final validation:
 
 ```python
 if not dry_run:
-    # Check for blockers unless --force
+    # Check for blockers unless force keyword detected
     if has_unresolved_blockers and not force_flag:
         print("❌ ERROR: Issues have unresolved blockers:")
         for issue_id, blocker_ids in blockers.items():
             print(f"   {issue_id} blocked by: {', '.join(blocker_ids)}")
         print("\nOptions:")
-        print("  1. Include blocking issues in execution: --issues ID1,ID2,BLOCKER_ID")
-        print("  2. Force execution (not recommended): --force")
+        print("  1. Include blocking issues in execution: ID1,ID2,BLOCKER_ID")
+        print("  2. Force execution (not recommended): add 'force' keyword")
         exit(1)
 
     # Warn if forcing through blockers
     if has_unresolved_blockers and force_flag:
-        print("⚠️  WARNING: Proceeding despite unresolved blockers (--force enabled)")
+        print("⚠️  WARNING: Proceeding despite unresolved blockers (force keyword enabled)")
         print("   This may result in incomplete or incorrect implementation")
 ```
 
@@ -536,7 +548,7 @@ for failed_agent in failed_agents:
 
 ### Example 1: Single Hot Fix
 ```bash
-$ /issue-execute --issue BUG-456
+$ /issue-execute BUG-456
 
 🔍 Analyzing issue BUG-456...
 📋 Issue: "Fix authentication timeout on mobile"
@@ -573,7 +585,7 @@ $ /issue-execute --issue BUG-456
 
 ### Example 2: Multiple Related Features
 ```bash
-$ /issue-execute --issues FEAT-123,FEAT-124,FEAT-125
+$ /issue-execute FEAT-123,FEAT-124,FEAT-125
 
 🔍 Analyzing issues FEAT-123, FEAT-124, FEAT-125...
 📋 Execution Scope: 5 issues (3 primary + 2 subtasks)
@@ -624,7 +636,7 @@ $ /issue-execute --issues FEAT-123,FEAT-124,FEAT-125
 
 ### Example 3: Dry-Run Preview
 ```bash
-$ /issue-execute --issues EPIC-100,EPIC-101 --dry-run
+$ /issue-execute EPIC-100,EPIC-101 dry-run
 
 🔍 Analyzing issues EPIC-100, EPIC-101...
 📋 Execution Scope: 23 issues (2 epics + 21 children)
@@ -671,12 +683,12 @@ Total Agents: 7 (4 max parallel)
 Estimated Parallel Execution: 65%
 Estimated Time: 45-60 minutes
 
-To execute: /issue-execute --issues EPIC-100,EPIC-101
+To execute: /issue-execute EPIC-100,EPIC-101
 ```
 
 ### Example 4: Forced Execution (Blockers Override)
 ```bash
-$ /issue-execute --issue BLOCKED-789 --force
+$ /issue-execute BLOCKED-789 force
 
 🔍 Analyzing issue BLOCKED-789...
 
@@ -684,7 +696,7 @@ $ /issue-execute --issue BLOCKED-789 --force
    - Blocked by: AUTH-500 (In Progress)
    - Blocked by: DB-301 (Planned)
 
-⚠️  --force flag enabled: Proceeding anyway
+⚠️  force keyword enabled: Proceeding anyway
 
 🔍 Code Analysis:
    May require incomplete dependencies from blockers
@@ -721,15 +733,15 @@ Action Required:
 
 **Issue Selection**:
 - Execute related issues together for better context
-- Include dependencies to avoid blockers (or use --force sparingly)
+- Include dependencies to avoid blockers (or use force keyword sparingly)
 - Consider execution time and complexity when grouping
-- Use --dry-run for complex multi-issue executions
+- Use dry-run keyword for complex multi-issue executions
 
 **Dependency Management**:
-- Always check dependencies before execution (automatic in Step 2)
-- Use --dry-run to preview complex executions
+- Always check dependencies before execution (automatic in Step 3)
+- Use dry-run keyword to preview complex executions
 - Include blocking issues in execution scope when possible
-- Understand impact before using --force flag
+- Understand impact before using force keyword
 
 **Progress Tracking**:
 - Monitor Linear for real-time updates from agents
@@ -738,7 +750,7 @@ Action Required:
 - Use Linear issue views to track execution status
 
 **Error Recovery**:
-- Use --force sparingly and only when blockers are understood
+- Use force keyword sparingly and only when blockers are understood
 - Review failed executions before retrying
 - Check Linear comments for detailed failure information
 - Consider breaking large issue sets into smaller batches
@@ -746,5 +758,5 @@ Action Required:
 **Performance Optimization**:
 - Group related issues by technical area for better parallelization
 - Limit to 4 parallel agents for optimal performance
-- Use --dry-run to identify potential conflicts before execution
+- Use dry-run keyword to identify potential conflicts before execution
 - Execute issues in logical groupings (all frontend, then all backend, etc.)

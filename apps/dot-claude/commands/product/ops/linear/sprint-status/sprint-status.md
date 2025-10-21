@@ -1,30 +1,41 @@
 ---
 allowed-tools: mcp__linear__*
-argument-hint: [--team <team-name>] [--project <project-name>] [--active] [--detailed]
+argument-hint: [team name] [project name] [active] [detailed]
 description: Check status of Linear sprints, showing progress, active agents, and blocked issues
 ---
 
 # Linear Sprint Status Command
 Query Linear to display the current status of sprints, including progress metrics, active agent work, and any blocked issues.
 
-## Usage
-- `--team <n>`: (Optional) Show all sprints for a specific team
-- `--project <n>`: (Optional) Show detailed status for specific sprint project
-- `--active`: (Optional) Only show currently active sprints (issues in "In Progress" state)
-- `--detailed`: (Optional) Include individual issue details and agent assignments
+## Workflow
 
-If no arguments provided, shows all active sprints across all teams.
+### Step 1: Parse Arguments
+Parse natural language input from $ARGUMENTS to extract:
 
-## Instructions
+**Keywords** (optional):
+- `active` - Only show currently active sprints (issues in "In Progress" state)
+- `detailed` - Include individual issue details and agent assignments
+- `team` followed by a name - Show all sprints for a specific team
+- `project` followed by a name - Show detailed status for specific sprint project
 
-### Step 1: Determine Query Scope
+**Examples of valid inputs:**
+- (empty) - Shows all active sprints across all teams
+- `active` - Only active sprints
+- `team Chronicle` - All sprints for Chronicle team
+- `project Sprint-2024-12-001 detailed` - Detailed view of specific sprint
+- `team Chronicle active` - Active sprints for Chronicle team
+- `Sprint-2024-12-001` - Can infer project name without "project" keyword
 
-1. **Parse Arguments**:
+### Step 2: Determine Query Scope
+
+Based on parsed arguments from Step 1:
+
+1. **Determine scope**:
    ```python
-   if --project specified:
+   if project_name_provided:
        # Detailed view of single sprint
        scope = "single_project"
-   elif --team specified:
+   elif team_name_provided:
        # All sprints for one team
        scope = "team_sprints"
    else:
@@ -32,12 +43,12 @@ If no arguments provided, shows all active sprints across all teams.
        scope = "all_active"
    ```
 
-2. **Set Detail Level**:
+2. **Set detail level**:
    - Default: Summary statistics only
-   - With `--detailed`: Include issue-level information
-   - With `--active`: Filter to sprints with "In Progress" issues
+   - With `detailed` keyword: Include issue-level information
+   - With `active` keyword: Filter to sprints with "In Progress" issues
 
-### Step 2: Query Linear Data
+### Step 3: Query Linear Data
 
 #### For Single Project Status
 ```python
@@ -63,7 +74,7 @@ If no arguments provided, shows all active sprints across all teams.
 4. Aggregate statistics across teams
 ```
 
-### Step 3: Analyze Sprint State
+### Step 4: Analyze Sprint State
 
 1. **Calculate Phase Progress**:
    ```python
@@ -121,7 +132,7 @@ If no arguments provided, shows all active sprints across all teams.
    }
    ```
 
-### Step 4: Format Status Output
+### Step 5: Format Status Output
 
 #### Summary View (Default)
 ```markdown

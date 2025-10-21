@@ -1,6 +1,6 @@
 ---
 allowed-tools: mcp__linear__get_issue, mcp__linear__list_issues, mcp__linear__create_issue, mcp__linear__update_issue, mcp__linear__list_comments, mcp__linear__list_teams, mcp__linear__list_issue_labels, Task, Glob, Grep
-argument-hint: [issue-id-or-url] [--lite] [--analyze-codebase] [--interactive] [--team <name>] [--title <text>]
+argument-hint: [issue-id-or-url] [lite] [analyze-codebase] [interactive] [team name] [title text]
 description: Transform a Linear issue into a comprehensive epic using full PRD or lite 1-pager template, with optional codebase analysis
 ---
 
@@ -11,84 +11,51 @@ Transform a minimal Linear issue into a comprehensive, AI-ready epic using eithe
 
 ## Usage
 
-### Multi-Mode Operation
-```bash
-# Mode 1: Refine existing epic (default: comprehensive)
-/refine-epic CCC-123 [options]
+### Step 1: Parse Arguments
+Parse natural language input from $ARGUMENTS to extract:
 
-# Mode 2: Refine with lightweight template
-/refine-epic CCC-123 --lite
+**Issue ID or URL** (optional):
+- Look for patterns matching `XXX-NNN` format (e.g., CCC-123)
+- Or full Linear URLs
+- If omitted AND team name provided, creates new epic
 
-# Mode 3: Refine with codebase analysis
-/refine-epic CCC-123 --analyze-codebase
+**Keywords** (optional):
+- `lite` - Use lightweight 1-pager template instead of comprehensive PRD
+- `analyze-codebase` or `analyze codebase` - Add lightweight codebase analysis
+- `interactive` - Step through template sections with guided prompts
+- `validate-only` or `validate only` - Check issue accessibility and preview current content
+- `skip-validation` or `skip validation` - Skip readiness checks for faster refinement (lite mode only)
+- `team` followed by a name - Target Linear team (required for create mode)
+- `title` followed by text - Initial title for new epic (create mode)
 
-# Mode 4: Combined lite + analysis
-/refine-epic CCC-123 --lite --analyze-codebase
+**Examples of valid inputs:**
+- `CCC-123` - Refine existing epic (comprehensive template)
+- `CCC-123 lite` - Refine with lightweight template
+- `CCC-123 analyze-codebase` - Refine with codebase analysis
+- `CCC-123 lite analyze codebase` - Combined lite + analysis
+- `team Chronicle title New Authentication System` - Create new epic
+- `CCC-123 interactive` - Interactive guided refinement
+- `https://linear.app/team/issue/CCC-123` - Refine from URL
 
-# Mode 5: Create new epic from scratch
-/refine-epic --team "Team Name" --title "Epic Title"
+### Step 2: Mode Detection
+Based on parsed arguments from Step 1:
 
-# Mode 6: Interactive mode for guided refinement
-/refine-epic CCC-123 --interactive
-```
+**Determine operation mode:**
+- If issue ID was provided → `refine` mode
+- If no issue ID BUT team name provided → `create` mode
+- If neither → error
 
-### Parameters
-- **issue-id-or-url** (optional): Linear issue ID or URL. If omitted with --team, creates new epic
-- **--lite** (optional): Use lightweight 1-pager template instead of comprehensive PRD
-- **--analyze-codebase** (optional): Add lightweight codebase analysis to inform epic refinement
-- **--team <name>** (optional): Target Linear team (required for create mode)
-- **--title <text>** (optional): Initial title for new epic (create mode)
-- **--interactive** (optional): Step through template sections with guided prompts
-- **--validate-only** (optional): Check issue accessibility and preview current content
-- **--skip-validation** (optional): Skip readiness checks for faster refinement (lite mode only)
+**Select template:**
+- If `lite` keyword detected → lightweight 1-pager template (6 sections, 5 min)
+- Otherwise → comprehensive PRD template (12+ sections, 30+ min)
 
-## Template Selection
+**Enable enhancements:**
+- If `analyze-codebase` keyword detected → enable codebase analysis
+- If `interactive` keyword detected → enable guided prompts
+- If `validate-only` keyword detected → check readiness without changes
+- If `skip-validation` keyword detected → skip readiness checks (lite mode only)
 
-### Choose Template Based on Flags
-
-**Comprehensive PRD Template (default):**
-- Use when --lite flag is NOT present
-- Best for production features, multi-team work
-- 12+ sections with deep detail
-- 30+ minutes to complete
-
-**Lightweight 1-Pager Template (--lite):**
-- Use when --lite flag IS present
-- Perfect for MVPs, personal projects, hackathons
-- 6 essential sections only
-- 5 minutes to complete
-
-**Codebase Analysis Enhancement (--analyze-codebase):**
-- Works with either template
-- Adds lightweight technical context
-- Launches parallel analysis agents
-- Enhances Technical Approach section
-
-## Step-by-Step Process
-
-### Step 0: Mode Detection
-```python
-# Determine operation mode
-if issue_id_provided:
-    mode = "refine"
-    issue = mcp__linear__get_issue(issue_id)
-else:
-    mode = "create"
-    if not team_provided:
-        error("--team required for create mode")
-
-# Select template
-if lite_flag:
-    template = "lite"  # 1-pager
-else:
-    template = "comprehensive"  # Full PRD
-
-# Enable analysis if requested
-if analyze_codebase_flag:
-    enable_codebase_analysis = True
-```
-
-### 1. Issue Analysis & Context Gathering
+### Step 3: Issue Analysis & Context Gathering
 **Retrieve and analyze the source Linear issue:**
 - Fetch issue details using Linear MCP `get_issue` 
 - Extract current title, description, labels, and comments
@@ -108,7 +75,7 @@ if analyze_codebase_flag:
 - [ ] Team/project context is available
 - [ ] Issue is appropriate for epic expansion (not already a detailed epic)
 
-### 2. Interactive Template Population
+### Step 4: Interactive Template Population
 
 #### For Comprehensive Template (Default)
 
@@ -156,7 +123,7 @@ For Create Mode - Quick 5-question flow:
 5️⃣ What features? (list 3-5 or auto-generate)
 ```
 
-### Template Section Breakdown
+### Step 5: Template Section Breakdown
 
 #### **Executive Context**
 ```
@@ -316,9 +283,9 @@ Observability:
 - User metrics from user journey analysis
 ```
 
-### 2A. Codebase Analysis Enhancement (--analyze-codebase Flag)
+### Step 6: Codebase Analysis Enhancement (Optional)
 
-When the `--analyze-codebase` flag is present, perform lightweight reconnaissance:
+When the `analyze-codebase` keyword is detected in $ARGUMENTS, perform lightweight reconnaissance:
 
 ```python
 # Lightweight Codebase Analysis
@@ -356,7 +323,7 @@ if analyze_codebase:
         epic_template['technical_context'] += f"\n\nCodebase Analysis:\n{technical_context}"
 ```
 
-### 3. AI Agent Guidance Generation
+### Step 7: AI Agent Guidance Generation
 
 **Parallelization Analysis:**
 - Analyze feature decomposition for dependency patterns
@@ -370,7 +337,7 @@ if analyze_codebase:
 - Flag anti-patterns based on past issues or failures
 - Include implementation hints specific to the technology stack
 
-### 4. Output Generation & Validation
+### Step 8: Output Generation & Validation
 
 #### **Epic Issue Creation** (adapts to template type)
 
@@ -385,7 +352,7 @@ Create comprehensive Linear issue:
 - Project: Keep in same project or suggest epic-appropriate project
 ```
 
-**For Lite Template (--lite flag):**
+**For Lite Template (lite keyword):**
 ```python
 refined_description = f"""
 # Epic: {title}
@@ -410,7 +377,7 @@ refined_description = f"""
 {risks_if_any}
 
 ---
-*Refined with /refine-epic --lite for quick epic definition*
+*Refined with /refine-epic lite for quick epic definition*
 """
 
 mcp__linear__update_issue(
@@ -436,7 +403,7 @@ Markdown File:
 - Include metadata headers for easy parsing
 ```
 
-### 5. Validation & Quality Assurance
+### Step 9: Validation & Quality Assurance
 
 **Completeness Check:**
 - [ ] All template sections populated with meaningful content
@@ -485,9 +452,9 @@ Markdown File:
 📊 Ready for /epic-breakdown command
 ```
 
-### **Lite Template Mode (--lite)**
+### **Lite Template Mode (lite keyword)**
 ```
-/refine-epic CCC-123 --lite
+/refine-epic CCC-123 lite
 
 🚀 Quick Epic Refinement Starting...
 📋 Found epic: "Build notification system"
@@ -514,9 +481,9 @@ Markdown File:
 🔗 View: https://linear.app/team/issue/CCC-123
 ```
 
-### **With Codebase Analysis (--analyze-codebase)**
+### **With Codebase Analysis (analyze-codebase keyword)**
 ```
-/refine-epic CCC-123 --analyze-codebase
+/refine-epic CCC-123 analyze-codebase
 
 🔍 Analyzing Linear issue CCC-123...
 ✅ Issue found: "Add user authentication system"
@@ -540,7 +507,7 @@ Markdown File:
 
 ### **Combined Lite + Analysis**
 ```
-/refine-epic CCC-123 --lite --analyze-codebase
+/refine-epic CCC-123 lite analyze-codebase
 
 🚀 Quick Epic with Codebase Context
 📋 Using 1-pager template + technical analysis

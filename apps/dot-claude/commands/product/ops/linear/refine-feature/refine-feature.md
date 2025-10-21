@@ -1,6 +1,6 @@
 ---
 allowed-tools: mcp__linear__get_issue, mcp__linear__list_issues, mcp__linear__update_issue, mcp__linear__create_issue, mcp__linear__list_comments, mcp__linear__list_teams, mcp__linear__list_issue_labels
-argument-hint: [feature-id-or-url] [--team <name>] [--parent-epic <id>] [--interactive] [--create-subtasks]
+argument-hint: [feature-id-or-url] [team name] [parent-epic id] [interactive] [create-subtasks]
 description: Refine Linear features with AI templates and right-sizing - refine existing or create new from ideas
 ---
 
@@ -9,28 +9,32 @@ description: Refine Linear features with AI templates and right-sizing - refine 
 ## Command Purpose
 Transform a basic Linear feature issue into a comprehensive, AI-ready feature specification using proven templates and right-sizing logic from epic breakdown. This ensures features are properly scoped, have clear acceptance criteria, and include well-defined subtasks for efficient AI agent execution.
 
-## Usage
+## Workflow
 
-### Dual-Mode Operation
-```bash
-# Mode 1: Refine existing feature
-/refine-feature PROJ-456 [options]
+### Step 1: Parse Arguments
+Parse natural language input from $ARGUMENTS to extract:
 
-# Mode 2: Create new feature from idea
-/refine-feature --team "Team Name" [options]
-```
+**Feature ID or URL** (optional):
+- Look for patterns matching `XXX-NNN` format (e.g., PROJ-456)
+- Or full Linear URLs
+- If omitted AND team name provided, creates new feature
 
-### Parameters
-- **feature-id-or-url** (optional): Linear feature ID or URL. If omitted, creates new feature
-- **--team <name>** (required for create mode): Target Linear team
-- **--parent-epic <id>** (optional): Link to parent epic (useful in create mode)
-- **--interactive** (optional): Step through refinement sections with guided prompts
-- **--create-subtasks** (optional): Automatically generate and create subtasks
-- **--validate-only** (optional): Check readiness without changes (refine mode only)
+**Keywords** (optional):
+- `interactive` - Step through refinement sections with guided prompts
+- `create-subtasks` or `create subtasks` - Automatically generate and create subtasks
+- `validate-only` or `validate only` - Check readiness without changes (refine mode only)
+- `team` followed by a name - Target Linear team (required for create mode)
+- `parent-epic` or `epic` followed by ID - Link to parent epic
 
-## Step-by-Step Process
+**Examples of valid inputs:**
+- `PROJ-456` - Refine existing feature
+- `team Chronicle` - Create new feature for Chronicle team
+- `PROJ-456 interactive` - Refine with guided prompts
+- `PROJ-456 create-subtasks` - Refine and auto-generate subtasks
+- `team Chronicle epic CCC-100` - Create feature linked to epic
+- `https://linear.app/team/issue/PROJ-456` - Refine from URL
 
-### Step 0: Mode Detection
+### Step 2: Mode Detection
 ```python
 if feature_id_provided:
     # REFINE MODE - enhance existing feature

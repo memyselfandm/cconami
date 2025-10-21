@@ -1,6 +1,6 @@
 ---
 allowed-tools: Task, Read, Write, MultiEdit, Bash(mkdir:*), mcp__linear__*, Glob, Grep
-argument-hint: <spec> [--context <ref>] [--depth light|normal|deep] [--research <urls>] [--dry-run]
+argument-hint: <spec> [context ref-url] [depth light|normal|deep] [research urls] [dry-run]
 description: Executes phased building of subagents with extensive context research using a 2-pass drafting system
 ---
 
@@ -8,61 +8,41 @@ description: Executes phased building of subagents with extensive context resear
 
 Systematically create production-ready Claude Code subagents through a 3-phase process: Research → Draft → Refine. This command implements the successful pattern from CCC-16,17,18 with smart multiplexing and configurable research depth.
 
-## Usage
+## Workflow
 
-### Basic Usage
-```bash
-# Single agent from natural language
-/subagent-build "Create a testing automation subagent with pytest expertise"
+### Step 1: Parse Arguments
+Parse natural language input from $ARGUMENTS to extract:
 
-# Multiple agents from Linear issues
-/subagent-build CCC-123,CCC-124,CCC-125
+**Spec** (required):
+- Natural language description(s) in quotes
+- Linear issue IDs matching `CCC-NNN` pattern (comma-separated)
+- Markdown file path with `@` prefix
+- Multiple specs separated by spaces or commas
 
-# From markdown specification file
-/subagent-build @specs/new-agent.md
-```
-
-### Advanced Usage
-```bash
-# With reference implementation and deep research
-/subagent-build "kubernetes-operator agent" \
-  --context https://github.com/operator-framework/operator-sdk \
-  --depth deep \
-  --research https://kubernetes.io/docs/concepts/
-
-# Multiple agents with varied configurations
-/subagent-build "api-agent: GraphQL specialist" "data-agent: ETL pipelines" \
-  --depth deep,normal \
-  --context https://ref1.com,
-```
-
-## Arguments
-
-- **`<spec>`**: Agent specification(s) - can be:
-  - Natural language description(s) in quotes
-  - Linear issue ID(s) (comma-separated)
-  - Markdown file path with `@` prefix
-  - Multiple specs separated by spaces
-
-- **`--context <ref>`**: Reference implementation URLs (comma-separated)
+**Keywords** (optional):
+- `dry-run` or `dry run` - Preview execution plan without running agents
+- `context` followed by URL(s) - Reference implementation URLs (comma-separated)
   - When provided, research biases 70-80% toward the reference
-  - Use commas to separate multiple references
-  - Leave empty for specific agents to skip: `ref1,,ref3`
-
-- **`--depth <level>`**: Research depth per agent (comma-separated)
+  - Use commas to separate multiple references: `context url1,url2,url3`
+  - Leave empty for specific agents to skip: `context url1,,url3`
+- `depth` followed by level(s) - Research depth per agent (comma-separated)
   - `light`: 2-3 sources, quick patterns (2 min)
   - `normal`: 5 sources, balanced research (5 min) [default]
   - `deep`: 8-10 sources, exhaustive analysis (10 min)
-
-- **`--research <urls>`**: Additional research URLs (comma-separated)
+  - Can specify per-agent: `depth deep,normal,light`
+- `research` followed by URL(s) - Additional research URLs (comma-separated)
   - Supplementary sources for context engineers
   - Applied to all agents unless position-specific
 
-- **`--dry-run`: Preview execution plan without running agents
+**Examples of valid inputs:**
+- `"Create testing automation subagent with pytest expertise"` - Single agent from description
+- `CCC-123,CCC-124,CCC-125` - Multiple agents from Linear issues
+- `@specs/new-agent.md` - From markdown specification file
+- `"k8s-operator agent" context https://github.com/operator-framework/operator-sdk depth deep` - With reference and deep research
+- `"api-agent: GraphQL specialist" "data-agent: ETL pipelines" depth deep,normal context https://ref1.com,` - Multiple agents with varied configs
+- `CCC-123 dry-run` - Preview without execution
 
-## Instructions
-
-### Step 1: Parse Input & Configure
+### Step 2: Parse Input & Configure
 
 1. **Identify Input Type**:
    ```python
@@ -101,7 +81,7 @@ Systematically create production-ready Claude Code subagents through a 3-phase p
            name = generate_name_from_description(spec)
    ```
 
-### Step 2: Phase 1 - Research (context-engineering-subagent)
+### Step 3: Phase 1 - Research (context-engineering-subagent)
 
 **Multiplexing**: Deploy N context engineers for N specifications concurrently
 
@@ -141,7 +121,7 @@ Systematically create production-ready Claude Code subagents through a 3-phase p
    - Normal: 3-5 pages with examples
    - Deep: 5-10 pages with comprehensive analysis
 
-### Step 3: Phase 2 - Draft (subagent-architect)
+### Step 4: Phase 2 - Draft (subagent-architect)
 
 **Multiplexing**: Deploy N architects for N specifications concurrently
 
@@ -182,7 +162,7 @@ Systematically create production-ready Claude Code subagents through a 3-phase p
        })
    ```
 
-### Step 4: Phase 3 - Refine (subagent-architect in review mode)
+### Step 5: Phase 3 - Refine (subagent-architect in review mode)
 
 **Multiplexing**: Deploy N architects for refinement concurrently
 
@@ -227,7 +207,7 @@ Systematically create production-ready Claude Code subagents through a 3-phase p
        })
    ```
 
-### Step 5: Post-Processing & Deployment
+### Step 6: Post-Processing & Deployment
 
 1. **Create Directory Structure**:
    ```bash

@@ -1,6 +1,6 @@
 ---
 allowed-tools: mcp__linear__get_issue, mcp__linear__create_issue, mcp__linear__update_issue, mcp__linear__list_teams, mcp__linear__list_issue_labels, WebFetch
-argument-hint: [issue-id-or-url] [--team <name>] [--type <task|bug|chore>] [--template <path-or-url>]
+argument-hint: [issue-id-or-url] [team name] [type task|bug|chore] [template path-or-url]
 description: Generic issue refinement for tasks, bugs, and chores - refine existing or create new from ideas
 ---
 
@@ -9,28 +9,31 @@ description: Generic issue refinement for tasks, bugs, and chores - refine exist
 ## Command Purpose
 Refine existing Linear issues OR create new ones from scratch using appropriate templates for tasks, bugs, and chores. Supports custom templates for team-specific requirements. This is the Swiss Army knife of issue refinement - use specialized commands (`refine-epic`, `refine-feature`) when available.
 
-## Usage
+## Workflow
 
-### Dual-Mode Operation
-```bash
-# Mode 1: Refine existing issue
-/refine-issue CCC-789 [options]
+### Step 1: Parse Arguments
+Parse natural language input from $ARGUMENTS to extract:
 
-# Mode 2: Create new issue from idea
-/refine-issue --team "Team Name" --type bug [options]
-```
+**Issue ID or URL** (optional):
+- Look for patterns matching `XXX-NNN` format (e.g., CCC-789)
+- Or full Linear URLs
+- If omitted AND team name provided, creates new issue
 
-### Parameters
-- **issue-id-or-url** (optional): Linear issue ID or URL. If omitted, creates new issue
-- **--team <name>** (required for create mode): Target Linear team
-- **--type <task|bug|chore>** (optional): Issue type (auto-detected if not specified)
-- **--template <path-or-url>** (optional): Custom template markdown file
-- **--interactive** (optional): Step through all sections with prompts
-- **--validate-only** (optional): Check readiness without changes (refine mode only)
+**Keywords** (optional):
+- `interactive` - Step through all sections with prompts
+- `validate-only` or `validate only` - Check readiness without changes (refine mode only)
+- `team` followed by a name - Target Linear team (required for create mode)
+- `type` followed by task/bug/chore - Issue type (auto-detected if not specified)
+- `template` followed by path or URL - Custom template markdown file
 
-## Step-by-Step Process
+**Examples of valid inputs:**
+- `CCC-789` - Refine existing issue
+- `team Chronicle type bug` - Create new bug report
+- `CCC-789 interactive` - Refine with guided prompts
+- `team Chronicle template https://example.com/template.md` - Create with custom template
+- `https://linear.app/team/issue/CCC-789` - Refine from URL
 
-### Step 0: Mode Detection
+### Step 2: Mode Detection
 ```python
 if issue_id_provided:
     # REFINE MODE - enhance existing issue
