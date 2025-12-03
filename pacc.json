@@ -25,11 +25,23 @@
     ]
   },
   "metadata": {
-    "tags": ["productivity", "linear", "project-management", "sprint-planning"],
+    "tags": ["productivity", "linear", "jira", "project-management", "sprint-planning", "agile"],
     "license": "MIT",
     "requirements": {
       "claude-code": ">=1.0.0",
-      "mcp-server": "linear"
+      "mcp-server": "linear",
+      "cli-tools": {
+        "jira-cli": {
+          "required": false,
+          "version": ">=1.4.0",
+          "repository": "https://github.com/ankitpokhrel/jira-cli",
+          "install": {
+            "macos": "brew install ankitpokhrel/jira-cli/jira-cli",
+            "linux": "sh -c \"$(curl -fsSL https://raw.githubusercontent.com/ankitpokhrel/jira-cli/main/install.sh)\""
+          },
+          "description": "CLI tool for Jira integration (optional, enables Jira workflow commands)"
+        }
+      }
     }
   }
 }

@@ -18,6 +18,15 @@ Transform ideas into execution-ready Linear issues with AI-optimized templates:
 
 You'll need to tweak them to work with your Linear setup.
 
+### Jira Product Ops (Foundation Established)
+Comprehensive Jira CLI integration infrastructure ready for command implementation:
+- **Foundation Documentation** - Complete setup guides, CLI patterns, and workflow documentation
+- **Jira-to-Linear Mapping** - Clear concept mapping for teams migrating or using both tools
+- **Command Roadmap** - Planned commands mirroring Linear workflow (`/jira-sprint-execute`, `/jira-epic-breakdown`, etc.)
+- **Technical Patterns** - Implementation patterns for jira-cli with JSON parsing and error handling
+
+See [Jira Commands README](./apps/dot-claude/commands/product/ops/jira/README.md) for details.
+
 ### Domain-Organized Subagents
 
 **Meta-Agents** (Claude Code Enhancement)

@@ -7,12 +7,14 @@ This directory contains 22 custom slash commands for Claude Code, organized by d
 | Category | Subcategory | Count |
 |----------|-------------|-------|
 | Product | Linear Integration | 16 |
+| Product | Jira Integration | 0 (Foundation) |
 | Product | Operations | 2 |
 | Engineering | Development | 3 |
 | UI/UX | Design | 1 |
 | **Total** | | **22** |
 
 *Note: Documentation files in command subdirectories are not counted*
+*Note: Jira Integration foundation established, commands planned for Phase 2+*
 
 ## Command Categories
 
@@ -50,6 +52,26 @@ Commands for product management, planning, and operations.
 - `/dependency-map` - Analyze dependencies across releases and epics
 - `/project-shuffle` - Move issues between releases/projects
 - `/sprint-review` - Review and analyze completed sprint performance with actionable insights
+
+**Jira Integration** - Jira workflow automation (Foundation Established)
+
+*Foundation Phase* - Infrastructure and documentation complete
+- Directory structure: `apps/dot-claude/commands/product/ops/jira/`
+- LLM context guide: [MMM Jira Guide](../context/mmm/workflow/mmm-jira-guide.md)
+- Technical patterns: [Jira CLI Patterns](../../../ai_docs/knowledge/jira-cli-patterns.md)
+- Foundation docs: [Jira Commands README](./product/ops/jira/README.md)
+
+*Planned Commands* - Mirroring Linear workflow structure
+- `/jira-epic-breakdown` - Analyze epic and create stories/tasks (Planned - Phase 2)
+- `/jira-sprint-plan` - Break down epics into focused sprints (Planned - Phase 3)
+- `/jira-sprint-execute` - Orchestrate parallel execution with AI agents (Planned - Phase 5)
+- `/jira-sprint-status` - Monitor sprint progress (Planned - Phase 2)
+- `/jira-issue-execute` - Execute specific issues ad-hoc (Planned - Phase 2)
+- `/jira-refine-epic` - Transform issues into comprehensive epics (Planned - Phase 4)
+- `/jira-refine-story` - Refine stories with acceptance criteria (Planned - Phase 4)
+- `/jira-sprint-review` - Validate completed sprint work (Planned - Phase 5)
+
+See [Jira Commands README](./product/ops/jira/README.md) for complete implementation roadmap
 
 **Research** - User and market research
 - (Empty - future commands)
@@ -136,12 +158,14 @@ commands/
 │   ├── ops/             # Operational commands
 │   │   ├── prd-meeting/ # PRD writing session
 │   │   ├── sprint/      # Sprint execution
-│   │   └── linear/      # Linear integration commands
-│   │       ├── epic-breakdown/    # Epic to features/tasks
-│   │       ├── epic-prep/         # Epic preparation
-│   │       ├── sprint-plan/       # Sprint planning
-│   │       ├── sprint-execute/    # Sprint execution
-│   │       └── sprint-status/     # Sprint monitoring
+│   │   ├── linear/      # Linear integration commands
+│   │   │   ├── epic-breakdown/    # Epic to features/tasks
+│   │   │   ├── epic-prep/         # Epic preparation
+│   │   │   ├── sprint-plan/       # Sprint planning
+│   │   │   ├── sprint-execute/    # Sprint execution
+│   │   │   └── sprint-status/     # Sprint monitoring
+│   │   └── jira/        # Jira integration commands (Foundation)
+│   │       └── README.md          # Foundation documentation
 │   ├── research/        # User/market research
 │   └── marketing/       # Go-to-market commands
 ├── uiux/
@@ -183,6 +207,13 @@ commands/
 
 Complete documentation for Linear commands is available at:
 - **[Linear Commands Overview](./product/ops/linear/LINEAR_COMMANDS.md)** - Comprehensive guide to all Linear commands
+
+### Jira Integration Commands
+
+Foundation documentation for Jira integration:
+- **[Jira Commands README](./product/ops/jira/README.md)** - Foundation and implementation roadmap
+- **[MMM Jira Guide](../context/mmm/workflow/mmm-jira-guide.md)** - Complete workflow and LLM context
+- **[Jira CLI Patterns](../../../ai_docs/knowledge/jira-cli-patterns.md)** - Technical implementation patterns
 
 #### Individual Linear Commands
 - **Epic Breakdown:** [epic-breakdown.md](./product/ops/linear/epic-breakdown/epic-breakdown.md)

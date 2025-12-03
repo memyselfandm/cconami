@@ -63,12 +63,16 @@ This is a personal system of Claude Code enhancements inspired by IndieDevDan's 
 ```
 claudecode-dev/
 ├── README.md                    # Basic project overview
+├── CLAUDE.md                    # This file - project context for Claude Code
+├── pacc.json                    # Pacc package configuration
 ├── ai_docs/                     # AI context and documentation
 │   ├── knowledge/               # Claude Code feature documentation
 │   │   ├── claude-code-hooks-docs.md
 │   │   ├── claude-code-settings-docs.md
 │   │   ├── claude-code-slash-commands-docs.md
-│   │   └── claude-code-subagents-docs.md
+│   │   ├── claude-code-subagents-docs.md
+│   │   ├── my-linear-guide.md
+│   │   └── jira-cli-patterns.md      # Jira CLI technical patterns
 │   └── prds/                    # Product requirements (empty)
 └── apps/
     ├── agent-app-wrapper/       # Agentic layer initialization
@@ -77,7 +81,20 @@ claudecode-dev/
     └── dot-claude/              # .claude directory templates
         ├── agents/              # Subagent definitions
         ├── commands/            # Custom slash commands
-        │   └── git_status.md
+        │   ├── COMMANDS_README.md
+        │   ├── product/
+        │   │   └── ops/
+        │   │       ├── linear/       # Linear integration commands
+        │   │       └── jira/         # Jira integration foundation
+        │   │           └── README.md # Jira foundation documentation
+        │   ├── uiux/
+        │   └── eng/
+        │       └── dev/
+        │           └── git_status.md
+        ├── context/             # LLM context documentation
+        │   └── mmm/
+        │       └── workflow/
+        │           └── mmm-jira-guide.md  # Jira workflow guide
         ├── hooks/               # Hook scripts
         │   └── HOOKS_README.md
         └── settings/            # Configuration templates
@@ -116,6 +133,13 @@ claudecode-dev/
 
 ### Claude Code Documentation
 - Local markdown copies of Claude Code documentation can be referenced at @~/.claude/context/docs/claude-code/
+
+### Jira Integration Documentation
+For Jira CLI integration and workflow automation:
+- **Foundation Documentation**: `apps/dot-claude/commands/product/ops/jira/README.md` - Installation, authentication, CLI patterns, and command roadmap
+- **LLM Context Guide**: `apps/dot-claude/context/mmm/workflow/mmm-jira-guide.md` - Complete workflow patterns and command examples
+- **Technical Patterns**: `ai_docs/knowledge/jira-cli-patterns.md` - Implementation patterns, JSON parsing, error handling, and integration guidelines
+- **Jira-to-Linear Mapping**: Comprehensive concept mapping for teams using both tools or migrating between them
 
 ### Hook Development
 - Keep hooks focused and fast-executing
