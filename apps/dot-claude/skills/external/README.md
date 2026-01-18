@@ -65,8 +65,8 @@ Skills from these repos can be:
 ### Example: Enable a Sentry skill
 
 ```bash
-# Symlink the commit skill to your commands
-ln -s ../../../apps/dot-claude/skills/external/sentry-skills/plugins/sentry-skills/skills/commit \
+# Symlink the commit skill to your commands (from repo root)
+ln -s ../../apps/dot-claude/skills/external/sentry-skills/plugins/sentry-skills/skills/commit \
       .claude/commands/commit
 ```
 

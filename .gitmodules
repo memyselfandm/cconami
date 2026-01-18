@@ -1,39 +1,3 @@
-[submodule "external/skills/anthropics-skills"]
-	path = external/skills/anthropics-skills
-	url = https://github.com/anthropics/skills.git
-[submodule "external/skills/trailofbits-skills"]
-	path = external/skills/trailofbits-skills
-	url = https://github.com/trailofbits/skills.git
-[submodule "external/skills/sentry-skills"]
-	path = external/skills/sentry-skills
-	url = https://github.com/getsentry/skills.git
-[submodule "external/skills/vercel-skills"]
-	path = external/skills/vercel-skills
-	url = https://github.com/vercel-labs/agent-skills.git
-[submodule "external/skills/aws-skills"]
-	path = external/skills/aws-skills
-	url = https://github.com/zxkane/aws-skills.git
-[submodule "external/skills/ui-skills"]
-	path = external/skills/ui-skills
-	url = https://github.com/ibelick/ui-skills.git
-[submodule "external/skills/claude-bootstrap"]
-	path = external/skills/claude-bootstrap
-	url = https://github.com/alinaqi/claude-bootstrap.git
-[submodule "external/skills/context-engineering-skills"]
-	path = external/skills/context-engineering-skills
-	url = https://github.com/muratcankoylan/Agent-Skills-for-Context-Engineering.git
-[submodule "external/skills/dev-agent-skills"]
-	path = external/skills/dev-agent-skills
-	url = https://github.com/fvadicamo/dev-agent-skills.git
-[submodule "external/skills/n8n-skills"]
-	path = external/skills/n8n-skills
-	url = https://github.com/czlonkowski/n8n-skills.git
-[submodule "external/skills/playwright-skill"]
-	path = external/skills/playwright-skill
-	url = https://github.com/lackeyjb/playwright-skill.git
-[submodule "external/skills/claude-scientific-skills"]
-	path = external/skills/claude-scientific-skills
-	url = https://github.com/K-Dense-AI/claude-scientific-skills.git
 [submodule "apps/dot-claude/skills/external/anthropics-skills"]
 	path = apps/dot-claude/skills/external/anthropics-skills
 	url = https://github.com/anthropics/skills.git
