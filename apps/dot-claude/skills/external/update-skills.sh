@@ -7,13 +7,13 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
 
 cd "$REPO_ROOT"
 
 update_submodule() {
     local submodule="$1"
-    local submodule_path="external/skills/$submodule"
+    local submodule_path="apps/dot-claude/skills/external/$submodule"
 
     if [[ ! -d "$submodule_path" ]]; then
         echo "Error: Submodule '$submodule' not found at $submodule_path"
@@ -30,10 +30,10 @@ if [[ $# -eq 0 ]]; then
     echo ""
 
     # Initialize any uninitialized submodules first
-    git submodule update --init --recursive external/skills/
+    git submodule update --init --recursive apps/dot-claude/skills/external/
 
     # Update all submodules to their latest remote commits
-    for dir in external/skills/*/; do
+    for dir in apps/dot-claude/skills/external/*/; do
         submodule_name=$(basename "$dir")
         update_submodule "$submodule_name"
     done
@@ -42,7 +42,7 @@ if [[ $# -eq 0 ]]; then
     echo "All skill submodules updated!"
     echo ""
     echo "Review changes with: git diff --submodule"
-    echo "Commit with: git add external/skills && git commit -m 'chore: update external skills'"
+    echo "Commit with: git add apps/dot-claude/skills/external && git commit -m 'chore: update external skills'"
 else
     update_submodule "$1"
 fi

@@ -35,17 +35,17 @@ Community and official Claude Code skills pulled in as git submodules. These sta
 
 ### Update All Skills
 ```bash
-./external/skills/update-skills.sh
+./apps/dot-claude/skills/external/update-skills.sh
 ```
 
 ### Update Single Skill
 ```bash
-./external/skills/update-skills.sh trailofbits-skills
+./apps/dot-claude/skills/external/update-skills.sh trailofbits-skills
 ```
 
 ### Initialize After Clone
 ```bash
-git submodule update --init --recursive external/skills/
+git submodule update --init --recursive apps/dot-claude/skills/external/
 ```
 
 ### Check Status
@@ -65,7 +65,7 @@ Skills from these repos can be:
 
 ```bash
 # Symlink the commit skill to your commands
-ln -s ../../external/skills/sentry-skills/plugins/sentry-skills/skills/commit \
+ln -s ../../../apps/dot-claude/skills/external/sentry-skills/plugins/sentry-skills/skills/commit \
       .claude/commands/commit
 ```
 
@@ -73,19 +73,19 @@ ln -s ../../external/skills/sentry-skills/plugins/sentry-skills/skills/commit \
 
 ```markdown
 # Security Guidelines
-@external/skills/trailofbits-skills/plugins/building-secure-contracts/building-secure-contracts.md
+@apps/dot-claude/skills/external/trailofbits-skills/plugins/building-secure-contracts/building-secure-contracts.md
 ```
 
 ## Adding New Skills
 
 ```bash
-git submodule add https://github.com/user/skill-repo.git external/skills/skill-name
+git submodule add https://github.com/user/skill-repo.git apps/dot-claude/skills/external/skill-name
 ```
 
 ## Removing Skills
 
 ```bash
-git submodule deinit external/skills/skill-name
-git rm external/skills/skill-name
-rm -rf .git/modules/external/skills/skill-name
+git submodule deinit apps/dot-claude/skills/external/skill-name
+git rm apps/dot-claude/skills/external/skill-name
+rm -rf .git/modules/apps/dot-claude/skills/external/skill-name
 ```
