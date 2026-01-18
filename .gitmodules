@@ -1,0 +1,39 @@
+[submodule "apps/dot-claude/skills/external/anthropics-skills"]
+	path = apps/dot-claude/skills/external/anthropics-skills
+	url = https://github.com/anthropics/skills.git
+[submodule "apps/dot-claude/skills/external/trailofbits-skills"]
+	path = apps/dot-claude/skills/external/trailofbits-skills
+	url = https://github.com/trailofbits/skills.git
+[submodule "apps/dot-claude/skills/external/sentry-skills"]
+	path = apps/dot-claude/skills/external/sentry-skills
+	url = https://github.com/getsentry/skills.git
+[submodule "apps/dot-claude/skills/external/vercel-skills"]
+	path = apps/dot-claude/skills/external/vercel-skills
+	url = https://github.com/vercel-labs/agent-skills.git
+[submodule "apps/dot-claude/skills/external/aws-skills"]
+	path = apps/dot-claude/skills/external/aws-skills
+	url = https://github.com/zxkane/aws-skills.git
+[submodule "apps/dot-claude/skills/external/ui-skills"]
+	path = apps/dot-claude/skills/external/ui-skills
+	url = https://github.com/ibelick/ui-skills.git
+[submodule "apps/dot-claude/skills/external/playwright-skill"]
+	path = apps/dot-claude/skills/external/playwright-skill
+	url = https://github.com/lackeyjb/playwright-skill.git
+[submodule "apps/dot-claude/skills/external/dev-agent-skills"]
+	path = apps/dot-claude/skills/external/dev-agent-skills
+	url = https://github.com/fvadicamo/dev-agent-skills.git
+[submodule "apps/dot-claude/skills/external/claude-bootstrap"]
+	path = apps/dot-claude/skills/external/claude-bootstrap
+	url = https://github.com/alinaqi/claude-bootstrap.git
+[submodule "apps/dot-claude/skills/external/context-engineering-skills"]
+	path = apps/dot-claude/skills/external/context-engineering-skills
+	url = https://github.com/muratcankoylan/Agent-Skills-for-Context-Engineering.git
+[submodule "apps/dot-claude/skills/external/n8n-skills"]
+	path = apps/dot-claude/skills/external/n8n-skills
+	url = https://github.com/czlonkowski/n8n-skills.git
+[submodule "apps/dot-claude/skills/external/claude-scientific-skills"]
+	path = apps/dot-claude/skills/external/claude-scientific-skills
+	url = https://github.com/K-Dense-AI/claude-scientific-skills.git
+[submodule "apps/dot-claude/skills/external/agent-sop"]
+	path = apps/dot-claude/skills/external/agent-sop
+	url = https://github.com/strands-agents/agent-sop.git
