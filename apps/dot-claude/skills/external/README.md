@@ -12,6 +12,7 @@ Community and official Claude Code skills pulled in as git submodules. These sta
 | **trailofbits-skills** | [trailofbits/skills](https://github.com/trailofbits/skills) | Security-focused: static-analysis, property-based-testing, semgrep-rule-creator, building-secure-contracts, variant-analysis |
 | **sentry-skills** | [getsentry/skills](https://github.com/getsentry/skills) | Dev workflow: commit, code-review, create-pr, find-bugs, iterate-pr |
 | **vercel-skills** | [vercel-labs/agent-skills](https://github.com/vercel-labs/agent-skills) | React best practices, web design guidelines, deployment |
+| **agent-sop** | [strands-agents/agent-sop](https://github.com/strands-agents/agent-sop) | Standard Operating Procedures with RFC 2119 constraints: prompt-driven development, TDD code-assist, codebase-summary, task-generator, eval workflows |
 
 ### Development & Testing
 
