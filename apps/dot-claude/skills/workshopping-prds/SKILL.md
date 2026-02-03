@@ -1,16 +1,16 @@
 ---
-name: running-prd-sessions
-description: Facilitates interactive PRD (Product Requirements Document) writing sessions with multi-phase workflow. Use when defining new features, products, or initiatives that need structured requirements gathering and documentation.
+name: workshopping-prds
+description: Facilitates interactive PRD (Product Requirements Document) workshops with multi-phase workflow. Use when defining new features, products, or initiatives that need structured requirements gathering and documentation.
 ---
 
-# Running PRD Sessions
+# Workshopping PRDs
 
 Interactive product requirements document creation with structured phases.
 
 ## Usage
 
 ```
-/running-prd-sessions [options]
+/workshopping-prds [options]
 ```
 
 ## Options

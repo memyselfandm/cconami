@@ -42,7 +42,7 @@ This directory contains Claude Code skills following the Agent Skills specificat
 
 | Skill | Description |
 |-------|-------------|
-| [running-prd-sessions](running-prd-sessions/) | Interactive PRD writing with multi-phase workflow |
+| [workshopping-prds](workshopping-prds/) | Interactive PRD workshops with multi-phase workflow |
 | [brainstorming-designs](brainstorming-designs/) | Design ideation and exploration sessions |
 
 ## PM Tool Support
