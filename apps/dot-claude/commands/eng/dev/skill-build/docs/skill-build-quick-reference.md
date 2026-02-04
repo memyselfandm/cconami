@@ -2,12 +2,12 @@
 
 ## Common Patterns
 
-### Create a simple Claude Code command
+### Create a Claude Code skill
 ```bash
 /skill-build "Git commit helper that follows conventional commits"
 ```
 
-### Create an AgentSkills.io skill
+### Create a portable AgentSkills.io skill
 ```bash
 /skill-build "CSV data analysis and visualization" --format agentskills
 ```
@@ -37,14 +37,15 @@
 
 ## Format Comparison
 
-| Aspect | Claude Code | AgentSkills.io |
-|--------|-------------|----------------|
-| File | `command-name.md` | `SKILL.md` in directory |
-| Frontmatter | `allowed-tools`, `description`, `argument-hint` | `name`, `description`, optional fields |
-| Body | Instructions with `$ARGUMENTS`, `!`, `@` | Markdown instructions, any structure |
-| Extras | `docs/` subdirectory | `scripts/`, `references/`, `assets/` |
-| Discovery | Via `/help` in Claude Code | Agent-specific loading |
-| Portability | Claude Code only | Cross-agent compatible |
+| Aspect | Claude Code Skill | AgentSkills.io |
+|--------|-------------------|----------------|
+| Location | `.claude/skills/<name>/SKILL.md` | Any directory with `SKILL.md` |
+| Frontmatter | name (opt), description (rec), + extensions | name (req), description (req) |
+| Extensions | invocation control, subagent exec, hooks | None (portable) |
+| Body syntax | `$ARGUMENTS`, `$N`, `!`cmd`, `${CLAUDE_SESSION_ID}` | Plain markdown |
+| Supporting files | Any structure | `scripts/`, `references/`, `assets/` |
+| Discovery | `/help` + Claude auto-loads | Agent-specific |
+| Portability | Claude Code only | Cross-agent |
 
 ## Phase Overview
 
@@ -59,12 +60,22 @@ Phase 3: REFINE (slash-command-architect in review mode)
     └── Polishes for production deployment
 ```
 
-## Output Locations
+## Output Location
 
-| Format | Location |
-|--------|----------|
-| Claude Code | `apps/dot-claude/commands/{namespace}/{name}/{name}.md` |
-| AgentSkills.io | `apps/dot-claude/skills/{name}/SKILL.md` |
+All skills go to: `apps/dot-claude/skills/<name>/SKILL.md`
+
+Deploy by copying to:
+- Personal: `~/.claude/skills/<name>/`
+- Project: `.claude/skills/<name>/`
+
+## Invocation Control Quick Reference
+
+| Behavior | Frontmatter |
+|----------|-------------|
+| User + Claude can invoke (default) | (no special fields) |
+| User only (side-effect skills) | `disable-model-invocation: true` |
+| Claude only (background knowledge) | `user-invocable: false` |
+| Run in isolation | `context: fork` + `agent: Explore` |
 
 ## Flags
 

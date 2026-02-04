@@ -1,21 +1,27 @@
 ---
 allowed-tools: Task, Read, Write, MultiEdit, Bash(mkdir:*), Glob, Grep
 argument-hint: <spec> [--format claude|agentskills|both] [--context <ref>] [--depth light|normal|deep] [--dry-run]
-description: Build production-ready Claude Code skills/commands and AgentSkills.io-compatible skills through a 3-phase Research-Draft-Refine process
+description: Build production-ready Claude Code skills and AgentSkills.io-compatible skills through a 3-phase Research-Draft-Refine process
 ---
 
 # Skill Build Command
 
-Systematically create production-ready skills for Claude Code and/or the AgentSkills.io format through a 3-phase process: Research, Draft, Refine. Supports building slash commands (`.claude/commands/`), AgentSkills.io skills (`SKILL.md` directories), or both simultaneously.
+Systematically create production-ready skills through a 3-phase process: Research, Draft, Refine.
+
+Supports two output formats:
+- **Claude Code skills** (`.claude/skills/<name>/SKILL.md`) - the current standard, following the [Agent Skills](https://agentskills.io) open standard with Claude Code extensions
+- **AgentSkills.io portable skills** - cross-agent compatible format without Claude Code extensions
+
+> **Important**: Claude Code has unified slash commands and skills. `.claude/commands/` files still work but `.claude/skills/<name>/SKILL.md` is the modern standard. Both create `/skill-name` commands. Skills add optional features: a directory for supporting files, invocation control, subagent execution, and automatic loading by Claude.
 
 ## Usage
 
 ### Basic Usage
 ```bash
-# Build a Claude Code slash command from natural language
-/skill-build "Create a code review command that checks for security issues"
+# Build a Claude Code skill from natural language
+/skill-build "Create a code review skill that checks for security issues"
 
-# Build an AgentSkills.io skill
+# Build a portable AgentSkills.io skill
 /skill-build "PDF form extraction and filling" --format agentskills
 
 # Build both formats simultaneously
@@ -25,7 +31,7 @@ Systematically create production-ready skills for Claude Code and/or the AgentSk
 ### Advanced Usage
 ```bash
 # With reference implementation and deep research
-/skill-build "kubernetes deployment command" \
+/skill-build "kubernetes deployment skill" \
   --context https://kubernetes.io/docs/concepts/workloads/ \
   --depth deep
 
@@ -45,13 +51,12 @@ Systematically create production-ready skills for Claude Code and/or the AgentSk
   - Multiple specs separated by spaces
 
 - **`--format <type>`**: Output format (default: `claude`)
-  - `claude`: Claude Code slash command (`.claude/commands/` markdown file)
-  - `agentskills`: AgentSkills.io format (`SKILL.md` directory structure)
+  - `claude`: Claude Code skill (`.claude/skills/` SKILL.md directory)
+  - `agentskills`: Portable AgentSkills.io format (no Claude Code extensions)
   - `both`: Generate both formats
 
 - **`--context <ref>`**: Reference implementation URLs (comma-separated)
   - When provided, research biases 70-80% toward the reference
-  - Useful for adapting existing patterns
 
 - **`--depth <level>`**: Research depth per skill (comma-separated)
   - `light`: 2-3 sources, quick patterns
@@ -69,8 +74,6 @@ format = args.format || 'claude'
 # Valid: 'claude', 'agentskills', 'both'
 
 if format == 'both':
-    # Generate BOTH a Claude Code command AND an AgentSkills.io skill
-    # They share the same research phase but diverge at drafting
     output_targets = ['claude', 'agentskills']
 else:
     output_targets = [format]
@@ -102,7 +105,6 @@ else:
 3. **Generate Skill Names**:
    ```python
    for spec in specs:
-       # Extract or generate kebab-case name
        if ':' in spec:
            name, description = spec.split(':', 1)
            name = kebab_case(name.strip())
@@ -113,7 +115,6 @@ else:
 4. **Dry Run Check**:
    ```python
    if args.dry_run:
-       # Display what WOULD be executed without actually doing it
        print("=== Skill Build Execution Plan ===")
        print(f"Skills to build: {len(specs)}")
        print(f"Output format(s): {', '.join(output_targets)}")
@@ -124,14 +125,10 @@ else:
            if skill_config[i].context:
                print(f"    Reference: {skill_config[i].context}")
            for target in output_targets:
-               if target == 'claude':
-                   ns = categorize_namespace(spec)
-                   print(f"    Output: apps/dot-claude/commands/{ns}/{spec.name}/{spec.name}.md")
-               else:
-                   print(f"    Output: apps/dot-claude/skills/{spec.name}/SKILL.md")
+               print(f"    Output: apps/dot-claude/skills/{spec.name}/SKILL.md")
        print(f"\nPhases: Research → Draft → Refine")
        print(f"Concurrent agents per phase: {len(specs)}")
-       return  # Stop here
+       return
    ```
 
 ### Step 2: Phase 1 - Research (context-engineering-subagent)
@@ -142,30 +139,57 @@ For EACH skill specification, launch a context-engineering-subagent with this pr
 
 ```
 RESEARCH_DEPTH: {skill_config[i].depth}
-RESEARCH_FOCUS: Best practices and patterns for building a skill/command with the following purpose: {spec.description}
+RESEARCH_FOCUS: Best practices and patterns for building a skill with the following purpose: {spec.description}
 
 {f"REFERENCE_CONTEXT: {skill_config[i].context}" if skill_config[i].context else ""}
 
-OBJECTIVE: Research patterns and best practices for creating a Claude Code skill with the following specialization:
+OBJECTIVE: Research patterns and best practices for creating an Agent Skills skill with the following specialization:
 
 {spec.full_description}
 
 TARGET FORMAT(S): {', '.join(output_targets)}
 
 Research the following aspects:
-1. Similar existing commands/skills and their patterns
+1. Similar existing skills and their patterns
 2. The domain knowledge needed for this skill's purpose
 3. Best practices for the skill's interaction model (arguments, workflows, output)
 4. Tool permissions and security considerations
-5. Progressive disclosure opportunities (what goes in main file vs reference files)
+5. Progressive disclosure opportunities (what goes in SKILL.md vs supporting files)
 6. Error handling patterns for the domain
+7. Whether the skill should use invocation control (disable-model-invocation, user-invocable)
+8. Whether the skill benefits from subagent execution (context: fork)
 
 {"Focus 70-80% on analyzing the provided reference implementation." if skill_config[i].context else ""}
 
-IMPORTANT CONTEXT FOR YOUR RESEARCH:
-- If targeting 'claude' format: Research Claude Code slash command patterns (YAML frontmatter with allowed-tools, description, argument-hint; markdown body with instructions using $ARGUMENTS, ! for bash, @ for file references)
-- If targeting 'agentskills' format: Research AgentSkills.io spec (SKILL.md with name/description frontmatter, optional scripts/, references/, assets/ directories, progressive disclosure patterns)
-- If targeting 'both': Research patterns that work well across both formats
+IMPORTANT CONTEXT:
+
+Claude Code skills follow the Agent Skills open standard (https://agentskills.io) with extensions.
+
+CLAUDE CODE SKILL FORMAT (current standard):
+- Location: .claude/skills/<name>/SKILL.md (replaces the older .claude/commands/ pattern)
+- Both create /skill-name slash commands
+- YAML frontmatter fields:
+  * name (optional, defaults to directory name): max 64 chars, lowercase + hyphens
+  * description (recommended): what it does AND when to use it, with trigger keywords
+  * argument-hint: hint for autocomplete (e.g., "[issue-number]")
+  * disable-model-invocation: true to prevent Claude auto-loading (manual /invoke only)
+  * user-invocable: false to hide from / menu (background knowledge only)
+  * allowed-tools: tools Claude can use without permission when skill is active
+  * model: model to use when skill is active
+  * context: set to "fork" to run in a forked subagent context
+  * agent: which subagent type to use with context: fork (e.g., Explore, Plan)
+  * hooks: lifecycle hooks scoped to this skill
+- Body features:
+  * $ARGUMENTS for all arguments, $ARGUMENTS[N] or $N for positional, ${CLAUDE_SESSION_ID}
+  * !`command` for dynamic shell context injection (runs before Claude sees content)
+  * Relative path references to supporting files
+  * Progressive disclosure: SKILL.md <500 lines, details in supporting files
+- Supporting files: any files in the skill directory (templates, scripts, examples, references)
+
+AGENTSKILLS.IO PORTABLE FORMAT:
+- Same SKILL.md core but only standard fields: name (required), description (required), license, compatibility, metadata, allowed-tools (space-delimited)
+- No Claude Code extensions (no context, agent, hooks, disable-model-invocation, user-invocable)
+- Directory: scripts/, references/, assets/ for optional supporting files
 
 Generate a comprehensive context engineering report optimized for the skill architect in Phase 2.
 ```
@@ -196,7 +220,7 @@ For EACH skill specification AND each output target, launch a slash-command-arch
 #### For Claude Code format (`claude`):
 
 ```
-CREATE PRODUCTION-READY CLAUDE CODE SLASH COMMAND: {spec.name}
+CREATE PRODUCTION-READY CLAUDE CODE SKILL: {spec.name}
 
 SPECIFICATION:
 {spec.full_description}
@@ -204,43 +228,97 @@ SPECIFICATION:
 RESEARCH CONTEXT:
 {research_reports[i]}
 
-TARGET FORMAT: Claude Code slash command (.claude/commands/ markdown file)
+TARGET FORMAT: Claude Code skill (.claude/skills/<name>/SKILL.md)
 
 REQUIREMENTS:
-1. YAML frontmatter with:
-   - allowed-tools: MINIMAL set of tools needed. Be specific with Bash permissions (e.g., Bash(git:*) not just Bash)
-   - description: Action-oriented, concise. Describes what it does AND when to use it. Third person. Max ~100 chars
-   - argument-hint: Clear parameter guidance with sensible defaults shown
 
-2. Command body must include:
-   - Clear purpose statement and overview
-   - Usage examples (basic and advanced)
-   - Step-by-step instructions using pseudocode for complex logic
-   - Proper use of $ARGUMENTS for dynamic input
-   - Bash context gathering with ! prefix where useful
-   - File references with @ prefix where useful
-   - Error handling instructions for common failure modes
-   - Collaborative checkpoints for destructive or irreversible operations
+1. SKILL.md frontmatter (YAML between --- markers):
+   All fields are optional except description (recommended).
 
-3. Follow these patterns from proven commands:
-   - Phase-based execution for complex workflows (Foundation → Features → Integration)
-   - Mode switching for multi-purpose commands (if input_provided: refine_mode else: create_mode)
-   - Pseudocode blocks for logic (Python-style, not actual executable code)
-   - Concurrency directives for subagent orchestration (if applicable)
-   - Confirmation checkpoints before destructive actions
+   CORE FIELDS:
+   - name: Display name. If omitted, uses directory name. Lowercase letters, numbers, hyphens only. Max 64 chars.
+   - description: RECOMMENDED. What the skill does AND when to use it. Include trigger keywords so Claude knows when to load it automatically. Third person. Concise.
+   - argument-hint: Shown during autocomplete. E.g., "[issue-number]", "[filename] [format]"
+   - allowed-tools: Tools Claude can use without asking permission. Be specific: Bash(git:*) not Bash
+   - model: Model to use when skill is active (sonnet, opus, haiku)
+
+   INVOCATION CONTROL FIELDS:
+   - disable-model-invocation: Set true for workflows with side effects (deploy, commit, send-message). Prevents Claude from auto-triggering. User must type /name.
+   - user-invocable: Set false for background knowledge that shouldn't appear in / menu. Claude can still load it when relevant.
+
+   SUBAGENT EXECUTION FIELDS:
+   - context: Set to "fork" to run in an isolated subagent context (no conversation history). The skill content becomes the subagent's task prompt. Only makes sense for skills with explicit task instructions.
+   - agent: Which subagent runs the skill when context: fork. Built-in: Explore (read-only, fast), Plan (read-only, inherits model), general-purpose (all tools). Or any custom subagent name.
+
+   HOOKS FIELD:
+   - hooks: Lifecycle hooks scoped to this skill (PreToolUse, PostToolUse, Stop events)
+
+2. SKILL.md body (markdown after frontmatter):
+   TWO TYPES OF SKILL CONTENT:
+
+   A) Reference content (knowledge/conventions Claude applies to current work):
+      - Conventions, patterns, style guides, domain knowledge
+      - Runs inline in main conversation context
+      - Good default for most skills
+
+   B) Task content (step-by-step instructions for specific actions):
+      - Deployments, commits, code generation workflows
+      - Often paired with disable-model-invocation: true
+      - Consider context: fork for isolation
+
+   BODY REQUIREMENTS:
+   - Keep under 500 lines. Move detailed material to supporting files.
+   - Use $ARGUMENTS for user input. $ARGUMENTS[N] or $N for positional args. ${CLAUDE_SESSION_ID} for session ID.
+   - Use !`command` to inject dynamic shell output (runs BEFORE Claude sees the content).
+   - Reference supporting files with relative paths from skill root.
+   - Include: purpose, when to use, step-by-step instructions, examples, edge cases.
+   - For complex logic, use pseudocode blocks (Python-style).
+
+3. Supporting files (optional):
+   Any files in the skill directory that SKILL.md references:
+   - Templates for Claude to fill in
+   - Example outputs showing expected format
+   - Scripts Claude can execute
+   - Detailed reference documentation
+   Reference them from SKILL.md so Claude knows when to load them.
+
+   ```
+   {spec.name}/
+   ├── SKILL.md              # Main instructions (required)
+   ├── template.md           # Optional: template for Claude
+   ├── examples/
+   │   └── sample.md         # Optional: example outputs
+   ├── scripts/
+   │   └── helper.py         # Optional: executable scripts
+   └── references/
+       └── detailed-guide.md # Optional: detailed docs
+   ```
 
 4. Quality standards:
    - Single responsibility principle
    - Idempotent where possible
-   - Security-conscious (no secrets in commands, validate inputs)
-   - Composable with other commands where applicable
-   - Under 500 lines for main file; split to docs/ subdirectory if larger
-   - Professional language (no slang in the command itself)
+   - Security-conscious (no secrets, validate inputs)
+   - Under 500 lines for SKILL.md
+   - Professional language
+   - Include trigger keywords in description for auto-discovery
 
-TARGET FILE: apps/dot-claude/commands/{namespace}/{spec.name}/{spec.name}.md
-(Where namespace is determined by the skill's domain: eng/dev, product/ops, etc.)
+5. Invocation design decision tree:
+   ```python
+   if skill_has_side_effects:  # deploy, commit, send messages
+       set disable-model-invocation: true
+   elif skill_is_background_knowledge:  # conventions, patterns
+       set user-invocable: false
+   elif skill_needs_isolation:  # long research, heavy processing
+       set context: fork
+       choose agent type based on needs
+   else:
+       # Default: both user and Claude can invoke
+       pass
+   ```
 
-Generate the complete command file with YAML frontmatter and full implementation.
+TARGET DIRECTORY: apps/dot-claude/skills/{spec.name}/
+
+Generate all files needed for the complete skill directory.
 ```
 
 #### For AgentSkills.io format (`agentskills`):
@@ -254,63 +332,42 @@ SPECIFICATION:
 RESEARCH CONTEXT:
 {research_reports[i]}
 
-TARGET FORMAT: AgentSkills.io skill (SKILL.md directory)
+TARGET FORMAT: AgentSkills.io portable skill (no Claude Code extensions)
 
 REQUIREMENTS:
 1. SKILL.md frontmatter (YAML):
-   - name: Lowercase kebab-case, max 64 chars. Must match directory name. No reserved words (anthropic, claude). Consider gerund form (e.g., processing-pdfs)
-   - description: Max 1024 chars. Third person. Describes WHAT and WHEN. Include trigger keywords for discovery. Be specific, not vague
-   - license: Optional. If included, keep short (e.g., "Apache-2.0")
-   - compatibility: Optional. Only if specific env requirements exist (e.g., "Requires git, docker")
-   - metadata: Optional. author, version, tags
-   - allowed-tools: Optional/experimental. Space-delimited (not comma)
+   - name: REQUIRED. Lowercase kebab-case, max 64 chars. Must match directory name. Must not start/end with hyphen. No consecutive hyphens (--). Unicode lowercase alphanumeric + hyphens only.
+   - description: REQUIRED. Max 1024 chars. Describes WHAT and WHEN. Include trigger keywords. Be specific.
+   - license: Optional. Short license reference (e.g., "Apache-2.0")
+   - compatibility: Optional. Max 500 chars. Environment requirements.
+   - metadata: Optional. Arbitrary key-value string map (author, version, etc.)
+   - allowed-tools: Optional/experimental. Space-delimited (NOT comma-separated).
 
 2. SKILL.md body:
-   - Keep under 500 lines total
-   - Use progressive disclosure: overview in SKILL.md, details in reference files
-   - Include: quick start, when to use, step-by-step instructions, examples
-   - Reference additional files with relative paths: [guide](references/REFERENCE.md)
-   - Keep file references ONE level deep (no nested reference chains)
-   - Use consistent terminology throughout
-   - No time-sensitive information
-   - Match freedom level to task fragility:
-     * High freedom for flexible tasks (text instructions, general guidelines)
-     * Medium freedom for pattern-following tasks (pseudocode, parameterized scripts)
-     * Low freedom for fragile tasks (exact scripts, strict sequences)
+   - No format restrictions, but keep under 500 lines
+   - Recommended: step-by-step instructions, input/output examples, edge cases
+   - Reference supporting files with relative paths
+   - Keep file references one level deep (no nested chains)
+   - Progressive disclosure: overview in SKILL.md, details in referenced files
 
 3. Directory structure:
    ```
    {spec.name}/
-   ├── SKILL.md           # Required: main instructions + metadata
-   ├── scripts/           # Optional: executable utility scripts
+   ├── SKILL.md           # Required: instructions + metadata
+   ├── scripts/           # Optional: executable code
    ├── references/        # Optional: detailed documentation
    └── assets/            # Optional: templates, schemas, data files
    ```
 
 4. Progressive disclosure budget:
    - Metadata (~100 tokens): name + description loaded at startup for ALL skills
-   - Instructions (<5000 tokens recommended): SKILL.md body loaded on activation
-   - Resources (as needed): scripts/, references/, assets/ loaded on demand
+   - Instructions (<5000 tokens): SKILL.md body loaded on activation
+   - Resources (as needed): supporting files loaded only when required
 
-5. If scripts are included:
-   - Self-contained with documented dependencies
-   - Helpful error messages (solve, don't punt)
-   - No magic numbers (document all constants)
-   - Clear whether to EXECUTE or READ AS REFERENCE
-   - Handle edge cases gracefully
-
-6. Quality standards:
-   - Concise: only add context the agent doesn't already have
-   - Use workflows with checklists for complex multi-step tasks
-   - Include feedback loops for quality-critical operations (run → validate → fix → repeat)
-   - Provide input/output examples where output quality matters
-   - Use templates for strict output requirements
-   - Unix-style paths only (forward slashes)
-   - Long reference files get a table of contents
-   - Avoid offering too many tool options (provide a default with escape hatch)
+5. Scripts: self-contained, documented deps, helpful error messages, handle edge cases
+6. Quality: concise, workflows with checklists, feedback loops, Unix-style paths only
 
 TARGET DIRECTORY: apps/dot-claude/skills/{spec.name}/
-(Or as specified by the orchestrator)
 
 Generate ALL files needed for the complete skill directory.
 ```
@@ -318,13 +375,12 @@ Generate ALL files needed for the complete skill directory.
 ⚠️ Launch ALL drafting agents concurrently. In a SINGLE response, use MULTIPLE Task tool invocations:
 
 ```python
-# All in ONE response - do NOT wait between launches
 for i, spec in enumerate(specs):
     for target in output_targets:
         Task.invoke({
             subagent_type: "slash-command-architect",
             description: f"Draft {target} skill: {spec.name}",
-            prompt: draft_prompt  # Use Claude or AgentSkills prompt template above
+            prompt: draft_prompt
         })
 ```
 
@@ -348,49 +404,49 @@ REVIEW CHECKLIST:
 
 ### Core Quality
 - [ ] Description is specific, third-person, includes trigger keywords
-- [ ] Description includes both WHAT it does and WHEN to use it
-- [ ] Main file is under 500 lines
-- [ ] Additional details are in separate files (if needed)
+- [ ] Description covers both WHAT it does and WHEN to use it
+- [ ] SKILL.md is under 500 lines
+- [ ] Supporting details in separate files (if needed)
 - [ ] No time-sensitive information
 - [ ] Consistent terminology throughout
 - [ ] Examples are concrete, not abstract
 - [ ] File references are one level deep
 - [ ] Progressive disclosure used appropriately
-- [ ] Workflows have clear steps
 
-### Format-Specific (Claude Code)
-- [ ] YAML frontmatter has allowed-tools (minimal), description, argument-hint
-- [ ] Tool permissions are minimal and specific
-- [ ] $ARGUMENTS used correctly for dynamic input
-- [ ] ! prefix used for context gathering (not implementation)
-- [ ] @ prefix used for file references
-- [ ] Pseudocode is Python-style and clear
+### Claude Code Format
+- [ ] Frontmatter fields are accurate and minimal
+- [ ] Tool permissions are minimal and specific (Bash(git:*) not Bash)
+- [ ] $ARGUMENTS / $ARGUMENTS[N] / $N used correctly
+- [ ] !`command` used for dynamic context injection (preprocessed, not Claude-executed)
+- [ ] Invocation control is appropriate:
+      * Side-effect skills have disable-model-invocation: true
+      * Background knowledge has user-invocable: false
+      * Isolated tasks use context: fork with appropriate agent
+- [ ] If context: fork, skill has actionable task instructions (not just guidelines)
 - [ ] Error handling covers common failure modes
 - [ ] Confirmation checkpoints for destructive actions
-- [ ] Instructions are clear enough for consistent execution
 
-### Format-Specific (AgentSkills.io)
-- [ ] name field: lowercase, kebab-case, max 64 chars, matches directory
-- [ ] description field: max 1024 chars, specific, includes keywords
-- [ ] Directory structure follows spec (SKILL.md + optional dirs)
+### AgentSkills.io Format
+- [ ] name: required, lowercase, kebab-case, max 64 chars, matches directory, no -- no leading/trailing -
+- [ ] description: required, max 1024 chars, specific, includes trigger keywords
+- [ ] Directory structure follows spec (SKILL.md + optional scripts/ references/ assets/)
 - [ ] Progressive disclosure budget respected (<5000 tokens for body)
+- [ ] allowed-tools is space-delimited (NOT comma-separated)
 - [ ] Scripts are self-contained with documented deps
 - [ ] No Windows-style paths
-- [ ] Reference files have TOC if >100 lines
 
 ### Security and Robustness
-- [ ] No secrets or credentials in the skill
+- [ ] No secrets or credentials
 - [ ] Input validation at system boundaries
-- [ ] Sandboxing considerations for script execution
 - [ ] No command injection vulnerabilities
 - [ ] Graceful error handling
 
 REFINEMENT GOALS:
 - Polish for production deployment
-- Ensure optimal discovery triggers
+- Ensure optimal discovery triggers in description
 - Validate all best practices
 - Enhance documentation and examples
-- Trim unnecessary verbosity (every token must justify its cost)
+- Trim unnecessary verbosity
 
 Generate the refined, production-ready implementation.
 ```
@@ -398,13 +454,12 @@ Generate the refined, production-ready implementation.
 ⚠️ Launch ALL refinement agents concurrently. In a SINGLE response, use MULTIPLE Task tool invocations:
 
 ```python
-# All in ONE response - do NOT wait between launches
 for i, spec in enumerate(specs):
     for target in output_targets:
         Task.invoke({
             subagent_type: "slash-command-architect",
             description: f"Refine {target} skill: {spec.name}",
-            prompt: refine_prompt  # Use review prompt template above
+            prompt: refine_prompt
         })
 ```
 
@@ -413,58 +468,45 @@ for i, spec in enumerate(specs):
 1. **Create Directory Structure**:
    ```python
    for skill in refined_skills:
-       if skill.format == 'claude':
-           # Determine namespace from domain
-           namespace = categorize_domain(skill)  # eng/dev, product/ops, uiux, etc.
-           mkdir -p apps/dot-claude/commands/{namespace}/{skill.name}
-       elif skill.format == 'agentskills':
-           mkdir -p apps/dot-claude/skills/{skill.name}
-           if skill.has_scripts:
-               mkdir -p apps/dot-claude/skills/{skill.name}/scripts
-           if skill.has_references:
-               mkdir -p apps/dot-claude/skills/{skill.name}/references
-           if skill.has_assets:
-               mkdir -p apps/dot-claude/skills/{skill.name}/assets
+       mkdir -p apps/dot-claude/skills/{skill.name}
+       # Create subdirectories only if the skill has supporting files
+       if skill.has_scripts:
+           mkdir -p apps/dot-claude/skills/{skill.name}/scripts
+       if skill.has_references:
+           mkdir -p apps/dot-claude/skills/{skill.name}/references
+       if skill.has_assets:
+           mkdir -p apps/dot-claude/skills/{skill.name}/assets
+       if skill.has_examples:
+           mkdir -p apps/dot-claude/skills/{skill.name}/examples
    ```
 
 2. **Write Skill Files**:
    ```python
    for skill in refined_skills:
-       if skill.format == 'claude':
-           Write(f"apps/dot-claude/commands/{namespace}/{skill.name}/{skill.name}.md", skill.content)
-       elif skill.format == 'agentskills':
-           Write(f"apps/dot-claude/skills/{skill.name}/SKILL.md", skill.main_content)
-           for ref_file in skill.reference_files:
-               Write(f"apps/dot-claude/skills/{skill.name}/{ref_file.path}", ref_file.content)
-           for script in skill.scripts:
-               Write(f"apps/dot-claude/skills/{skill.name}/scripts/{script.name}", script.content)
+       Write(f"apps/dot-claude/skills/{skill.name}/SKILL.md", skill.main_content)
+       for supporting_file in skill.supporting_files:
+           Write(f"apps/dot-claude/skills/{skill.name}/{supporting_file.path}", supporting_file.content)
    ```
 
 3. **Validate Generated Files**:
    ```python
    for skill in refined_skills:
-       if skill.format == 'claude':
-           # Verify YAML frontmatter is present and parseable
-           assert skill.content.startswith('---')
-           assert 'description:' in skill.content
-           # Verify file is under 500 lines
-           assert len(skill.content.splitlines()) <= 500
+       # Verify YAML frontmatter is present and parseable
+       assert skill.main_content.startswith('---')
+       assert 'description:' in skill.main_content
+       # Verify SKILL.md is under 500 lines
+       assert len(skill.main_content.splitlines()) <= 500
 
-       elif skill.format == 'agentskills':
-           # Verify required frontmatter fields
+       if skill.format == 'agentskills':
+           # AgentSkills.io requires name field
            assert 'name:' in skill.main_content
-           assert 'description:' in skill.main_content
-           # Verify name matches directory
            name_in_frontmatter = extract_name(skill.main_content)
            assert name_in_frontmatter == skill.name
-           # Verify name constraints
            assert len(name_in_frontmatter) <= 64
            assert name_in_frontmatter == name_in_frontmatter.lower()
            assert not name_in_frontmatter.startswith('-')
            assert not name_in_frontmatter.endswith('-')
            assert '--' not in name_in_frontmatter
-           assert 'anthropic' not in name_in_frontmatter
-           assert 'claude' not in name_in_frontmatter
    ```
 
 4. **Generate Summary Report**:
@@ -472,9 +514,9 @@ for i, spec in enumerate(specs):
    ## Skill Build Summary
 
    ### Skills Created: [COUNT]
-   | Skill | Format | Location | Status |
-   |-------|--------|----------|--------|
-   | [name] | [claude/agentskills] | [path] | [status] |
+   | Skill | Format | Location | Invocation | Status |
+   |-------|--------|----------|------------|--------|
+   | [name] | [claude/agentskills] | [path] | [user+model / user-only / model-only] | [status] |
 
    ### Execution Metrics
    - Phase 1 (Research): [DEPTH] depth
@@ -487,8 +529,8 @@ for i, spec in enumerate(specs):
    ### Next Steps
    - [ ] Review generated skill(s) before production use
    - [ ] Test with representative inputs
-   - [ ] If Claude Code format: copy to .claude/commands/ for activation
-   - [ ] If AgentSkills.io format: validate with `skills-ref validate ./skill-name`
+   - [ ] Copy to .claude/skills/ or ~/.claude/skills/ for activation
+   - [ ] For AgentSkills.io: validate with `skills-ref validate ./skill-name`
    ```
 
 ## Smart Multiplexing
@@ -498,50 +540,6 @@ The command scales based on the number of skills being built:
 - **1 skill, 1 format**: 1 researcher → 1 drafter → 1 refiner (sequential phases)
 - **1 skill, both formats**: 1 researcher → 2 drafters → 2 refiners
 - **N skills**: N researchers → N*formats drafters → N*formats refiners (concurrent within phase)
-
-## Namespace Categorization
-
-When generating Claude Code commands, determine the namespace using this decision tree:
-
-```python
-def categorize_namespace(skill):
-    name = skill.name.lower()
-    desc = skill.description.lower()
-    combined = name + ' ' + desc
-
-    # Check for Linear/project management keywords
-    if any(kw in combined for kw in ['linear', 'sprint', 'epic', 'issue', 'backlog', 'ticket']):
-        return 'product/ops/linear'
-
-    # Check for product management keywords
-    if any(kw in combined for kw in ['prd', 'roadmap', 'stakeholder', 'prioritiz', 'product']):
-        return 'product/ops'
-
-    # Check for UI/UX keywords
-    if any(kw in combined for kw in ['design', 'ui', 'ux', 'figma', 'component', 'layout', 'css']):
-        return 'uiux/ui_design'
-
-    # Check for infrastructure/DevOps keywords
-    if any(kw in combined for kw in ['deploy', 'docker', 'k8s', 'kubernetes', 'terraform',
-                                      'ci/cd', 'pipeline', 'monitor', 'infra', 'helm']):
-        return 'eng/infra'
-
-    # Check for documentation keywords
-    if any(kw in combined for kw in ['doc', 'readme', 'api-doc', 'changelog', 'wiki']):
-        return 'eng/docs'
-
-    # Default: software engineering
-    return 'eng/dev'
-```
-
-| Domain | Namespace | Keywords | Examples |
-|--------|-----------|----------|----------|
-| Software engineering | `eng/dev` | git, test, lint, code, build | lint-fix, test-runner |
-| Linear/project management | `product/ops/linear` | linear, sprint, epic, issue | refine-issue, sprint-plan |
-| Product management | `product/ops` | prd, roadmap, product | prd-meeting |
-| UI/UX design | `uiux/ui_design` | design, ui, ux, figma | design-brainstorm |
-| DevOps, infrastructure | `eng/infra` | deploy, docker, k8s, terraform | deploy, monitor |
-| Documentation | `eng/docs` | doc, readme, changelog | doc-gen, api-docs |
 
 ## Error Handling
 
@@ -558,7 +556,6 @@ for i, result in enumerate(research_results):
     if result.failed:
         log_warning(f"Research for {specs[i].name} incomplete")
         research_reports[i] = "LIMITED CONTEXT: Research phase failed. Rely on general best practices and your existing knowledge."
-        # Continue - don't block draft phase
 
 # Phase 2 failures (draft)
 for i, result in enumerate(draft_results):
@@ -567,15 +564,14 @@ for i, result in enumerate(draft_results):
         retry_result = retry_draft(specs[i], simplified=True)
         if retry_result.failed:
             failed_skills.append(specs[i].name)
-            continue  # Skip to next skill
+            continue
 
 # Phase 3 failures (refine)
 for i, result in enumerate(refine_results):
     if result.failed:
         log_warning(f"Refinement for {specs[i].name} failed - using draft version")
-        refined_skills[i] = draft_results[i]  # Fall back to unrefined draft
+        refined_skills[i] = draft_results[i]
 
-# Report partial success
 if failed_skills:
     print(f"⚠️ {len(failed_skills)} skill(s) failed: {', '.join(failed_skills)}")
     print(f"✅ {len(specs) - len(failed_skills)} skill(s) created successfully")
@@ -584,38 +580,33 @@ if failed_skills:
 ## Best Practices
 
 1. **Match format to use case**:
-   - `claude`: For commands used within Claude Code sessions
-   - `agentskills`: For portable skills that work across agents
+   - `claude`: For skills used within Claude Code (supports invocation control, subagent execution, hooks)
+   - `agentskills`: For portable skills across multiple AI agents
    - `both`: When you want maximum reach
 
 2. **Use reference contexts** when adapting existing patterns
-3. **Choose appropriate depth**:
-   - Light: Well-understood domains with clear patterns
-   - Normal: Standard production skills
-   - Deep: Complex, novel, or safety-critical implementations
-4. **Review generated skills** before deploying to production
-5. **Test with representative inputs** across different scenarios
+3. **Choose appropriate depth**: Light for simple domains, Normal for standard skills, Deep for complex/novel implementations
+4. **Design invocation control deliberately**:
+   - Side-effect skills (deploy, commit): `disable-model-invocation: true`
+   - Background knowledge (conventions, patterns): `user-invocable: false`
+   - Heavy/isolated tasks: `context: fork` with appropriate `agent`
+   - Most skills: default (both user and Claude can invoke)
+5. **Review generated skills** before deploying to production
 
-## Anti-Patterns (Avoid These)
+## Anti-Patterns
 
 ```bash
-# BAD: Vague specification - produces generic, unhelpful skills
+# BAD: Vague specification
 /skill-build "helper for documents"
 
 # GOOD: Specific scope and purpose
 /skill-build "Extract tables from PDF files and convert to CSV format"
 
-# BAD: Too broad - single responsibility violated
+# BAD: Too broad
 /skill-build "all-in-one: code review, testing, deployment, and monitoring"
 
-# GOOD: Focused single-purpose skills
+# GOOD: Focused single-purpose
 /skill-build "code-review: review PR for security and performance issues"
-
-# BAD: Unnecessary depth for simple domains
-/skill-build "hello-world greeter" --depth deep
-
-# GOOD: Match depth to complexity
-/skill-build "hello-world greeter" --depth light
 ```
 
 ### Common Mistakes in Generated Skills
@@ -623,9 +614,10 @@ if failed_skills:
 | Mistake | Fix |
 |---------|-----|
 | `Bash` without specifics | Use `Bash(git:*)` or `Bash(npm:*)` |
-| Description says "I can help you..." | Use third person: "Extracts data from..." |
-| Vague description: "Helps with files" | Specific: "Extract text from PDFs, fill forms" |
-| Body >500 lines without splitting | Move details to docs/ or references/ |
-| Nested reference chains (A→B→C) | Keep references one level deep from main file |
-| Magic numbers in scripts | Document all constants with justification |
-| `name: My-Skill` (AgentSkills) | Must be lowercase: `name: my-skill` |
+| Description says "I can help you..." | Third person: "Extracts data from..." |
+| Vague description: "Helps with files" | Specific: "Extract text from PDFs, fill forms. Use when working with PDF documents." |
+| Body >500 lines | Move details to supporting files |
+| `context: fork` with only guidelines | Fork needs actionable task instructions, not just conventions |
+| Missing `disable-model-invocation` on deploy skills | Side-effect skills need manual invocation control |
+| AgentSkills.io: comma-separated allowed-tools | Must be space-delimited: `Bash(git:*) Read Write` |
+| AgentSkills.io: `name: My-Skill` | Must be lowercase: `name: my-skill` |

@@ -1,136 +1,179 @@
 # Skill Build - Format Reference
 
-## Claude Code Slash Command Format
+> Claude Code skills follow the [Agent Skills](https://agentskills.io) open standard with Claude Code extensions. Custom slash commands have been merged into skills. `.claude/commands/` files still work, but `.claude/skills/<name>/SKILL.md` is the modern standard.
 
-### File Structure
+## Claude Code Skill Format (Current Standard)
+
+### Directory Structure
 ```
-command-name/
-├── command-name.md          # Main command (required)
-└── docs/                    # Supporting documentation (optional)
-    ├── documentation-index.md
-    ├── quick-reference.md
-    └── usage-guide.md
+skill-name/
+├── SKILL.md              # Main instructions (required)
+├── template.md           # Optional: template for Claude to fill in
+├── examples/
+│   └── sample.md         # Optional: example output
+├── scripts/
+│   └── helper.py         # Optional: executable scripts
+└── references/
+    └── detailed-guide.md # Optional: detailed docs
 ```
+
+### Where Skills Live
+
+| Location | Path | Applies to | Priority |
+|----------|------|------------|----------|
+| Enterprise | Managed settings | All users in org | Highest |
+| Personal | `~/.claude/skills/<name>/SKILL.md` | All your projects | High |
+| Project | `.claude/skills/<name>/SKILL.md` | This project only | Medium |
+| Plugin | `<plugin>/skills/<name>/SKILL.md` | Where plugin enabled | Lowest |
+
+Skills sharing the same name: higher-priority locations win. Plugin skills use `plugin-name:skill-name` namespace (no conflicts). If a skill and a legacy command (`.claude/commands/`) share the same name, the skill takes precedence.
+
+Monorepo support: Claude Code auto-discovers skills from nested `.claude/skills/` directories (e.g., `packages/frontend/.claude/skills/`).
 
 ### YAML Frontmatter
+
 ```yaml
 ---
-allowed-tools: Tool1, Tool2, Bash(specific:*)
-description: Action-oriented description of command purpose
-argument-hint: [required-arg] [--optional-flag <value>]
-model: sonnet  # Optional: sonnet, opus, haiku
+name: my-skill
+description: What this skill does and when to use it
+argument-hint: [issue-number]
+disable-model-invocation: true
+user-invocable: true
+allowed-tools: Read, Grep, Glob
+model: sonnet
+context: fork
+agent: Explore
+hooks:
+  PreToolUse:
+    - matcher: "Bash"
+      hooks:
+        - type: command
+          command: "./scripts/validate.sh"
 ---
 ```
 
-#### Frontmatter Fields
+#### All Frontmatter Fields
 
-| Field | Required | Type | Constraints |
+| Field | Required | Type | Description |
 |-------|----------|------|-------------|
-| `allowed-tools` | No | String/List | Minimal tool set. Use specific Bash patterns |
-| `description` | No | String | Action-oriented, concise, third-person |
-| `argument-hint` | No | String | User-friendly parameter guidance |
-| `model` | No | String | Model alias or specific ID |
+| `name` | No | String | Display name. If omitted, uses directory name. Lowercase letters, numbers, hyphens only. Max 64 chars. |
+| `description` | Recommended | String | What it does AND when to use it. Claude uses this for auto-discovery. If omitted, uses first paragraph of content. |
+| `argument-hint` | No | String | Hint shown during autocomplete. E.g., `[issue-number]`, `[filename] [format]` |
+| `disable-model-invocation` | No | Boolean | `true` = only user can invoke (via `/name`). Claude cannot auto-load. Default: `false` |
+| `user-invocable` | No | Boolean | `false` = hidden from `/` menu. Claude can still auto-load. Default: `true` |
+| `allowed-tools` | No | String | Tools Claude can use without permission when skill is active |
+| `model` | No | String | Model alias (`sonnet`, `opus`, `haiku`) or specific model ID |
+| `context` | No | String | Set to `fork` to run in isolated subagent context |
+| `agent` | No | String | Subagent type for `context: fork`. Built-in: `Explore`, `Plan`, `general-purpose`. Or custom subagent name. |
+| `hooks` | No | Object | Lifecycle hooks scoped to this skill (PreToolUse, PostToolUse, Stop) |
 
-#### Tool Permission Patterns
+#### Invocation Control Matrix
+
+| Frontmatter | User can invoke | Claude can invoke | Context loading |
+|-------------|-----------------|-------------------|-----------------|
+| (default) | Yes | Yes | Description always in context; full skill loads on invoke |
+| `disable-model-invocation: true` | Yes | No | Description NOT in context; full skill loads on user invoke |
+| `user-invocable: false` | No | Yes | Description always in context; full skill loads on invoke |
+
+### String Substitutions
+
+| Variable | Description |
+|----------|-------------|
+| `$ARGUMENTS` | All arguments passed when invoking |
+| `$ARGUMENTS[N]` | Specific argument by 0-based index (e.g., `$ARGUMENTS[0]`) |
+| `$N` | Shorthand for `$ARGUMENTS[N]` (e.g., `$0`, `$1`) |
+| `${CLAUDE_SESSION_ID}` | Current session ID |
+
+### Dynamic Context Injection (`!` syntax)
+
+Shell commands prefixed with `!` run BEFORE Claude sees the content. Output replaces the placeholder:
+
 ```yaml
-# Specific bash commands
-allowed-tools: Bash(git:*), Bash(npm:*)
+---
+name: pr-summary
+description: Summarize changes in a pull request
+context: fork
+agent: Explore
+allowed-tools: Bash(gh *)
+---
 
-# Standard tools
-allowed-tools: Read, Write, Edit, Glob, Grep
+## Pull request context
+- PR diff: !`gh pr diff`
+- PR comments: !`gh pr view --comments`
+- Changed files: !`gh pr diff --name-only`
 
-# MCP tools
-allowed-tools: mcp__linear__get_issue, mcp__linear__create_issue
-
-# Task delegation
-allowed-tools: Task, TodoWrite
-
-# Mixed
-allowed-tools: Task, Read, Write, Bash(git:*), mcp__linear__*
+## Your task
+Summarize this pull request...
 ```
 
-### Body Syntax
+This is preprocessing - Claude only sees the final rendered output.
 
-#### Variable Substitution
-```markdown
-# Use $ARGUMENTS for user input
-Fix issue #$ARGUMENTS following our coding standards.
+### Subagent Execution (`context: fork`)
+
+Add `context: fork` for skills that should run in isolation. The skill content becomes the subagent's task prompt.
+
+```yaml
+---
+name: deep-research
+description: Research a topic thoroughly
+context: fork
+agent: Explore
+---
+
+Research $ARGUMENTS thoroughly:
+1. Find relevant files using Glob and Grep
+2. Read and analyze the code
+3. Summarize findings with specific file references
 ```
 
-#### Bash Execution (! prefix)
-```markdown
-## Context
-- Status: !`git status`
-- Branch: !`git branch --show-current`
-```
+The `agent` field determines the execution environment:
+- `Explore`: Read-only, fast (Haiku model)
+- `Plan`: Read-only, inherits model
+- `general-purpose`: All tools, inherits model
+- Any custom subagent name from `.claude/agents/`
 
-#### File References (@ prefix)
-```markdown
-## Files
-@README.md
-@src/config.ts
-```
-
-#### Pseudocode Instructions
-```markdown
-```python
-if input_provided:
-    mode = "refine"
-    data = fetch_data(input)
-else:
-    mode = "create"
-    data = prompt_user()
-```
-```
-
-### Naming Conventions
-- Kebab-case: `my-command-name`
-- Verb-first preferred: `analyze-`, `generate-`, `review-`
-- Namespaced via directories: `eng/dev/my-command` -> `/eng:dev:my-command`
+**Important**: `context: fork` only makes sense for skills with explicit task instructions. Guidelines-only skills won't produce useful output in a fork.
 
 ---
 
-## AgentSkills.io Skill Format
+## AgentSkills.io Portable Format
+
+The open standard without Claude Code extensions.
 
 ### Directory Structure
 ```
 skill-name/
 ├── SKILL.md              # Required: instructions + metadata
 ├── scripts/              # Optional: executable code
-│   ├── analyze.py
-│   └── validate.sh
-├── references/           # Optional: detailed docs
-│   ├── REFERENCE.md
-│   └── FORMS.md
-└── assets/               # Optional: templates, data
-    ├── template.json
-    └── schema.yaml
+├── references/           # Optional: detailed documentation
+└── assets/               # Optional: templates, schemas, data files
 ```
 
 ### SKILL.md Frontmatter
+
 ```yaml
 ---
-name: skill-name
-description: Extracts data from files and generates reports. Use when working with data files or when the user mentions extraction.
+name: pdf-processing
+description: Extract text and tables from PDF files, fill forms, merge documents. Use when working with PDF documents.
 license: Apache-2.0
-compatibility: Requires python3, jq
+compatibility: Requires python3, poppler-utils
 metadata:
-  author: org-name
+  author: example-org
   version: "1.0"
-allowed-tools: Bash(git:*) Read Write
+allowed-tools: Bash(python:*) Read Write
 ---
 ```
 
-#### Frontmatter Fields
+#### All Frontmatter Fields
 
 | Field | Required | Constraints |
 |-------|----------|-------------|
-| `name` | Yes | Max 64 chars. Lowercase alphanumeric + hyphens. No start/end hyphens. No `--`. Must match directory name. No reserved words (anthropic, claude) |
-| `description` | Yes | Max 1024 chars. Non-empty. Third person. No XML tags. Include WHAT and WHEN |
+| `name` | **Yes** | Max 64 chars. Lowercase alphanumeric + hyphens only. No start/end hyphens. No `--`. Must match directory name. |
+| `description` | **Yes** | Max 1024 chars. Non-empty. Describes what + when. Include trigger keywords. |
 | `license` | No | Short license reference |
-| `compatibility` | No | Max 500 chars. Environment requirements |
+| `compatibility` | No | Max 500 chars. Environment requirements. |
 | `metadata` | No | Arbitrary key-value string map |
-| `allowed-tools` | No | Space-delimited (experimental) |
+| `allowed-tools` | No | **Space-delimited** (NOT comma-separated). Experimental. |
 
 #### Name Validation Rules
 ```
@@ -138,68 +181,47 @@ Valid:   pdf-processing, data-analysis, code-review
 Invalid: PDF-Processing   (uppercase)
 Invalid: -pdf             (starts with hyphen)
 Invalid: pdf--processing  (consecutive hyphens)
-Invalid: claude-helper    (reserved word)
 ```
 
-#### Description Best Practices
-```yaml
-# GOOD: Specific with trigger keywords
-description: Extract text and tables from PDF files, fill forms, merge documents. Use when working with PDF files or when the user mentions PDFs, forms, or document extraction.
+### Progressive Disclosure Budget
 
-# BAD: Vague
-description: Helps with documents.
-```
+| Level | Tokens | Loaded when |
+|-------|--------|-------------|
+| Metadata | ~100 | At startup for ALL skills |
+| Instructions | <5000 recommended | When skill is activated |
+| Resources | As needed | On demand from supporting files |
 
-### Body Content
-
-#### Progressive Disclosure Pattern
-```markdown
-# Quick Start
-[Immediate value - how to get started fast]
-
-## When to Use
-[Specific triggers and use cases]
-
-## Step-by-Step
-[Core instructions]
-
-## Advanced Features
-See [REFERENCE.md](references/REFERENCE.md) for details.
-See [FORMS.md](references/FORMS.md) for form handling.
-```
-
-#### Token Budget
-- Metadata: ~100 tokens (loaded at startup for ALL skills)
-- Body: <5000 tokens recommended (loaded on activation)
-- References: As needed (loaded on demand)
-
-#### Reference File Rules
-- Keep references ONE level deep from SKILL.md
-- No nested reference chains (A -> B -> C)
+### File Reference Rules
+- Use relative paths from skill root
+- Keep references one level deep from SKILL.md
+- No deeply nested reference chains
 - Files >100 lines should have a table of contents
-- Use descriptive filenames: `form_validation_rules.md` not `doc2.md`
-
-### Naming Conventions
-- Gerund form preferred: `processing-pdfs`, `analyzing-data`
-- Also acceptable: `pdf-processing`, `process-pdfs`
-- Avoid: `helper`, `utils`, `tools`, `documents`
 
 ---
 
 ## Format Comparison Matrix
 
-| Feature | Claude Code | AgentSkills.io |
-|---------|-------------|----------------|
-| Entry point | `command-name.md` | `SKILL.md` |
-| Name location | Filename/directory | `name` in frontmatter |
-| Name format | Kebab-case | Kebab-case, max 64 chars |
-| Description | `description` in frontmatter | `description` in frontmatter |
-| Tool permissions | `allowed-tools` (comma-separated) | `allowed-tools` (space-separated) |
-| Dynamic input | `$ARGUMENTS` | N/A (agent-dependent) |
-| Bash execution | `!` prefix | Via scripts/ directory |
-| File inclusion | `@` prefix | Relative path references |
-| Extra files | `docs/` subdirectory | `scripts/`, `references/`, `assets/` |
-| Discovery | `/help` command | Agent metadata loading |
-| Validation | Manual review | `skills-ref validate` CLI |
+| Feature | Claude Code Skill | AgentSkills.io |
+|---------|-------------------|----------------|
+| Entry point | `SKILL.md` | `SKILL.md` |
+| Location | `.claude/skills/<name>/` | Any directory |
+| `name` required | No (uses dir name) | **Yes** |
+| `description` required | Recommended | **Yes** |
+| `argument-hint` | Yes | No |
+| `disable-model-invocation` | Yes | No |
+| `user-invocable` | Yes | No |
+| `context: fork` | Yes | No |
+| `agent` | Yes | No |
+| `hooks` | Yes | No |
+| `model` | Yes | No |
+| `license` | No | Yes |
+| `compatibility` | No | Yes |
+| `metadata` | No | Yes |
+| `allowed-tools` delimiter | Comma | **Space** |
+| `$ARGUMENTS` / `$N` | Yes | No (agent-dependent) |
+| `!` command syntax | Yes (preprocessing) | No |
+| `${CLAUDE_SESSION_ID}` | Yes | No |
+| Supporting files | Any structure | `scripts/`, `references/`, `assets/` |
+| Discovery | `/help`, auto-load by Claude | Agent-specific |
+| Validation tool | N/A | `skills-ref validate` |
 | Portability | Claude Code only | Cross-agent |
-| Model override | `model` field | N/A |

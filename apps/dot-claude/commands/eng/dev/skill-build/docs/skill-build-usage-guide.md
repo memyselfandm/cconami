@@ -2,46 +2,110 @@
 
 ## Overview
 
-The `/skill-build` command creates production-ready skills through a systematic 3-phase process that ensures quality and completeness. It supports two output formats and can generate both simultaneously.
+The `/skill-build` command creates production-ready skills through a 3-phase Research-Draft-Refine process. It supports two output formats and can generate both simultaneously.
+
+> **Note**: Claude Code has unified skills and slash commands. `.claude/skills/<name>/SKILL.md` is the current standard. Legacy `.claude/commands/` files still work but skills offer additional features like invocation control, subagent execution, and supporting file directories.
 
 ## Choosing a Format
 
 ### Claude Code Format (`--format claude`)
 Use when:
-- The skill will be used exclusively within Claude Code sessions
-- You need Claude Code-specific features (`$ARGUMENTS`, `!` bash, `@` file refs)
-- The skill involves interactive workflows with the user
-- You want the skill accessible via `/skill-name` in Claude Code
+- The skill will be used within Claude Code sessions
+- You need Claude Code extensions (invocation control, `context: fork`, hooks)
+- You want Claude to auto-discover and load the skill when relevant
+- You need dynamic context injection (`!`command`` syntax)
+- You want positional argument access (`$0`, `$1`, `$ARGUMENTS[N]`)
 
 ### AgentSkills.io Format (`--format agentskills`)
 Use when:
-- The skill should be portable across different AI agents
-- You want to use progressive disclosure with separate reference files
-- The skill includes executable utility scripts
-- You plan to share or publish the skill
+- The skill should work across multiple AI agents (not just Claude Code)
+- You want to publish or share the skill broadly
+- You need strict format validation (`skills-ref validate`)
 
 ### Both Formats (`--format both`)
 Use when:
-- You want maximum compatibility
+- Maximum compatibility is important
 - The skill's core logic works in both contexts
-- You're developing for a mixed agent environment
+
+## Skill Content Types
+
+When designing a skill, consider which type of content it provides:
+
+### Reference Content (Knowledge)
+Conventions, patterns, style guides, domain knowledge that Claude applies to your current work. Runs inline in the main conversation.
+
+```yaml
+---
+name: api-conventions
+description: API design patterns for this codebase. Use when writing or reviewing API endpoints.
+---
+
+When writing API endpoints:
+- Use RESTful naming conventions
+- Return consistent error formats
+- Include request validation
+```
+
+### Task Content (Actions)
+Step-by-step instructions for specific actions like deployments, commits, or code generation. Often paired with `disable-model-invocation: true`.
+
+```yaml
+---
+name: deploy
+description: Deploy the application to production
+disable-model-invocation: true
+---
+
+Deploy $ARGUMENTS to production:
+1. Run the test suite
+2. Build the application
+3. Push to the deployment target
+```
+
+## Invocation Control
+
+One of the most important design decisions for Claude Code skills:
+
+### Default (Both Can Invoke)
+Most skills. Both you and Claude can trigger them.
+
+### User-Only (`disable-model-invocation: true`)
+For skills with side effects. Claude cannot auto-trigger these.
+- Deploy workflows
+- Commit/push operations
+- Sending messages
+- Destructive operations
+
+### Model-Only (`user-invocable: false`)
+For background knowledge that isn't actionable as a command.
+- Legacy system context
+- Domain conventions
+- Architectural decisions
+
+### Isolated Execution (`context: fork`)
+For skills that should run in their own context window.
+- Long research tasks
+- Heavy processing
+- Tasks that produce verbose output
+
+Choose an agent type with the `agent` field:
+- `Explore`: Read-only, fast (Haiku)
+- `Plan`: Read-only, inherits model
+- `general-purpose`: All tools
 
 ## Research Depth Guide
 
 ### Light Depth
 - **Sources**: 2-3 (official docs only)
-- **Best for**: Well-understood domains, simple utility commands
-- **Example**: `/skill-build "git branch cleanup" --depth light`
+- **Best for**: Well-understood domains, simple utility skills
 
 ### Normal Depth (Default)
 - **Sources**: 5 (docs + examples + community)
-- **Best for**: Standard production skills, most use cases
-- **Example**: `/skill-build "API testing with curl"`
+- **Best for**: Standard production skills
 
 ### Deep Depth
 - **Sources**: 8-10 (comprehensive analysis)
-- **Best for**: Complex domains, safety-critical skills, novel implementations
-- **Example**: `/skill-build "kubernetes rollback orchestrator" --depth deep`
+- **Best for**: Complex domains, safety-critical skills
 
 ## Using Reference Contexts
 
@@ -60,7 +124,6 @@ Reference contexts tell the research phase to focus on an existing implementatio
 When a reference is provided:
 - 70-80% of research focuses on analyzing the reference
 - 20-30% covers alternatives and validation
-- The draft phase inherits patterns from the reference
 
 ## Multi-Skill Builds
 
@@ -78,12 +141,11 @@ Build multiple skills concurrently:
 # Different references per skill
 /skill-build "tool-a" "tool-b" "tool-c" \
   --context https://ref-a.com,,https://ref-c.com
-# (empty between commas means no reference for tool-b)
 ```
 
 ## Spec Files
 
-For complex skill specifications, use a markdown file:
+For complex skill specifications:
 
 ```bash
 /skill-build @specs/my-skill-spec.md
@@ -106,75 +168,51 @@ Who will use this skill and in what context.
 ## Workflow
 1. Step one
 2. Step two
-3. Step three
 
 ## Input/Output Examples
 Input: "example input"
 Output: "expected output"
 
-## Constraints
-- Must handle X
-- Cannot do Y
-- Should support Z
+## Invocation Preference
+- Should Claude auto-invoke? (yes/no)
+- Should it run in isolation? (yes/no)
 ```
-
-## Understanding the 3-Phase Process
-
-### Phase 1: Research
-A context-engineering-subagent researches:
-- Similar existing commands/skills
-- Domain knowledge for the skill's purpose
-- Best practices for interaction models
-- Tool permissions and security considerations
-- Progressive disclosure opportunities
-- Error handling patterns
-
-### Phase 2: Draft
-A slash-command-architect creates the initial implementation using:
-- The original specification
-- The research report from Phase 1
-- Format-specific best practices
-
-### Phase 3: Refine
-A slash-command-architect in review mode polishes:
-- Standards compliance
-- Production readiness
-- Discovery trigger optimization
-- Tool permission minimization
-- Documentation completeness
-- Token budget adherence
 
 ## Post-Build Checklist
 
 After the skill is generated:
 
-1. **Review the output** - Read through all generated files
-2. **Test with representative inputs** - Try the skill with real-world scenarios
-3. **Check tool permissions** - Ensure they're truly minimal
-4. **Validate descriptions** - Confirm they enable proper discovery
-5. **Deploy**:
-   - Claude Code: Copy to `.claude/commands/` (or symlink)
+1. **Review the output** - Read all generated files
+2. **Check invocation control** - Is `disable-model-invocation` set for side-effect skills?
+3. **Test with representative inputs** - Try the skill with real scenarios
+4. **Check tool permissions** - Are they truly minimal?
+5. **Validate description** - Does it include trigger keywords for auto-discovery?
+6. **Deploy**:
+   - Personal: Copy to `~/.claude/skills/<name>/`
+   - Project: Copy to `.claude/skills/<name>/`
    - AgentSkills.io: Run `skills-ref validate ./skill-name`
-6. **Iterate** - Refine based on real usage patterns
+7. **Test discovery** - Ask Claude "What skills are available?" to verify it appears
 
 ## Troubleshooting
 
-### Skill not discovered
-- Check that the description includes relevant keywords
-- Verify the file is in the correct location
-- For Claude Code: ensure the file has `.md` extension
+### Skill not triggering
+- Check the description includes keywords users would naturally say
+- Verify the skill appears via "What skills are available?"
+- Try invoking directly with `/skill-name`
 
-### Tool permissions too broad
-- Replace `Bash` with specific patterns: `Bash(git:*)`
-- Remove tools not actually needed by the instructions
-- Review each tool grant against actual usage
+### Skill triggers too often
+- Make the description more specific
+- Add `disable-model-invocation: true` for manual-only invocation
 
-### Skill too large
-- Move detailed content to reference files
-- Use progressive disclosure patterns
-- Keep main file under 500 lines
+### Claude doesn't see all skills
+- Skill descriptions may exceed the character budget (default 15,000 chars)
+- Run `/context` to check for warnings about excluded skills
+- Set `SLASH_COMMAND_TOOL_CHAR_BUDGET` env var to increase limit
 
-### Research phase returns thin results
-- Increase depth: `--depth deep`
-- Provide a reference context: `--context <url>`
-- Use more specific skill descriptions
+### `context: fork` skill returns nothing useful
+- Ensure the skill has actionable task instructions, not just guidelines
+- Guidelines-only skills should NOT use `context: fork`
+
+### Supporting files not loading
+- Reference them from SKILL.md with relative paths
+- Keep references one level deep (no nested chains)
