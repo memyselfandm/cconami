@@ -27,8 +27,8 @@ Multiple skills can be specified separated by spaces. Use comma-separated `--dep
 ## Process Overview
 
 1. Parse input and configure
-2. Phase 1: Research (context-engineering-subagent)
-3. Phase 2: Draft (engineering-agent)
+2. Phase 1: Research
+3. Phase 2: Draft
 4. Phase 3: Refine and validate
 5. Write files and summarize
 
@@ -57,14 +57,9 @@ Determine what skills to build and how.
 
 ## Step 2: Phase 1 - Research
 
-Deploy one `context-engineering-subagent` per skill specification, concurrently.
+Launch one Task agent per skill specification, concurrently. Each agent's prompt should include the skill's purpose, the target format(s), and the research depth setting.
 
-Each research agent receives:
-- The skill's purpose and description
-- The target format(s)
-- The research depth setting
-
-Research should cover:
+The research prompt should direct the agent to investigate:
 - Similar existing skills and their patterns
 - Domain knowledge needed for the skill's purpose
 - Appropriate invocation model (who triggers it, does it need isolation?)
@@ -72,15 +67,15 @@ Research should cover:
 - Whether supporting files would help (progressive disclosure)
 - Error handling patterns for the domain
 
+Include the contents of [references/format-spec.md](references/format-spec.md) in each research prompt so agents understand both output formats.
+
 Launch all research agents in a single response for concurrent execution.
 
 Collect results before proceeding to Phase 2.
 
 ## Step 3: Phase 2 - Draft
 
-Deploy one `engineering-agent` per skill and format combination, concurrently.
-
-Each drafting agent receives the research report and must produce a complete skill following the format specification. Reference [format-spec.md](references/format-spec.md) for the complete format requirements for both Claude Code and AgentSkills.io skills.
+Launch one Task agent per skill and format combination, concurrently. Each agent's prompt should include the research report from Phase 1 and the complete format specification from [references/format-spec.md](references/format-spec.md). The agent must produce all files for the skill directory.
 
 **Critical drafting rules**:
 - SKILL.md must be under 500 lines
@@ -97,7 +92,7 @@ Each drafting agent receives the research report and must produce a complete ski
 - Isolated/heavy tasks: `context: fork` with appropriate `agent`
 - Most skills: default (both user and Claude can invoke)
 
-Launch all drafting agents in a single response for concurrent execution.
+Launch all Task agents in a single response for concurrent execution.
 
 Collect results before proceeding to Phase 3.
 
