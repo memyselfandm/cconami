@@ -1,12 +1,12 @@
 ---
-name: skill-building
+name: building-skills
 description: Build production-ready Claude Code skills through a structured Research-Draft-Refine process. Use when creating new skills, converting slash commands to skills, or generating AgentSkills.io-compatible skills from specifications.
 argument-hint: <description or @spec-file> [--format claude|agentskills|both] [--depth light|normal|deep]
 disable-model-invocation: true
 allowed-tools: Task, Read, Write, MultiEdit, Bash(mkdir:*), Glob, Grep, WebFetch
 ---
 
-# Skill Building
+# Building Skills
 
 Build production-ready skills through a 3-phase process: Research, Draft, Refine.
 
