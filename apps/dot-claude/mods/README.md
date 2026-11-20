@@ -30,8 +30,8 @@ repository moves on, run `claude plugin update <mod>` and then `/reload-plugins`
 
 ## owner-inbox
 
-The inbox is the set of open Linear issues that are assigned to you and carry the
-label `owner-action`. Agents file one issue per thing they need from you.
+The inbox is the set of open Linear issues that carry the label `owner-action`,
+whoever they are assigned to. Agents file one issue per thing they need from you.
 
 - **Band.** The count and the first four issue IDs, above the prompt. Absent when
   nothing is waiting.

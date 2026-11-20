@@ -3,8 +3,9 @@ import type { EngineInterface, Register } from 'claude-code'
 
 import type { Ask, Inbox } from '../types'
 
-// The inbox is the set of open Linear issues assigned to the owner that carry
-// this label. Linear is the record, so every session shows the same list.
+// The inbox is the set of open Linear issues that carry this label, whoever
+// they are assigned to: agents do not reliably assign the owner. Linear is the
+// record, so every session shows the same list.
 const LABEL = 'owner-action'
 const PANE = 'owner-inbox'
 const TITLE = 'Waiting on you'
@@ -62,10 +63,11 @@ async function refresh($: EngineInterface): Promise<Inbox> {
   let fresh: Inbox
   try {
     const answer = await $.mcp.call(LINEAR, 'list_issues', {
-      assignee: 'me',
       label: LABEL,
       fields: ['id', 'title', 'url', 'status', 'statusType', 'project'],
-      limit: 100,
+      // Closed asks come back too and are dropped in toAsks, so ask for the
+      // largest page the connector gives.
+      limit: 250,
     })
     if (answer.isError) {
       throw new Error('the Linear connector refused the request')
