@@ -3,6 +3,15 @@
 How agent sessions work with each other and with the owner, when several run in
 one repository at once and Linear is the shared record.
 
+## Install
+
+```sh
+claude plugin marketplace add memyselfandm/cconami
+claude plugin install operating-model@cconami
+```
+
+The command guard needs `python3` (3.8 or later) on `PATH`.
+
 ## Skills
 
 | Skill | Agents | What it does |
@@ -27,7 +36,7 @@ the file your agent loads, such as `AGENTS.md`) under one heading:
 - owner: <name>
 - owner time zone: <zone>
 - owner-action label: owner-action
-- owner inbox view: Waiting on Mike
+- owner inbox view: Waiting on owner
 - credential checks: <commands that print a credential's lifetime, never the credential>
 - blocking classes: <the only finding kinds that block a merge>
 - reserved items: <actions no session decides alone>
@@ -43,9 +52,11 @@ Every setting is optional; each skill lists its own and their defaults. A skill'
 ## Command guard
 
 Installing the plugin turns on a `PreToolUse` hook on the Bash tool
-(`hooks/hooks.json`). It refuses `gh pr merge --auto` and token-printing
-`bao`/`vault token lookup`, and a project adds its own rules in
+(`hooks/hooks.json`). It refuses `gh pr merge --auto` and the `bao`/`vault`
+commands that print a token, and a project adds its own rules in
 `.claude/guard-rules.json`. See [hooks/README.md](hooks/README.md).
 
-The hook needs `python3` on `PATH`. If it cannot load a rules file it fails open
-and says so.
+The hook runs with `python3` from `PATH` and uses only the standard library. If
+`python3` is missing, Claude Code reports the hook as failing and the command
+runs unguarded. If a project rules file cannot be loaded, the guard keeps the
+generic rules and says so.

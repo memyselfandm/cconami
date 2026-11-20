@@ -19,13 +19,14 @@ shared state; a session's memory and its messages are not.**
 ## Project settings
 
 Read these from the project's instructions file, under an `Operating model`
-heading.
+heading. Use the default when the project sets nothing.
 
 | Setting | Default | Meaning |
 |---|---|---|
 | `reserved items` | the general list below | Actions no session decides alone. |
-| `subagent brief lines` | the four lines in "Briefing a subagent" | Lines added to every brief. |
-| `merge method` | `--squash` | How an approved pull request is merged. |
+| `subagent brief lines` | none beyond the four in "Briefing a subagent" | Lines added to every brief. |
+| `merge method` | `--squash` | The `gh pr merge` flag for an approved pull request. |
+| `where agents run` | wherever the owner starts them | Where sessions run, and where they must not. |
 
 ### Reserved for the owner
 
@@ -60,11 +61,16 @@ list.
   issue is yours to decide. Another session's issue is theirs: ask that session.
 - **Pull request titles.** A title starts with an issue ID only when the pull
   request finishes that issue. Otherwise name the issue in the body.
-- **Merging.** Watch the checks, then merge, as one chained command
-  (`gh pr checks <pr> --watch && gh pr merge <pr> --squash`). Never `--auto`: where
-  the default branch has no required checks it merges before CI finishes.
+- **Merging.** Watch the checks, then merge with the project's `merge method`, as
+  one chained command (`gh pr checks <pr> --watch && gh pr merge <pr> <merge
+  method>`). Never `--auto`: where the default branch has no required checks it
+  merges before CI finishes.
 - **A cutover is done** when a real reply comes through a real channel, not when
   the manifest applies or the service reports healthy.
+- **Do not run on what you are rebuilding.** A session whose work rebuilds or
+  restarts the platform it runs on (its host, its cluster, its workspace service)
+  moves somewhere else first, as the project's `where agents run` says. A session
+  cannot finish work that takes itself down.
 
 ## The peer message
 

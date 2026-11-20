@@ -54,7 +54,7 @@ Then name the session after the project.
 - The latest checkpoint, if the workstream has run before (`checkpointing-sessions`).
 
 Reconcile obvious drift now: an issue marked done with an open pull request, or
-in progress with a merged one.
+in progress with a merged one (`reconciling-linear-projects`, where installed).
 
 ## 3. Sequence against the other workstreams
 
@@ -90,7 +90,14 @@ Linear, not from memory:
 While the loop runs:
 
 - **Delegate everything.** Implementation, investigation and review go to subagents
-  or peer sessions. Your context holds the plan, the record and decisions.
+  or peer sessions. Your context holds the plan, the record and decisions. The one
+  exception is a change of a few lines that you can state exactly: make it
+  yourself, and still send it to a reviewer.
+- **A merge can close its issue.** A pull request that names an issue with a
+  closing word ("Closes", "Fixes") closes it on merge, even when its "Done when" is
+  not met yet. In a pull request that finishes only part of an issue, write
+  "Part of <issue ID>" instead. After each merge, check the issue's status and
+  re-open it if its "Done when" is not yet met.
 - **Brief every subagent** with the standard lines in `coordinating-sessions`
   ("Briefing a subagent"), the issue ID, and the branch to work on.
 - **Review through `reviewing-pull-requests`.** Never review in your own context.

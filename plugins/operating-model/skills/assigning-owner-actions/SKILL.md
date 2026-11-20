@@ -27,12 +27,16 @@ heading. Use the default when the project sets nothing.
 |---|---|---|
 | `owner` | the person who runs the project | Who asks are assigned to. |
 | `owner-action label` | `owner-action` | The label every ask carries. |
-| `owner inbox view` | `Waiting on Mike` | The saved Linear view that lists open asks. |
+| `owner inbox view` | `Waiting on owner` | The saved Linear view that lists open asks. |
 
-Keep the label at `owner-action` unless the project says otherwise: the
-`owner-inbox` mod lists open issues with exactly that label.
+The `owner-inbox` mod lists open issues by a label of its own setting, also
+`owner-action` by default and configurable through the mod's settings. The two
+must match: if the project changes this label, change the mod's to the same
+value, or its asks disappear from the mod.
 
 Below, "the label" and "the inbox view" mean these settings.
+[references/example-settings.md](references/example-settings.md) shows one
+project's values.
 
 ## When to file one
 
@@ -52,7 +56,9 @@ scope, decide, record it on the work issue, and proceed.
 1. **Search first.** List open issues with the label and look for the same ask. If
    one exists, link your work issue to it and stop.
 2. **Create the issue** in the team that owns the work:
-   - `assignee`: the owner. `labels`: the label. `state`: Todo.
+   - `labels`: the label. `assignee`: the owner. `state`: Todo.
+     **The label is what puts the ask in the inbox.** An ask without it is
+     invisible; set it even if you cannot set the assignee.
    - `project`: the same project as the work issue.
    - `blocks`: the work issue. This keeps the work issue's own thread clean.
    - Title and body as below.
@@ -118,8 +124,11 @@ Rules for the body:
 
 ## Limits
 
-- The inbox view is a saved Linear view: the label, assigned to the owner, open. It
-  is made once by hand in the Linear UI.
+- The inbox view is a saved Linear view of open issues with the label, made once by
+  hand in the Linear UI. Its exact filter is not recorded with the project: if it
+  also filters on the assignee, an unassigned ask is hidden there, which is why
+  step 2 sets both.
+- The `owner-inbox` mod, if the owner runs it, lists open issues by the label alone.
 - An agent with no Linear access cannot file here. Its asks arrive through its own
   channel and do not appear in the view.
 - Nothing notifies a session when an ask completes. Step 5 is how you find out.
