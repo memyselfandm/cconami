@@ -32,11 +32,13 @@ jobs:
           done
       - name: Test the mods that have tests
         run: |
+          failed=0
           for plugin in plugins/*/; do
             if [ -d "${plugin}tests" ]; then
-              claude plugin test "$plugin"
+              claude plugin test "$plugin" || failed=1
             fi
           done
+          exit "$failed"
       - name: Lint SKILL.md files
         run: uv run --script scripts/lint-skills.py
       - name: Test the lint

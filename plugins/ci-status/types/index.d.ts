@@ -20,6 +20,7 @@ export type Summary = {
 export type Head = {
   /** The session's working directory the state was read in. */
   cwd: string
+  branch: string
   sha: string
   summary: Summary
   /** The number of the branch's open PR, or null. */
@@ -35,6 +36,8 @@ export type OpenedPr = {
   /** `OPEN`, `MERGED` or `CLOSED`, as `gh` reports it; empty before it is read. */
   state: string
   summary: Summary | null
+  /** Reads that failed in a row; the PR is drawn only while this is 0. */
+  failures: number
 }
 
 /** What the band draws. */
@@ -42,6 +45,8 @@ export type View = {
   /** Null hides the current branch's part of the band. */
   head: Head | null
   opened: OpenedPr[]
+  /** True when the last read failed in `gh` itself: the whole band hides. */
+  isOffline: boolean
 }
 
 declare module 'claude-code' {

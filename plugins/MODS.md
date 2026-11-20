@@ -64,20 +64,36 @@ when the branch has an open PR. After it, `opened #14 ✓ 3/3, #15 ● 1/4` list
 PRs this session opened with `gh pr create`, each with its own CI state, or `merged`
 and `closed` once they are.
 
-- **What it reads.** The check runs and commit statuses of HEAD. It finds the
-  repository from the branch's upstream remote, or `origin`. It runs
-  `gh pr view <branch> --json ...` and uses the PR's checks when the PR's head is
-  HEAD; otherwise it reads `commits/<sha>/check-runs` and `commits/<sha>/status`
-  through `gh api`. Skipped and neutral checks count as passed.
-- **When it reads.** At session start; after a Bash call that runs `git push` or
-  `gh pr create`; when a turn ends with HEAD or the working directory moved; and
-  every 30 seconds while any check is pending, or for two minutes after a push while
-  GitHub registers the new checks. While nothing is pending it does not poll, unless
-  a slow poll is configured.
+- **What it reads.** The check runs (`filter=latest`, every page) and commit
+  statuses of HEAD, through `gh api`. Of a check that was re-run, only the latest
+  attempt counts. Skipped and neutral checks count as passed. It finds the
+  repository from the branch's upstream remote, or `origin`, and the PR with
+  `gh pr list --head <upstream branch> --state open`.
+- **When it reads.** Every read runs from one five-second timer that the session
+  starts; the timer reads GitHub only when a read is due:
+  - at session start;
+  - after a Bash call that runs `git push` or `gh pr create`;
+  - when a turn ends with the branch, HEAD or the working directory moved;
+  - every 30 seconds while any check is pending, and for two minutes after a push
+    while GitHub registers the new checks;
+  - every 3 minutes for 15 minutes after the state last changed, so a late check, a
+    re-run started on GitHub or a merged PR still shows;
+  - every 3 minutes while HEAD is hidden but the branch has an upstream, so a push
+    from another terminal shows.
+
+  Otherwise it does not poll, unless an idle poll is configured.
 - **Hidden, never an error.** The band shows nothing outside a git repository, with
   no GitHub remote, when `gh` is missing, logged out or offline, when HEAD has no
-  checks, and when the commit is not on GitHub. The reason goes to the debug log
-  (`claude --debug`), never to the chat.
+  checks, and when the commit is not on GitHub. A failed call is never read as "no
+  checks". A PR the session opened is shown only from a read that worked, and none
+  are shown while `gh` fails. After three failed reads such a PR is no longer polled.
+  The session keeps at most 10, dropping the oldest merged or closed first. The
+  reason for anything hidden goes to the debug log (`claude --debug`), never to the
+  chat.
+- **Out of scope.** A PR from a fork to its parent repository. The mod looks for the
+  PR in the repository of the branch's own remote, so a branch pushed to a fork
+  shows its checks without the parent's PR number. Only `github.com` remotes are
+  recognised.
 
 It needs `gh` on the `PATH`, authenticated for the repository. It holds no credential
 of its own.
@@ -86,8 +102,8 @@ Settings, under `/config` or `pluginConfigs.ci-status.options` in `settings.json
 
 | Option | Default | Meaning |
 |---|---|---|
-| `pollSeconds` | 30 | How often to read GitHub while a check is pending |
-| `idlePollMinutes` | 0 | How often to read while nothing is pending; 0 is never |
+| `pollSeconds` | 30 | How often to read GitHub while a check is pending; at least 5 |
+| `idlePollMinutes` | 0 | How often to read while nothing is pending; 0 is never, otherwise at least 1 |
 | `maxFailingNames` | 3 | How many failing check names the band lists |
 
 Its tests run with `claude plugin test plugins/ci-status`. They drive the parsing

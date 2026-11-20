@@ -1,66 +1,64 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, PluginOptions, Register } from 'claude-code'
+import type { EngineInterface, Register } from 'claude-code'
 
-import type { Check, Head, OpenedPr, Summary, View } from '../types'
+import type { Check, Head, OpenedPr, View } from '../types'
 import {
+  addOpened,
   ciText,
   fromRest,
-  fromRollup,
+  isNotFound,
+  isOpenedPending,
   isPrCreate,
   isPush,
   json,
+  jsonLines,
+  parseHead,
+  parsePrUrl,
   parseRemote,
-  prNumber,
+  parseUpstream,
   prUrls,
+  settings,
   shortText,
   summarize,
-  upstreamRemote,
 } from './logic'
+import type { Settings } from './logic'
 
-// Defaults for the userConfig fields in plugin.json, used when a value is
-// missing or not a usable number.
-const DEFAULT_POLL_SECONDS = 30
-const DEFAULT_IDLE_POLL_MINUTES = 0
-const DEFAULT_MAX_FAILING_NAMES = 3
+// Every read runs from the session's own timer, which ticks this often; the
+// hooks on tool calls and turns only mark a read as due.
+const TICK_MS = 5_000
 // After a push or a new PR, GitHub takes a moment to register the checks, so
 // the mod polls at the pending rate for this long even when it sees none.
 const GRACE_MS = 120_000
+// After any change of state, a late check or a re-run started on GitHub can
+// still come: read every SETTLE_EVERY_MS for SETTLE_FOR_MS after the change.
+// The same slow read runs while HEAD is hidden but the branch has an upstream,
+// so a push made outside the session shows up.
+const SETTLE_EVERY_MS = 180_000
+const SETTLE_FOR_MS = 900_000
 // How long one `git` or `gh` call may run before it counts as a failure.
 const PROCESS_TIMEOUT_MS = 15_000
 // Keeps `gh` from prompting or printing an update notice into what it parses.
 const GH_ENV = { GH_PROMPT_DISABLED: '1', GH_NO_UPDATE_NOTIFIER: '1', NO_COLOR: '1' }
 
-const EMPTY: View = { head: null, opened: [] }
+const EMPTY: View = { head: null, opened: [], isOffline: false }
 const view = atom({ plugin: 'ci-status', key: 'view' } as const, EMPTY, {
-  shape: 'view-1',
+  shape: 'view-2',
 })
-
-type Settings = { pollMs: number; idleMs: number; maxNames: number }
-
-function settings(options: PluginOptions): Settings {
-  const number = (value: unknown, fallback: number, min: number): number => {
-    const parsed = Number(value)
-    return Number.isFinite(parsed) && parsed >= min ? parsed : fallback
-  }
-
-  return {
-    pollMs: number(options.pollSeconds, DEFAULT_POLL_SECONDS, 5) * 1000,
-    idleMs: number(options.idlePollMinutes, DEFAULT_IDLE_POLL_MINUTES, 0) * 60_000,
-    maxNames: Math.floor(number(options.maxFailingNames, DEFAULT_MAX_FAILING_NAMES, 0)),
-  }
-}
 
 /** Every failure goes to the debug log alone: the mod never speaks in the chat. */
 function debug($: EngineInterface, text: string): void {
   $.ui.log(`ci-status: ${text}`, { to: 'debug' })
 }
 
-/** Runs a command; null when it cannot start, times out or exits non-zero. */
-async function run(
-  $: EngineInterface,
-  cwd: string,
-  argv: readonly string[],
-): Promise<string | null> {
+function reason(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+type Ran = { ok: true; stdout: string } | { ok: false; stderr: string }
+
+/** Runs a command; `ok: false` when it cannot start, times out or exits non-zero. */
+async function run($: EngineInterface, cwd: string, argv: readonly string[]): Promise<Ran> {
+  const what = argv.slice(0, 3).join(' ')
   try {
     const done = await $.process.run(argv, {
       cwd,
@@ -68,197 +66,266 @@ async function run(
       env: argv[0] === 'gh' ? GH_ENV : {},
     })
     if (done.exitCode !== 0) {
-      debug($, `${argv.slice(0, 3).join(' ')} exited ${done.exitCode}: ${done.stderr.trim().slice(0, 200)}`)
-      return null
+      debug($, `${what} exited ${done.exitCode}: ${done.stderr.trim().slice(0, 200)}`)
+      return { ok: false, stderr: done.stderr }
     }
-    return done.stdout
+    return { ok: true, stdout: done.stdout }
   } catch (error) {
-    debug($, `${argv.slice(0, 3).join(' ')} failed: ${error instanceof Error ? error.message : String(error)}`)
-    return null
+    debug($, `${what} failed: ${reason(error)}`)
+    return { ok: false, stderr: reason(error) }
   }
 }
+
+/** Rows of a `gh api` list, or why not: `isOffline` unless GitHub said "no such". */
+type Rows = { ok: true; rows: unknown[] } | { ok: false; isOffline: boolean }
+
+/**
+ * The `key` rows of a REST answer that carries `total_count`, every page of
+ * them: a second call with `--paginate` when the first page is short.
+ */
+async function apiRows($: EngineInterface, cwd: string, path: string, key: string): Promise<Rows> {
+  const first = await run($, cwd, ['gh', 'api', path])
+  if (!first.ok) {
+    return { ok: false, isOffline: !isNotFound(first.stderr) }
+  }
+  const body = json(first.stdout) as Record<string, unknown> | null
+  const rows = body?.[key]
+  if (!Array.isArray(rows)) {
+    debug($, `gh api ${path} answered without ${key}`)
+    return { ok: false, isOffline: false }
+  }
+  const total = Number(body?.total_count ?? rows.length)
+  if (!(total > rows.length)) {
+    return { ok: true, rows }
+  }
+  const all = await run($, cwd, ['gh', 'api', '--paginate', '--jq', `.${key}[]`, path])
+  if (!all.ok) {
+    return { ok: false, isOffline: !isNotFound(all.stderr) }
+  }
+
+  return { ok: true, rows: jsonLines(all.stdout) }
+}
+
+type Read<T> = { ok: true; value: T } | { ok: false; isOffline: boolean }
+
+/** The checks on one commit; a failed call is never read as "no checks". */
+async function readCommit(
+  $: EngineInterface,
+  cwd: string,
+  slug: string,
+  sha: string,
+): Promise<Read<Check[]>> {
+  const runs = await apiRows(
+    $,
+    cwd,
+    `repos/${slug}/commits/${sha}/check-runs?per_page=100&filter=latest`,
+    'check_runs',
+  )
+  if (!runs.ok) {
+    return runs
+  }
+  const statuses = await apiRows($, cwd, `repos/${slug}/commits/${sha}/status?per_page=100`, 'statuses')
+  if (!statuses.ok) {
+    return statuses
+  }
+
+  return { ok: true, value: fromRest(runs.rows, statuses.rows) }
+}
+
+type HeadRead = { head: Head | null; isOffline: boolean; hasUpstream: boolean }
 
 /** The CI state of HEAD in `cwd`, or null whenever it cannot be shown. */
 async function readHead(
   $: EngineInterface,
   cwd: string,
-  sha: string,
-): Promise<Head | null> {
-  const branch = (await run($, cwd, ['git', 'rev-parse', '--abbrev-ref', 'HEAD']))?.trim() ?? 'HEAD'
-  const upstream = await run($, cwd, [
+  at: { sha: string; branch: string },
+): Promise<HeadRead> {
+  const hidden = (isOffline: boolean, hasUpstream: boolean): HeadRead => ({
+    head: null,
+    isOffline,
+    hasUpstream,
+  })
+  const tracked = await run($, cwd, [
     'git',
     'rev-parse',
     '--abbrev-ref',
     '--symbolic-full-name',
     '@{upstream}',
   ])
-  const remote = upstreamRemote(upstream ?? '') ?? 'origin'
-  const url =
-    (await run($, cwd, ['git', 'remote', 'get-url', remote])) ??
-    (remote === 'origin' ? null : await run($, cwd, ['git', 'remote', 'get-url', 'origin']))
-  const repo = url === null ? null : parseRemote(url)
+  const upstream = tracked.ok ? parseUpstream(tracked.stdout) : null
+  const remote = upstream?.remote ?? 'origin'
+  let url = await run($, cwd, ['git', 'remote', 'get-url', remote])
+  if (!url.ok && remote !== 'origin') {
+    url = await run($, cwd, ['git', 'remote', 'get-url', 'origin'])
+  }
+  const repo = url.ok ? parseRemote(url.stdout) : null
   if (repo === null) {
     debug($, `no GitHub remote in ${cwd}`)
-    return null
+    return hidden(false, false)
   }
   const slug = `${repo.owner}/${repo.name}`
 
+  // The PR is found by the upstream branch's name, never `gh pr view <branch>`,
+  // which reads a branch named `123` as PR #123.
   let pr: number | null = null
   let prUrl: string | null = null
-  let checks: Check[] | null = null
-  if (branch !== 'HEAD') {
-    const viewed = json(
-      (await run($, cwd, [
-        'gh',
-        'pr',
-        'view',
-        branch,
-        '-R',
-        slug,
-        '--json',
-        'number,state,url,headRefOid,statusCheckRollup',
-      ])) ?? '',
-    ) as Record<string, unknown> | null
-    if (viewed !== null && viewed.state === 'OPEN') {
-      pr = typeof viewed.number === 'number' ? viewed.number : null
-      prUrl = typeof viewed.url === 'string' ? viewed.url : null
-      // The PR's rollup is for its head; use it only when that is HEAD.
-      if (viewed.headRefOid === sha) {
-        checks = fromRollup(viewed.statusCheckRollup)
-      }
-    }
-  }
-  if (checks === null) {
-    const runs = await run($, cwd, [
+  if (upstream !== null) {
+    const listed = await run($, cwd, [
       'gh',
-      'api',
-      `repos/${slug}/commits/${sha}/check-runs?per_page=100`,
+      'pr',
+      'list',
+      '-R',
+      slug,
+      '--head',
+      upstream.branch,
+      '--state',
+      'open',
+      '--json',
+      'number,url,headRefOid',
+      '--limit',
+      '1',
     ])
-    if (runs === null) {
-      // Also what GitHub answers for a commit it does not have.
-      return null
+    if (!listed.ok) {
+      return hidden(true, true)
     }
-    const status = await run($, cwd, ['gh', 'api', `repos/${slug}/commits/${sha}/status`])
-    checks = fromRest(json(runs), json(status ?? ''))
+    const found = (json(listed.stdout) as Record<string, unknown>[] | null)?.[0]
+    pr = typeof found?.number === 'number' ? found.number : null
+    prUrl = typeof found?.url === 'string' ? found.url : null
   }
 
-  const summary = summarize(checks)
+  const checks = await readCommit($, cwd, slug, at.sha)
+  if (!checks.ok) {
+    return hidden(checks.isOffline, upstream !== null)
+  }
+  const summary = summarize(checks.value)
   if (summary === null) {
-    debug($, `no checks on ${slug}@${sha.slice(0, 7)}`)
-    return null
-  }
-
-  return { cwd, sha, summary, pr, prUrl }
-}
-
-/** The state of a PR the session opened; unchanged when `gh` cannot say. */
-async function readOpened(
-  $: EngineInterface,
-  cwd: string,
-  pr: OpenedPr,
-): Promise<OpenedPr> {
-  const viewed = json(
-    (await run($, cwd, ['gh', 'pr', 'view', pr.url, '--json', 'number,state,statusCheckRollup'])) ??
-      '',
-  ) as Record<string, unknown> | null
-  if (viewed === null) {
-    return pr
+    debug($, `no checks on ${slug}@${at.sha.slice(0, 7)}`)
+    return hidden(false, upstream !== null)
   }
 
   return {
-    ...pr,
-    state: typeof viewed.state === 'string' ? viewed.state : pr.state,
-    summary: summarize(fromRollup(viewed.statusCheckRollup)),
+    head: { cwd, branch: at.branch, sha: at.sha, summary, pr, prUrl },
+    isOffline: false,
+    hasUpstream: upstream !== null,
   }
 }
 
-function isPending(summary: Summary | null | undefined): boolean {
-  return summary?.state === 'pending'
+/** A PR the session opened, read again; a failed read counts in `failures`. */
+async function readOpened($: EngineInterface, cwd: string, pr: OpenedPr): Promise<OpenedPr> {
+  const failed = { ...pr, failures: pr.failures + 1 }
+  const where = parsePrUrl(pr.url)
+  if (where === null) {
+    return failed
+  }
+  const viewed = await run($, cwd, ['gh', 'pr', 'view', pr.url, '--json', 'state,headRefOid'])
+  const fields = viewed.ok ? (json(viewed.stdout) as Record<string, unknown> | null) : null
+  if (fields === null || typeof fields.state !== 'string') {
+    return failed
+  }
+  if (fields.state !== 'OPEN' || typeof fields.headRefOid !== 'string') {
+    return { ...pr, state: fields.state, summary: null, failures: 0 }
+  }
+  const checks = await readCommit($, cwd, where.slug, fields.headRefOid)
+  if (!checks.ok) {
+    return failed
+  }
+
+  return { ...pr, state: 'OPEN', summary: summarize(checks.value), failures: 0 }
 }
 
 // The module's own variables start over on a reload, which also runs
 // session.start again; the view itself is in $.state and stays.
 let config: Settings = settings({})
-let isBusy = false
-let isAgain = false
+let isTicking = false
+let isDue = false
+let isTurnEnded = false
 let lastRefresh = 0
+let lastChange = 0
+let lastSignature = ''
 let graceUntil = 0
+let hasUpstream = false
 // Where the last refresh looked, so a turn that moves HEAD triggers one.
 let lastCwd = ''
-let lastSha = ''
+let lastHeadKey = ''
+
+/** What the band would draw, to tell when the state changed. */
+function signature(next: View): string {
+  return JSON.stringify([
+    next.isOffline,
+    next.head && [next.head.sha, next.head.pr, next.head.summary],
+    next.opened.map(pr => [pr.url, pr.state, pr.failures === 0, pr.summary]),
+  ])
+}
+
+async function headAt($: EngineInterface, cwd: string) {
+  const got = await run($, cwd, ['git', 'rev-parse', 'HEAD', '--abbrev-ref', 'HEAD'])
+  return got.ok ? parseHead(got.stdout) : null
+}
 
 async function refresh($: EngineInterface): Promise<void> {
-  if (isBusy) {
-    isAgain = true
+  const now = await $.clock.now()
+  lastRefresh = now
+  const cwd = await $.session.cwd()
+  const at = await headAt($, cwd)
+  lastCwd = cwd
+  lastHeadKey = at === null ? '' : `${at.branch} ${at.sha}`
+  const found: HeadRead =
+    at === null
+      ? { head: null, isOffline: false, hasUpstream: false }
+      : await readHead($, cwd, at)
+  hasUpstream = found.hasUpstream
+
+  const prior = await read($, view)
+  const opened: OpenedPr[] = []
+  for (const pr of prior.opened) {
+    const isFinished = (pr.state === 'MERGED' || pr.state === 'CLOSED') && pr.failures === 0
+    opened.push(isFinished ? pr : await readOpened($, cwd, pr))
+  }
+  const next = await update($, view, current => ({
+    head: found.head,
+    isOffline: found.isOffline,
+    // PRs added while this refresh ran are kept.
+    opened: current.opened.map(pr => opened.find(fresh => fresh.url === pr.url) ?? pr),
+  }))
+  const drawn = signature(next)
+  if (drawn !== lastSignature) {
+    lastSignature = drawn
+    lastChange = now
+  }
+}
+
+/** One period of the session's timer: reads GitHub only when a read is due. */
+async function tick($: EngineInterface): Promise<void> {
+  if (isTicking) {
     return
   }
-  isBusy = true
+  isTicking = true
   try {
-    do {
-      isAgain = false
-      lastRefresh = await $.clock.now()
+    const now = await $.clock.now()
+    if (isTurnEnded && !isDue) {
+      isTurnEnded = false
       const cwd = await $.session.cwd()
-      const sha = (await run($, cwd, ['git', 'rev-parse', 'HEAD']))?.trim() ?? ''
-      lastCwd = cwd
-      lastSha = sha
-      const head = sha === '' ? null : await readHead($, cwd, sha)
-      const prior = await read($, view)
-      const opened: OpenedPr[] = []
-      for (const pr of prior.opened) {
-        opened.push(
-          pr.state === 'MERGED' || pr.state === 'CLOSED' ? pr : await readOpened($, cwd, pr),
-        )
+      const at = await headAt($, cwd)
+      if (cwd !== lastCwd || (at === null ? '' : `${at.branch} ${at.sha}`) !== lastHeadKey) {
+        isDue = true
       }
-      // PRs added while this refresh ran are kept.
-      await update($, view, current => ({
-        head,
-        opened: current.opened.map(pr => opened.find(fresh => fresh.url === pr.url) ?? pr),
-      }))
-    } while (isAgain)
-  } catch (error) {
-    debug($, `refresh failed: ${error instanceof Error ? error.message : String(error)}`)
+    }
+    const { head, opened } = await read($, view)
+    const since = now - lastRefresh
+    const isRunning = head?.summary.state === 'pending' || opened.some(isOpenedPending)
+    const isSettling = now - lastChange < SETTLE_FOR_MS || (head === null && hasUpstream)
+    const isReadDue =
+      isDue ||
+      ((isRunning || now < graceUntil) && since >= config.pollMs) ||
+      (isSettling && since >= SETTLE_EVERY_MS) ||
+      (config.idleMs > 0 && since >= config.idleMs)
+    if (isReadDue) {
+      isDue = false
+      isTurnEnded = false
+      await refresh($)
+    }
   } finally {
-    isBusy = false
-  }
-}
-
-/** One poll period: reads GitHub only while something is worth reading. */
-async function tick($: EngineInterface): Promise<void> {
-  const now = await $.clock.now()
-  const { head, opened } = await read($, view)
-  const isRunning =
-    isPending(head?.summary) ||
-    opened.some(pr => pr.state === '' || (pr.state === 'OPEN' && isPending(pr.summary)))
-  const isIdleDue = config.idleMs > 0 && now - lastRefresh >= config.idleMs
-  if (isRunning || now < graceUntil || isIdleDue) {
-    await refresh($)
-  }
-}
-
-/** Records the PRs a `gh pr create` printed, and starts the grace period. */
-async function afterPush($: EngineInterface, output: string): Promise<void> {
-  const urls = prUrls(output)
-  if (urls.length > 0) {
-    await update($, view, current => ({
-      ...current,
-      opened: [
-        ...current.opened,
-        ...urls
-          .filter(url => !current.opened.some(pr => pr.url === url))
-          .map(url => ({ url, number: prNumber(url) ?? 0, state: '', summary: null })),
-      ],
-    }))
-  }
-  graceUntil = (await $.clock.now()) + GRACE_MS
-  await refresh($)
-}
-
-/** Refreshes when the working directory or HEAD moved since the last read. */
-async function ifMoved($: EngineInterface): Promise<void> {
-  const cwd = await $.session.cwd()
-  const sha = (await run($, cwd, ['git', 'rev-parse', 'HEAD']))?.trim() ?? ''
-  if (cwd !== lastCwd || sha !== lastSha) {
-    await refresh($)
+    isTicking = false
   }
 }
 
@@ -266,14 +333,17 @@ export const register: Register = (on, options) => {
   config = settings(options)
 
   on('session.start', async ($, e, next) => {
-    void refresh($)
-    $.clock.every(config.pollMs, () => {
-      void tick($)
+    isDue = true
+    $.clock.every(TICK_MS, () => {
+      void tick($).catch(error => {
+        debug($, `refresh failed: ${reason(error)}`)
+      })
     })
 
     return next(e)
   })
 
+  // A push or a new PR marks a read as due; the session's timer makes it.
   on('tool.call', async ($, e, next) => {
     const ran = await next(e)
     if (e.tool !== 'Bash' || ran.deny !== undefined) {
@@ -284,23 +354,30 @@ export const register: Register = (on, options) => {
     if (!isPush(command) && !created) {
       return ran
     }
-    void afterPush($, created && ran.isError !== true ? (ran.text ?? '') : '')
+    const urls = created && ran.isError !== true ? prUrls(ran.text ?? '') : []
+    if (urls.length > 0) {
+      await update($, view, current => ({ ...current, opened: addOpened(current.opened, urls) }))
+    }
+    graceUntil = (await $.clock.now()) + GRACE_MS
+    isDue = true
 
     return ran
   }).catch(($, e, next) => next(e))
 
-  // A turn that commits, checks out or switches directory moves HEAD; the band
-  // would otherwise go on showing the old commit's checks.
-  on('turn.complete', async ($, e, next) => {
-    const result = await next(e)
-    void ifMoved($)
+  // A turn that commits, checks out or switches directory may move HEAD; the
+  // next tick checks, so the band does not go on showing the old commit.
+  on('turn.complete', (_$, e, next) => {
+    isTurnEnded = true
 
-    return result
+    return next(e)
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
-    const { head, opened } = await read($, view)
-    const others = opened.filter(pr => pr.url !== head?.prUrl)
+    const { head, opened, isOffline } = await read($, view)
+    // A PR is drawn only from a read that worked, and none while `gh` fails.
+    const others = isOffline
+      ? []
+      : opened.filter(pr => pr.url !== head?.prUrl && pr.state !== '' && pr.failures === 0)
     if (e.props.hasSurvey || (head === null && others.length === 0)) {
       return next(e)
     }

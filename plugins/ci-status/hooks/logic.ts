@@ -1,15 +1,53 @@
 // The pure half of ci-status: turning what `git` and `gh` print into a CI
-// summary, and a summary into the band's words. Nothing here reaches `$`, so
-// the tests drive it with captured output.
+// summary, a summary into the band's words, and the settings into numbers.
+// Nothing here reaches `$`, so the tests drive it with captured output.
 
-import type { Check, CheckState, Summary } from '../types'
+import type { Check, CheckState, OpenedPr, Summary } from '../types'
 
 /** A GitHub repository, as `owner/name`. */
 export type Repo = { owner: string; name: string }
 
+/** The defaults of the userConfig fields in plugin.json. */
+export const DEFAULT_POLL_SECONDS = 30
+export const DEFAULT_IDLE_POLL_MINUTES = 0
+export const DEFAULT_MAX_FAILING_NAMES = 3
+/** The most PRs the session list keeps. */
+export const MAX_OPENED = 10
+/** Reads of an opened PR that may fail before it stops counting as pending. */
+export const MAX_OPENED_FAILURES = 3
+
+export type Settings = { pollMs: number; idleMs: number; maxNames: number }
+
 /**
- * The GitHub repository a remote URL names, or null for any other host.
- * Accepts the https, ssh and scp-like forms, with or without `.git`.
+ * The userConfig values as numbers: `pollSeconds` at least 5, `idlePollMinutes`
+ * 0 (off) or at least 1, `maxFailingNames` a whole number of at least 0. A value
+ * that is not a number takes its default.
+ */
+export function settings(options: Readonly<Record<string, unknown>>): Settings {
+  const number = (value: unknown, fallback: number): number => {
+    const parsed = typeof value === 'number' || typeof value === 'string' ? Number(value) : NaN
+    return Number.isFinite(parsed) ? parsed : fallback
+  }
+  const poll = Math.max(5, number(options.pollSeconds, DEFAULT_POLL_SECONDS))
+  const idle = number(options.idlePollMinutes, DEFAULT_IDLE_POLL_MINUTES)
+
+  return {
+    pollMs: poll * 1000,
+    idleMs: idle <= 0 ? 0 : Math.max(1, idle) * 60_000,
+    maxNames: Math.max(0, Math.floor(number(options.maxFailingNames, DEFAULT_MAX_FAILING_NAMES))),
+  }
+}
+
+const NAME_PART = /^[A-Za-z0-9._-]+$/
+
+function isNamePart(part: string): boolean {
+  return NAME_PART.test(part) && part !== '.' && part !== '..'
+}
+
+/**
+ * The GitHub repository a remote URL names, or null for any other host or a
+ * name that is not a plain owner and repository. Accepts the https, ssh and
+ * scp-like forms, with or without `.git`.
  */
 export function parseRemote(url: string): Repo | null {
   const match = url
@@ -17,18 +55,28 @@ export function parseRemote(url: string): Repo | null {
     .match(
       /^(?:https?:\/\/(?:[^@/]+@)?|ssh:\/\/(?:[^@/]+@)?|[^@/\s]+@)github\.com[:/]([^/\s]+)\/([^/\s]+?)(?:\.git)?\/?$/,
     )
-  if (match === null) {
+  const owner = match?.[1] ?? ''
+  const name = match?.[2] ?? ''
+
+  return isNamePart(owner) && isNamePart(name) ? { owner, name } : null
+}
+
+/** An upstream such as `origin/feature/x` as its remote and branch, or null. */
+export function parseUpstream(upstream: string): { remote: string; branch: string } | null {
+  const value = upstream.trim()
+  const slash = value.indexOf('/')
+  if (slash <= 0 || slash === value.length - 1) {
     return null
   }
 
-  return { owner: match[1] ?? '', name: match[2] ?? '' }
+  return { remote: value.slice(0, slash), branch: value.slice(slash + 1) }
 }
 
-/** The remote an upstream such as `origin/main` lives on, or null. */
-export function upstreamRemote(upstream: string): string | null {
-  const slash = upstream.trim().indexOf('/')
+/** `git rev-parse HEAD --abbrev-ref HEAD`'s two lines, or null. */
+export function parseHead(output: string): { sha: string; branch: string } | null {
+  const [sha = '', branch = ''] = output.trim().split('\n').map(line => line.trim())
 
-  return slash > 0 ? upstream.trim().slice(0, slash) : null
+  return /^[0-9a-f]{40}$/.test(sha) && branch !== '' ? { sha, branch } : null
 }
 
 const FAILING = new Set([
@@ -72,33 +120,41 @@ function rows(value: unknown): Row[] {
     : []
 }
 
-/** The checks in `gh pr view --json statusCheckRollup`'s `statusCheckRollup`. */
-export function fromRollup(rollup: unknown): Check[] {
-  return rows(rollup).map(row =>
-    row.__typename === 'StatusContext' || ('context' in row && !('status' in row))
-      ? { name: String(row.context ?? '?'), state: statusState(row.state) }
-      : {
-          name: String(row.name ?? '?'),
-          state: checkRunState(row.status, row.conclusion),
-        },
-  )
+/** Whether check run `a` is a later attempt than `b`: by start time, then id. */
+function isLater(a: Row, b: Row): boolean {
+  const started = String(a.started_at ?? '').localeCompare(String(b.started_at ?? ''))
+
+  return started !== 0 ? started > 0 : Number(a.id ?? 0) > Number(b.id ?? 0)
 }
 
 /**
- * The checks on a commit from the REST answers of `commits/{sha}/check-runs`
- * and `commits/{sha}/status`, as parsed JSON.
+ * The checks on a commit from the REST rows of `commits/{sha}/check-runs`
+ * (`check_runs`) and `commits/{sha}/status` (`statuses`).
+ *
+ * A re-run adds a check run with the same name to the same check suite, and
+ * GitHub can return both, so only the latest attempt of each is kept. The
+ * combined status already holds one status per context.
  */
-export function fromRest(checkRuns: unknown, status: unknown): Check[] {
-  const runs = rows((checkRuns as Row | null)?.check_runs).map(run => ({
+export function fromRest(checkRuns: unknown, statuses: unknown): Check[] {
+  const latest = new Map<string, Row>()
+  for (const run of rows(checkRuns)) {
+    const suite = (run.check_suite as Row | null | undefined)?.id ?? ''
+    const key = `${String(run.name ?? '?')}\u0000${String(suite)}`
+    const seen = latest.get(key)
+    if (seen === undefined || isLater(run, seen)) {
+      latest.set(key, run)
+    }
+  }
+  const runs = [...latest.values()].map(run => ({
     name: String(run.name ?? '?'),
     state: checkRunState(run.status, run.conclusion),
   }))
-  const statuses = rows((status as Row | null)?.statuses).map(row => ({
+  const contexts = rows(statuses).map(row => ({
     name: String(row.context ?? '?'),
     state: statusState(row.state),
   }))
 
-  return [...runs, ...statuses]
+  return [...runs, ...contexts]
 }
 
 /** The checks reduced to one state and counts, or null when there are none. */
@@ -162,11 +218,45 @@ export function prUrls(text: string): string[] {
   return [...new Set(found)]
 }
 
-/** The PR number at the end of a PR URL, or null. */
-export function prNumber(url: string): number | null {
-  const match = url.match(/\/pull\/(\d+)$/)
+/** The repository and number of a PR URL, or null. */
+export function parsePrUrl(url: string): { slug: string; number: number } | null {
+  const match = url.match(/^https:\/\/github\.com\/([^/\s]+)\/([^/\s]+)\/pull\/(\d+)$/)
+  if (match === null || !isNamePart(match[1] ?? '') || !isNamePart(match[2] ?? '')) {
+    return null
+  }
 
-  return match === null ? null : Number(match[1])
+  return { slug: `${match[1]}/${match[2]}`, number: Number(match[3]) }
+}
+
+/** Whether an opened PR still needs reading on the pending poll. */
+export function isOpenedPending(pr: OpenedPr): boolean {
+  if (pr.state === '') {
+    return pr.failures < MAX_OPENED_FAILURES
+  }
+
+  return pr.state === 'OPEN' && pr.failures === 0 && pr.summary?.state === 'pending'
+}
+
+/**
+ * The opened-PR list with new URLs added, at most MAX_OPENED long: past that
+ * the oldest merged or closed PRs go first, then the oldest of the rest.
+ */
+export function addOpened(list: readonly OpenedPr[], urls: readonly string[]): OpenedPr[] {
+  const added = urls
+    .filter(url => !list.some(pr => pr.url === url))
+    .flatMap(url => {
+      const parsed = parsePrUrl(url)
+      return parsed === null
+        ? []
+        : [{ url, number: parsed.number, state: '', summary: null, failures: 0 }]
+    })
+  const next = [...list, ...added]
+  while (next.length > MAX_OPENED) {
+    const finished = next.findIndex(pr => pr.state === 'MERGED' || pr.state === 'CLOSED')
+    next.splice(finished === -1 ? 0 : finished, 1)
+  }
+
+  return next
 }
 
 /** Whether a Bash command pushes commits. */
@@ -179,6 +269,11 @@ export function isPrCreate(command: string): boolean {
   return /(^|[\s;&|(])gh\s+pr\s+create\b/.test(command)
 }
 
+/** Whether `gh api` failed because GitHub has no such commit or repository. */
+export function isNotFound(stderr: string): boolean {
+  return /HTTP 404|HTTP 422|No commit found|Not Found/i.test(stderr)
+}
+
 /** Parses JSON, or returns null for anything that is not JSON. */
 export function json(text: string): unknown {
   try {
@@ -186,4 +281,13 @@ export function json(text: string): unknown {
   } catch {
     return null
   }
+}
+
+/** Parses one JSON value per line, as `gh api --paginate --jq '.x[]'` prints. */
+export function jsonLines(text: string): unknown[] {
+  return text
+    .split('\n')
+    .filter(line => line.trim() !== '')
+    .map(json)
+    .filter(value => value !== null)
 }

@@ -8,13 +8,13 @@
     "pollSeconds": {
       "type": "number",
       "title": "Poll interval while checks run (seconds)",
-      "description": "How often to read GitHub while any check is pending.",
+      "description": "How often to read GitHub while any check is pending. At least 5; a smaller value counts as 5.",
       "default": 30
     },
     "idlePollMinutes": {
       "type": "number",
       "title": "Poll interval while nothing runs (minutes)",
-      "description": "How often to read GitHub while no check is pending. 0 reads only at session start, after a push and after a PR is opened.",
+      "description": "How often to read GitHub while no check is pending, beyond the slow reads after a change. 0 turns it off; any other value is at least 1.",
       "default": 0
     },
     "maxFailingNames": {
