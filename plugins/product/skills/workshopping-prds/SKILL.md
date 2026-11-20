@@ -1,6 +1,6 @@
 ---
 name: workshopping-prds
-description: Facilitates interactive PRD (Product Requirements Document) workshops with multi-phase workflow. Use when defining new features, products, or initiatives that need structured requirements gathering and documentation.
+description: Facilitates interactive PRD (Product Requirements Document) workshops with multi-phase workflow. Use when defining new features, products, or initiatives that need structured requirements gathering and documentation. Also ranks candidate features (RICE, MoSCoW, Kano) and writes one-page product overviews.
 ---
 
 # Workshopping PRDs
@@ -13,28 +13,19 @@ Interactive product requirements document creation with structured phases.
 /workshopping-prds [options]
 ```
 
-## Options
+## Starting points
 
-- `--template TEMPLATE`: PRD template (full|lean|technical)
-- `--output PATH`: Output file path
-- `--from-item ID`: Start from existing work item
-- `--quick`: Skip optional sections
+- Full interactive session: begin at Phase 1.
+- From an existing ticket: read it with `get_item` and seed Phase 1 from its description.
+- Template choice: `full`, `lean` or `technical`. Confirm it with the person at the start, along with where the output should go.
+- Quick pass: skip the optional sections if the person asks.
 
-## Examples
+## Modes
 
-```bash
-# Full interactive session
-/running-prd-sessions
+Besides the PRD workshop, two supporting modes. Load the file only when the person asks for that mode.
 
-# Start from existing idea
-/running-prd-sessions --from-item CCC-123
-
-# Quick lean PRD
-/running-prd-sessions --template lean --quick
-
-# Technical PRD
-/running-prd-sessions --template technical
-```
+- **Feature prioritization** ([modes/feature-prioritization.md](modes/feature-prioritization.md)): rank candidate features with RICE, MoSCoW and Kano, then give a ranked recommendation. Use when the question is what to build first.
+- **Product overview** ([modes/product-overview.md](modes/product-overview.md)): a one-page product overview from a discovery conversation. Use for a new product with no written strategy.
 
 ## Session Phases
 
@@ -224,8 +215,8 @@ Best for: Infrastructure changes, API design, technical debt.
 ## Output Options
 
 1. **Markdown file** - Save to docs/
-2. **Work item** - Create epic via pm-context
-3. **Both** - File + linked work item
+2. **Project** - Create a project via pm-context (`create_project`) with the PRD, or its brief, as the description; for an existing project, first read its current description with `get_project`, show it, and ask whether to replace it, append to it, or save the PRD as a file only; then `update_project`. The brief templates are `project-brief.md` (full) and `project-brief-lite.md` (one page) in `refining-work-items`. Then break the work into tickets of one to three units of value
+3. **Both** - File + project whose description links the file
 
 ## Session Tips
 
@@ -258,7 +249,7 @@ Output: docs/prd-user-notifications.md
 ✅ PRD generated: docs/prd-user-notifications.md
 
 Would you like to:
-1. Create an epic from this PRD
+1. Create a project from this PRD
 2. Refine any section
 3. Done
 
