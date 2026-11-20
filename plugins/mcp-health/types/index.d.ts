@@ -10,8 +10,9 @@ export type Seen = {
 export type Row = {
   server: string
   /**
-   * `failed`, `auth` or `unlisted`, as `$.mcp.connect` answers; or `unseen`, a
-   * watched name this session did not see start, which is not checked.
+   * `failed`, `auth` or `unlisted`, as `$.mcp.connect` answers; `timeout`, no
+   * answer in time; or `unseen`, a watched name this session did not see
+   * start, which is not checked.
    */
   reason: string
 }
@@ -20,6 +21,10 @@ export type Row = {
 export type Health = {
   down: Row[]
   unseen: Row[]
+  /** Servers that did not answer in time: unknown, not healthy. */
+  quiet: Row[]
+  /** True when every plugin server seen starting was held, so none is checked. */
+  isBlind: boolean
   /** Counted failed answers in a row, by server. */
   strikes: Record<string, number>
 }

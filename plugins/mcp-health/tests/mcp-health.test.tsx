@@ -2,6 +2,7 @@ import type { On } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 
 import {
+  BLIND,
   headline,
   judge,
   label,
@@ -118,12 +119,21 @@ test('only servers seen starting unheld are checked; watch adds, never replaces'
     { server: BROKEN, isHeld: false },
     { server: HELD, isHeld: true },
   ]
-  expect(plan(seen, [], [])).toEqual({ check: [BROKEN, FINE].sort(), unseen: [] })
+  expect(plan(seen, [], [])).toEqual({
+    check: [BROKEN, FINE].sort(),
+    unseen: [],
+    isBlind: false,
+  })
   expect(plan(seen, [LINEAR, HELD], [])).toEqual({
     check: [BROKEN, FINE].sort(),
     unseen: [HELD, LINEAR].sort(),
+    isBlind: false,
   })
-  expect(plan(seen, [LINEAR], [BROKEN, LINEAR])).toEqual({ check: [FINE], unseen: [] })
+  expect(plan(seen, [LINEAR], [BROKEN, LINEAR])).toEqual({
+    check: [FINE],
+    unseen: [],
+    isBlind: false,
+  })
 })
 
 test('a failure counts as down only on the second in a row; a success resets it', () => {
@@ -133,7 +143,29 @@ test('a failure counts as down only on the second in a row; a success resets it'
   expect(one.down).toEqual([])
   const two = judge(failed, [], one.strikes)
   expect(two.down).toEqual([{ server: BROKEN, reason: 'failed' }])
-  expect(judge(ok, [], two.strikes)).toEqual({ down: [], strikes: {} })
+  expect(judge(ok, [], two.strikes)).toEqual({ down: [], quiet: [], strikes: {} })
+})
+
+test('blind only when plugin servers started and every start looked held', () => {
+  expect(plan([], [], []).isBlind).toBe(false)
+  expect(plan([{ server: LINEAR, isHeld: true }], [], []).isBlind).toBe(false)
+  expect(plan([{ server: HELD, isHeld: true }], [], []).isBlind).toBe(true)
+  const mixed = [
+    { server: HELD, isHeld: true },
+    { server: FINE, isHeld: false },
+  ]
+  expect(plan(mixed, [], []).isBlind).toBe(false)
+})
+
+test('no answer in time is unknown: no strike, the count stands, listed as quiet', () => {
+  const timeout = [{ server: BROKEN, answer: { isConnected: false, reason: 'timeout' } as const }]
+  expect(judge(timeout, [], {})).toEqual({
+    down: [],
+    quiet: [{ server: BROKEN, reason: 'timeout' }],
+    strikes: {},
+  })
+  expect(judge(timeout, [], { [BROKEN]: 1 }).strikes).toEqual({ [BROKEN]: 1 })
+  expect(label({ server: BROKEN, reason: 'timeout' })).toBe('not answering')
 })
 
 test('auth and unlisted count only when named; a choice never counts', () => {
@@ -163,7 +195,7 @@ test('labels and headline', () => {
 // requests cannot be raised here: the servers seen starting are seeded as the
 // mod's own `started` state, and the test answers `$.mcp.connect`.
 
-function session(on: On, started: Seen[], isUp: Map<string, boolean>) {
+function session(on: On, started: Seen[], isUp: Map<string, boolean | 'hang'>) {
   const clock = mock.clock(on)
   const asked: string[] = []
   on('session.start', (_, e) => ({ cwd: e.cwd }))
@@ -172,6 +204,9 @@ function session(on: On, started: Seen[], isUp: Map<string, boolean>) {
   }))
   on('mcp.connect', (_, e) => {
     asked.push(e.server)
+    if (isUp.get(e.server) === 'hang') {
+      return new Promise<never>(() => {})
+    }
 
     return {
       value: isUp.get(e.server)
@@ -257,6 +292,54 @@ test('an ignored server is never asked and never shown', { options: { ignore: [B
   await clock.advance(135_000)
 
   expect(asked).toEqual([])
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text' })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('a connect that never answers shows as not answering, and the next check still runs', async ($, on) => {
+  const started = [
+    { server: BROKEN, isHeld: false },
+    { server: FINE, isHeld: false },
+  ]
+  const isUp = new Map<string, boolean | 'hang'>([
+    [BROKEN, 'hang'],
+    [FINE, true],
+  ])
+  const { clock, asked } = session(on, started, isUp)
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+
+  await clock.advance(15_000)
+  await clock.advance(10_000)
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect((await ui.find({ type: 'Text', text: /^plugin:oh/ }))?.text).toBe(
+    `${BROKEN}: not answering`,
+  )
+  expect(await ui.find({ type: 'Text', text: /not connected/ })).toBeUndefined()
+  await ui.unmount()
+
+  // The hung round ended, so the guard was released: the 60 s check asks again.
+  const before = asked.filter(server => server === BROKEN).length
+  await clock.advance(35_000)
+  expect(asked.filter(server => server === BROKEN).length).toBe(before + 1)
+})
+
+test('when every plugin server start looked held, a dim row says the mod is blind', async ($, on) => {
+  const { clock, asked } = session(on, [{ server: HELD, isHeld: true }], new Map())
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await clock.advance(15_000)
+
+  expect(asked).toEqual([])
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect((await ui.find({ type: 'Text', text: /could not verify/ }))?.text).toBe(BLIND)
+  await ui.unmount()
+})
+
+test('with no plugin servers started at all, nothing is drawn', async ($, on) => {
+  const { clock } = session(on, [], new Map())
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  await clock.advance(75_000)
+
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
   expect(await ui.find({ type: 'Text' })).toBeUndefined()
   await ui.unmount()

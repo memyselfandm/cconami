@@ -6,6 +6,12 @@ import type { Row, Seen } from '../types'
 export const NEXT_STEP =
   '/mcp to retry. If it fails again, run the server command by hand to see the error.'
 
+/** The dim row shown when every plugin server seen starting was held. */
+export const BLIND = 'mcp-health could not verify any server (all starts looked held)'
+
+/** How long one server's answer is waited for before it counts as not answering. */
+export const ANSWER_MS = 10_000
+
 /** Failed checks in a row before a server is shown as down. */
 export const STRIKES = 2
 
@@ -45,6 +51,8 @@ export function shouldRemember(
 /** What the mcp.connect hook saw since the last flush, oldest first. */
 export const sightings: Seen[] = []
 
+// This hook sits in every MCP server's startup path: it must always await
+// next and return its result unchanged.
 /**
  * The `mcp.connect` hook. It passes the request on, returns exactly what
  * `next(e)` resolved to, and makes no `$` call: it only notes what it saw in
@@ -91,15 +99,19 @@ export function plan(
   seen: readonly Seen[],
   watch: readonly string[],
   ignore: readonly string[],
-): { check: string[]; unseen: string[] } {
+): { check: string[]; unseen: string[]; isBlind: boolean } {
   const skip = new Set(ignore)
   const byName = new Map(seen.map(entry => [entry.server, entry]))
   const plugins = seen.map(entry => entry.server).filter(server => server.startsWith('plugin:'))
   const candidates = [...new Set([...plugins, ...watch])].filter(name => !skip.has(name)).sort()
 
+  const started = plugins.filter(name => !skip.has(name))
+
   return {
     check: candidates.filter(name => byName.get(name)?.isHeld === false),
     unseen: watch.filter(name => !skip.has(name) && byName.get(name)?.isHeld !== false).sort(),
+    // Plugin servers started, and every start looked held: the mod is blind.
+    isBlind: started.length > 0 && started.every(name => byName.get(name)?.isHeld === true),
   }
 }
 
@@ -109,18 +121,29 @@ export function plan(
  * `failed` counts for every checked server. `auth` (waiting on sign-in) and
  * `unlisted` count only for a name in the watch list. `disabled`, `policy` and
  * `unapproved` are someone's choice, not a fault. A server is down after
- * STRIKES counted answers in a row; one good answer resets it.
+ * STRIKES counted answers in a row; one good answer resets it. `timeout` (no
+ * answer within ANSWER_MS) is unknown: the count stands, and the server is
+ * listed as not answering, never as healthy.
  */
 export function judge(
   answers: readonly { server: string; answer: Answer }[],
   watch: readonly string[],
   prior: Readonly<Record<string, number>>,
-): { down: Row[]; strikes: Record<string, number> } {
+): { down: Row[]; quiet: Row[]; strikes: Record<string, number> } {
   const isNamed = new Set(watch)
   const strikes: Record<string, number> = {}
   const down: Row[] = []
+  const quiet: Row[] = []
   for (const { server, answer } of answers) {
     const reason = answer.isConnected ? null : answer.reason
+    if (reason === 'timeout') {
+      quiet.push({ server, reason })
+      const count = prior[server]
+      if (count !== undefined) {
+        strikes[server] = count
+      }
+      continue
+    }
     const counts =
       reason === 'failed' || ((reason === 'auth' || reason === 'unlisted') && isNamed.has(server))
     if (!counts || reason === null) {
@@ -133,7 +156,7 @@ export function judge(
     }
   }
 
-  return { down, strikes }
+  return { down, quiet, strikes }
 }
 
 /** What one row of the band says after the server's name. */
@@ -145,6 +168,8 @@ export function label(row: Row): string {
       return 'waiting for sign-in'
     case 'unseen':
       return 'not seen this session'
+    case 'timeout':
+      return 'not answering'
     default:
       return row.reason
   }

@@ -2,7 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { Health, Seen } from '../types'
-import { headline, judge, label, merge, names, NEXT_STEP, onConnect, plan, sightings } from './health'
+import { ANSWER_MS, BLIND, headline, judge, label, merge, names, NEXT_STEP, onConnect, plan, sightings } from './health'
 import type { Answer } from './health'
 
 // The first sightings are written soon after the session starts. The first
@@ -12,22 +12,25 @@ const FLUSH_MS = 1_000
 const FIRST_CHECK_MS = 15_000
 const CHECK_MS = 60_000
 
-const EMPTY: Health = { down: [], unseen: [], strikes: {} }
+const EMPTY: Health = { down: [], unseen: [], quiet: [], isBlind: false, strikes: {} }
 const health = atom({ plugin: 'mcp-health', key: 'status' } as const, EMPTY)
 const seen = atom({ plugin: 'mcp-health', key: 'started' } as const, [] as Seen[])
 
 let isChecking = false
 
 async function flush($: EngineInterface): Promise<Seen[]> {
-  const newer = sightings.slice()
-  if (newer.length === 0) {
+  // Taken at once, so two flushes never write or drop the same sighting.
+  const batch = sightings.splice(0)
+  if (batch.length === 0) {
     return read($, seen)
   }
-  const all = await update($, seen, prior => merge(prior, newer))
-  // Dropped only once written, so a failed write loses nothing.
-  sightings.splice(0, newer.length)
-
-  return all
+  try {
+    return await update($, seen, prior => merge(prior, batch))
+  } catch (error) {
+    // Put back, ahead of anything seen since, for the next flush.
+    sightings.unshift(...batch)
+    throw error
+  }
 }
 
 async function check(
@@ -41,23 +44,31 @@ async function check(
   }
   isChecking = true
   try {
-    const { check: servers, unseen } = plan(await flush($), watch, ignore)
+    const { check: servers, unseen, isBlind } = plan(await flush($), watch, ignore)
     // Only servers this session saw start, unheld, are asked. For those,
-    // `$.mcp.connect` answers as the server stands and dials nothing.
+    // `$.mcp.connect` answers as the server stands and dials nothing. An
+    // answer that never comes counts as not answering, so a round always ends.
+    const quietly: Answer = { isConnected: false, reason: 'timeout' }
     const answers = await Promise.all(
       servers.map(async server => {
-        const answer: Answer = await $.mcp
-          .connect(server)
-          .catch(() => ({ isConnected: false, reason: 'failed' }) as const)
+        const answer: Answer = await Promise.race([
+          $.mcp.connect(server).catch(() => ({ isConnected: false, reason: 'failed' }) as const),
+          $.clock.sleep(ANSWER_MS).then(
+            () => quietly,
+            () => quietly,
+          ),
+        ])
 
         return { server, answer }
       }),
     )
     const prior = (await read($, health)).strikes
-    const { down, strikes } = judge(answers, watch, prior)
+    const { down, quiet, strikes } = judge(answers, watch, prior)
     await update($, health, () => ({
       down,
       unseen: unseen.map(server => ({ server, reason: 'unseen' })),
+      quiet,
+      isBlind,
       strikes,
     }))
   } finally {
@@ -79,6 +90,8 @@ export const register: Register = (on, options) => {
   // the session's start, with the name /mcp lists it under. The hook notes the
   // name and whether the start was held, and returns `next(e)`'s result as is.
   // It only watches: if it fails, the server goes on as it would have.
+  // This hook sits in every MCP server's startup path: onConnect must always
+  // await next and return its result unchanged. No test covers this line.
   on('mcp.connect', onConnect).catch(($, e, next) => next(e))
 
   on('session.start', async ($, e, next) => {
@@ -94,9 +107,10 @@ export const register: Register = (on, options) => {
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
-    const { down, unseen } = await read($, health)
+    const { down, unseen, quiet, isBlind } = await read($, health)
     const title = headline(down)
-    if (e.props.hasSurvey || (title === null && unseen.length === 0)) {
+    const notes = [...quiet, ...unseen]
+    if (e.props.hasSurvey || (title === null && notes.length === 0 && !isBlind)) {
       return next(e)
     }
     const { Box, Button, Text } = $.ui.resolve(e)
@@ -114,11 +128,12 @@ export const register: Register = (on, options) => {
             {row.server}: {label(row)}
           </Text>
         ))}
-        {unseen.map(row => (
+        {notes.map(row => (
           <Text key={row.server} dimColor>
             {row.server}: {label(row)}
           </Text>
         ))}
+        {isBlind && <Text dimColor>{BLIND}</Text>}
         {title !== null && <Text dimColor>{NEXT_STEP}</Text>}
       </Box>
     )

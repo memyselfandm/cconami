@@ -88,6 +88,13 @@ never asked about.
   that matches no server, counts only when named in `watch`; the sign-in case is
   shown as "waiting for sign-in". A server you turned off, or one a policy blocks, is
   never down.
+- **No answer.** A server that does not answer within 10 seconds is listed, dimmed, as
+  "not answering". That is unknown, not healthy: it neither adds to nor clears its
+  failed count, and the check still finishes.
+- **When the mod is blind.** If plugin servers started this session but every start
+  looked held, nothing can be checked, so the band shows one dim row: "mcp-health
+  could not verify any server (all starts looked held)". An empty band then never
+  means "all healthy" by default.
 - **How it checks.** `$.mcp.connect(server)` on each checked server. For a server
   that `/mcp` lists and no hook holds, that call reports the server's state and does
   not dial it. It would bring in a server another mod is holding, which is why held
