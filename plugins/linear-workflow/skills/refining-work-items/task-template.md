@@ -1,14 +1,16 @@
-# Task / Bug / Chore Template
+# Small ticket / bug / chore template
 
-Template for refining atomic work items: tasks, bugs, and chores.
+For tickets small enough to need no design: a small change, a bug, a chore. Anything
+bigger uses [ticket-template.md](ticket-template.md). Every variant ends in a "Done
+when" section that names its evidence, because that is what a reconciliation checks.
 
-## Task Template
+## Small ticket template
 
 ```markdown
-# Task: {title}
+# {title}
 
-**Parent**: {parent_id} - {parent_title}
-**Priority**: {P0|P1|P2|P3|P4}
+**Project**: {project} | **Parent**: {parent key, if a sub-issue}
+**Priority**: {urgent|high|normal|low|none}
 **Complexity**: {Small|Medium}
 
 ---
@@ -40,17 +42,12 @@ Template for refining atomic work items: tasks, bugs, and chores.
 
 ---
 
-## Definition of Done
+## Done when
 
-- [ ] {DoD criterion 1}
-- [ ] {DoD criterion 2}
-- [ ] {DoD criterion 3}
-- [ ] Tests pass
-- [ ] No regressions
+- [ ] {The change, and its evidence: "a pull request merges that <does X>"}
+- [ ] {A check that proves it: "`<test command>` passes, including the new test for X"}
+- [ ] {If a running system changes: "the change is live and <check> shows it"}
 
----
-
-*Refined with /refining-work-items --type task*
 ```
 
 ## Bug Template
@@ -58,7 +55,7 @@ Template for refining atomic work items: tasks, bugs, and chores.
 ```markdown
 # Bug: {title}
 
-**Priority**: {P0|P1|P2|P3|P4}
+**Priority**: {urgent|high|normal|low|none}
 **Severity**: {Critical|Major|Minor|Trivial}
 
 ---
@@ -112,17 +109,13 @@ Template for refining atomic work items: tasks, bugs, and chores.
 
 ---
 
-## Definition of Done
+## Done when
 
-- [ ] Bug is fixed
-- [ ] Root cause documented
-- [ ] Regression test added
-- [ ] No new issues introduced
-- [ ] Verified in staging
+- [ ] A pull request merges that fixes the cause, with the root cause stated in its description
+- [ ] A regression test that fails before the fix and passes after it is part of that pull request
+- [ ] The project's checks pass on the merged change (`<test command>`)
+- [ ] The fix is live where the bug was seen, and the reproduction steps above no longer reproduce it
 
----
-
-*Refined with /refining-work-items --type bug*
 ```
 
 ## Chore Template
@@ -130,7 +123,7 @@ Template for refining atomic work items: tasks, bugs, and chores.
 ```markdown
 # Chore: {title}
 
-**Priority**: {P0|P1|P2|P3|P4}
+**Priority**: {urgent|high|normal|low|none}
 **Category**: {Maintenance|Refactoring|DevOps|Documentation|Tooling}
 
 ---
@@ -155,15 +148,12 @@ Template for refining atomic work items: tasks, bugs, and chores.
 
 ---
 
-## Definition of Done
+## Done when
 
-- [ ] {DoD criterion 1}
-- [ ] {DoD criterion 2}
-- [ ] {DoD criterion 3}
+- [ ] {The change, and its evidence: "a pull request merges that <updates X>"}
+- [ ] {A check that proves nothing broke: "`<check command>` passes"}
+- [ ] {If a running system changes: "<check> shows the new version is live"}
 
----
-
-*Refined with /refining-work-items --type chore*
 ```
 
 ## Type Detection
@@ -180,19 +170,22 @@ If type not specified, detect from:
 - "maintenance", "tech debt", "optimize"
 - "migrate", "deprecate", "remove"
 
-### Keywords suggesting Task:
-- "add", "create", "implement", "build"
-- "configure", "setup", "integrate"
-- Default if no other signals
+### Keywords suggesting a small ticket:
+- "add", "create", "implement", "build", "configure", "setup", "integrate", **and** the
+  change fits in one pull request with no design questions
+
+### Default
+With no other signal, the type is `ticket` and the full
+[ticket-template.md](ticket-template.md) applies, as in the skill's type detection.
 
 ## Validation Checklist
 
-### Task
+### Small ticket
 - [ ] Clear, actionable title
 - [ ] Description explains what to do
-- [ ] Definition of done is specific
-- [ ] Complexity is Small or Medium
-- [ ] Parent linked (if applicable)
+- [ ] "Done when" lines each name their evidence
+- [ ] Fits in one pull request
+- [ ] In a project; parent linked if it is a sub-issue
 
 ### Bug
 - [ ] Steps to reproduce are clear
@@ -204,12 +197,12 @@ If type not specified, detect from:
 ### Chore
 - [ ] Scope is well-defined
 - [ ] Approach is clear
-- [ ] Definition of done is measurable
-- [ ] Not too large (< 1 day ideally)
+- [ ] "Done when" lines each name their evidence
+- [ ] Small enough for one pull request
 
 ## Quick Prompts (Create Mode)
 
-### Task Creation
+### Small ticket creation
 ```
 1️⃣ What needs to be done?
 >

@@ -1,405 +1,156 @@
-# Markdown Adapter
+# Markdown adapter
 
-Implements the PM Operations Interface using local markdown files. No external PM tool required.
-
-## Prerequisites
-
-- None! Works with any filesystem.
+Implements the [interface](../interface.md) with markdown files in the repository. It
+needs no external tool, works offline and keeps the backlog in git history. It also
+proves that the skills depend on the interface, not on Linear.
 
 ## Configuration
 
-In CLAUDE.md:
 ```markdown
 ## Project Management
 pm_tool: markdown
-pm_backlog: ./BACKLOG.md
-pm_sprints_dir: ./sprints/
+pm_team: ABC            # Ticket prefix and branch prefix
+pm_dir: ./backlog       # Default ./backlog
 ```
 
-Or in `.claude/settings.json`:
-```json
-{
-  "pm": {
-    "tool": "markdown",
-    "backlog": "./BACKLOG.md",
-    "sprints_dir": "./sprints/"
-  }
-}
+## Layout
+
+```
+backlog/
+├── projects/
+│   ├── sync-engine.md        # one file per project
+│   └── maintenance.md
+├── initiatives/
+│   └── version-2.md          # one file per initiative
+└── NEXT_ID                   # the next ticket number, a single integer
 ```
 
----
+`BACKLOG.md` at the repository root is accepted as a single project named `Backlog`,
+for small repositories.
 
-## Backlog File Format
-
-The primary backlog file uses a structured markdown format:
+## Project file
 
 ```markdown
-# Project Backlog
+# Project: Sync engine
 
-## Epics
+**Status:** in_progress | **Lead:** @alice | **Initiative:** Version 2
+**Milestones:** Log format, Replay
 
-### [EPIC-001] User Authentication {#epic-001}
-**Status:** in_progress | **Priority:** high | **Assignee:** @developer
+Brief: why this workstream exists and what "finished" means.
 
-Implement complete user authentication system with OAuth support.
+## Tickets
 
-#### Acceptance Criteria
-- [ ] Users can sign up with email
-- [ ] Users can log in with Google OAuth
-- [ ] Sessions persist across browser restarts
+### [ABC-101] Store changes as an append-only log {#abc-101}
+**Status:** done | **Priority:** high | **Assignee:** @alice
+**Links:** https://github.com/org/repo/pull/41
 
-#### Features
-- [FEAT-001] JWT Implementation
-- [FEAT-002] OAuth Providers
+Description.
 
----
+#### Done when
+- [x] Writes append to the log; nothing rewrites it (PR #41)
 
-## Features
+### [ABC-102] Replay the log on start {#abc-102}
+**Status:** in_progress | **Priority:** high | **Blocked by:** ABC-101
+**Branch:** alice/abc-102-replay-log-on-start
 
-### [FEAT-001] JWT Implementation {#feat-001}
-**Status:** todo | **Priority:** high | **Parent:** EPIC-001
+Description.
 
-Implement JWT token generation and validation.
-
-#### Tasks
-- [ ] [TASK-001] Create token generation utility
-- [ ] [TASK-002] Implement token validation middleware
-- [x] [TASK-003] Add refresh token support
-
----
-
-## Tasks
-
-### [TASK-001] Create token generation utility {#task-001}
-**Status:** in_progress | **Priority:** normal | **Parent:** FEAT-001 | **Assignee:** @dev
-
-Generate JWT tokens with configurable expiration.
-
----
-
-## Bugs
-
-### [BUG-001] Login fails on Safari {#bug-001}
-**Status:** todo | **Priority:** urgent
-
-Users on Safari cannot complete login flow.
-
----
-```
-
----
-
-## Work Item ID Convention
-
-IDs follow the pattern: `TYPE-NNN`
-- `EPIC-001`, `EPIC-002`, ...
-- `FEAT-001`, `FEAT-002`, ...
-- `TASK-001`, `TASK-002`, ...
-- `BUG-001`, `BUG-002`, ...
-
----
-
-## Work Item Operations
-
-### get_item(id)
-Parse the backlog file and find the section with matching ID.
-
-```python
-def get_item(id):
-    content = read_file(backlog_path)
-
-    # Find section starting with ### [ID]
-    pattern = rf'### \[{id}\].*?(?=\n### |\n## |\Z)'
-    match = re.search(pattern, content, re.DOTALL)
-
-    if not match:
-        return None
-
-    section = match.group()
-    return parse_item_section(section)
-
-def parse_item_section(section):
-    # Extract title: ### [ID] Title {#anchor}
-    title_match = re.search(r'### \[[\w-]+\] (.+?) \{', section)
-    title = title_match.group(1) if title_match else ""
-
-    # Extract metadata line: **Status:** X | **Priority:** Y | ...
-    metadata = {}
-    meta_match = re.search(r'\*\*Status:\*\* (\w+)', section)
-    if meta_match:
-        metadata['status'] = meta_match.group(1)
-
-    # Extract description (text after metadata, before ####)
-    desc_match = re.search(r'\n\n(.+?)(?=\n####|\Z)', section, re.DOTALL)
-    description = desc_match.group(1).strip() if desc_match else ""
-
-    return WorkItem(
-        id=id,
-        key=id,
-        title=title,
-        description=description,
-        status=metadata.get('status', 'backlog'),
-        # ... etc
-    )
-```
-
-**Field Mapping:**
-```yaml
-id: [ID] from header
-key: same as id
-title: text after [ID] before {#anchor}
-description: paragraph(s) after metadata line
-type: derived from ID prefix (EPIC/FEAT/TASK/BUG)
-status: parsed from **Status:** field
-status_type: map status string to enum
-priority: parsed from **Priority:** field
-assignee: parsed from **Assignee:** @username
-parent: parsed from **Parent:** field
-children: items referencing this as parent
-labels: parsed from **Labels:** field (comma-separated)
-project: directory name if in sprints/
-url: file path + anchor
-```
-
-### create_item(params)
-Append new section to appropriate part of backlog file.
-
-```python
-def create_item(params):
-    content = read_file(backlog_path)
-
-    # Generate next ID
-    type_prefix = {'epic': 'EPIC', 'feature': 'FEAT', 'task': 'TASK', 'bug': 'BUG'}
-    prefix = type_prefix[params.type]
-    next_num = get_next_id_number(content, prefix)
-    new_id = f"{prefix}-{next_num:03d}"
-
-    # Create section
-    section = f"""
-### [{new_id}] {params.title} {{#{new_id.lower()}}}
-**Status:** todo | **Priority:** {params.priority or 'normal'}"""
-
-    if params.parent:
-        section += f" | **Parent:** {params.parent}"
-    if params.assignee:
-        section += f" | **Assignee:** @{params.assignee}"
-
-    section += f"\n\n{params.description}\n\n---\n"
-
-    # Insert into appropriate section
-    insert_position = find_section_end(content, params.type)
-    new_content = content[:insert_position] + section + content[insert_position:]
-
-    write_file(backlog_path, new_content)
-    return get_item(new_id)
-```
-
-### update_item(id, params)
-Find and replace the item section.
-
-```python
-def update_item(id, params):
-    content = read_file(backlog_path)
-
-    # Find existing section
-    pattern = rf'(### \[{id}\].+?)(?=\n### |\n## |\Z)'
-    match = re.search(pattern, content, re.DOTALL)
-
-    if not match:
-        raise NotFound(id)
-
-    old_section = match.group(1)
-    new_section = rebuild_section(old_section, params)
-
-    new_content = content.replace(old_section, new_section)
-    write_file(backlog_path, new_content)
-
-    return get_item(id)
-```
-
-### list_items(filters)
-Parse all items and filter in memory.
-
-```python
-def list_items(filters):
-    content = read_file(backlog_path)
-
-    # Find all item sections
-    pattern = r'### \[([\w-]+)\]'
-    all_ids = re.findall(pattern, content)
-
-    items = [get_item(id) for id in all_ids]
-
-    # Apply filters
-    if filters.type:
-        items = [i for i in items if i.type == filters.type]
-    if filters.status:
-        items = [i for i in items if i.status == filters.status]
-    if filters.parent:
-        items = [i for i in items if i.parent == filters.parent]
-    # ... etc
-
-    return items[:filters.limit or 50]
-```
-
----
-
-## Hierarchy Operations
-
-### set_parent(child_id, parent_id)
-Update the child's **Parent:** metadata field.
-
-### get_children(parent_id)
-```python
-def get_children(parent_id):
-    all_items = list_items({})
-    return [i for i in all_items if i.parent == parent_id]
-```
-
----
-
-## Project/Sprint Operations
-
-Sprints are separate markdown files in the sprints directory:
-
-```
-sprints/
-├── 2025-01.md
-├── 2025-02.md
-└── 2025-03.md
-```
-
-### Sprint File Format
-```markdown
-# Sprint 2025-01
-
-**Status:** active
-**Start:** 2025-01-06
-**End:** 2025-01-17
-
-## Sprint Goal
-Complete authentication foundation.
-
-## Items
-- [x] [FEAT-001] JWT Implementation
-- [ ] [FEAT-002] OAuth Providers
-- [ ] [TASK-005] Write auth tests
-```
-
-### get_project(id)
-```python
-def get_project(id):
-    sprint_path = f"{sprints_dir}/{id}.md"
-    content = read_file(sprint_path)
-
-    # Parse sprint metadata
-    return Project(
-        id=id,
-        name=f"Sprint {id}",
-        status=parse_field(content, 'Status'),
-        start_date=parse_field(content, 'Start'),
-        end_date=parse_field(content, 'End'),
-        items=parse_item_list(content)
-    )
-```
-
-### create_project(params)
-Create new sprint file.
-
-### assign_to_project(item_id, project_id)
-Add item to sprint's Items list.
-
----
-
-## Comment Operations
-
-Comments are stored as sub-sections under items:
-
-```markdown
-### [TASK-001] Some task {#task-001}
-...
+#### Done when
+- [ ] Start-up replays the log and the state matches a fresh build
 
 #### Comments
-> **@developer** (2025-01-15): Started working on this.
+> **@alice** (2026-01-15): Started; the reader is in PR #44.
 
-> **@reviewer** (2025-01-16): Looks good, but add tests.
+### [ABC-103] Conflict rule for concurrent edits {#abc-103}
+**Status:** todo | **Parent:** ABC-102 | **Blocked by:** ABC-102
+
+## Comments
+
+> **@bob** (2026-01-17): Ruling: ABC-103 goes before ABC-110; both change the merge
+> code and the conflict rule must land first. — Status runner
+
+## Updates
+
+### 2026-01-16, on_track, @alice
+Log format merged; replay under review.
 ```
 
-### add_comment(item_id, body)
-Append to Comments section.
+## Initiative file
 
-### list_comments(item_id)
-Parse Comments section.
+```markdown
+# Initiative: Version 2
 
----
+**Status:** in_progress | **Owner:** @bob
+**Projects:** Sync engine, Settings page
 
-## Status Values
+Goal of the effort.
 
-| Status String | Type |
-|---------------|------|
-| `backlog` | backlog |
-| `todo` | todo |
-| `in_progress` | in_progress |
-| `in_review` | in_review |
-| `done` | done |
-| `cancelled` | cancelled |
+## Comments
 
----
+## Updates
 
-## Advantages
-
-1. **No external dependencies** - Works offline
-2. **Version controlled** - Full git history of changes
-3. **Human readable** - Edit in any text editor
-4. **Portable** - Move between systems easily
-5. **Searchable** - Use grep, ripgrep, etc.
-
-## Limitations
-
-1. **Manual ID management** - Must track next ID
-2. **No real-time sync** - Single-user or requires git workflow
-3. **Limited querying** - No database-style queries
-4. **No notifications** - Must poll for changes
-
----
-
-## Examples
-
-### Initialize Backlog
-```bash
-cat > BACKLOG.md << 'EOF'
-# Project Backlog
-
-## Epics
-
----
-
-## Features
-
----
-
-## Tasks
-
----
-
-## Bugs
-
----
-EOF
+### 2026-01-16, @bob
+Sync engine on track; settings page waiting on design.
 ```
 
-### Create Sprint
-```bash
-cat > sprints/2025-01.md << 'EOF'
-# Sprint 2025-01
+## Fields
 
-**Status:** planned
-**Start:** 2025-01-06
-**End:** 2025-01-17
+| Interface field | Where it lives |
+|-----------------|----------------|
+| key, title | `### [ABC-12] Title {#abc-12}` |
+| status_type | `**Status:**` value: `backlog`, `todo`, `in_progress`, `in_review`, `done`, `cancelled` |
+| priority, assignee, labels | `**Priority:**`, `**Assignee:** @name`, `**Labels:** a, b` |
+| parent | `**Parent:** ABC-11` |
+| blocked_by | `**Blocked by:** ABC-9, ABC-10` |
+| blocks | derived: every ticket whose `Blocked by` names this one |
+| links | `**Links:**` URLs, comma-separated |
+| branch | `**Branch:**`, default `<user>/<team-key>-<n>-<slug>` in lower case |
+| project | the file the entry is in |
+| type | `**Labels:**` containing `bug` or `chore`, otherwise ticket |
+| description | text after the metadata lines, up to the next `####` heading |
+| children | derived: every ticket whose `Parent` is this one |
 
-## Sprint Goal
-TBD
+## Operations
 
-## Items
-EOF
+| Operation | What to do |
+|-----------|------------|
+| get_item | Find `### [KEY]` in any project file; parse the entry |
+| create_item | Read `NEXT_ID`, write it back plus one, append the entry under `## Tickets` in the project file. Refuse without a project |
+| update_item, transition_item | Rewrite the metadata line or section of the entry |
+| list_items | Parse every project file (or one); filter in memory |
+| search_items | Text search over the project files |
+| set_parent | Set or remove `**Parent:**` |
+| get_children | Entries whose `Parent` is the key |
+| add_blocking_link | Add the blocker to the blocked entry's `**Blocked by:**` |
+| remove_blocking_link | Remove it |
+| add_link | Append to `**Links:**` |
+| get_project, list_projects | Parse the header of each project file |
+| create_project | Write a new project file with empty `## Tickets`, `## Comments` and `## Updates` sections; add its name to the initiative file's `**Projects:**` if given |
+| update_project | Rewrite the project file's header line or brief; for `initiative`, also update `**Projects:**` in both initiative files |
+| assign_to_project | Move the entry, and its sub-issues, to the other file |
+| get_initiative, list_initiatives | Parse the initiative files |
+| create_initiative | Write a new initiative file with `**Status:** planned`, `**Owner:**` if given, empty `**Projects:**`, `## Comments` and `## Updates` |
+| update_initiative | Rewrite the initiative file's header or goal |
+| add_comment, list_comments | For a ticket, the entry's `#### Comments` block; for a project or initiative, the file's `## Comments` section. One dated blockquote per comment, newest last in the file |
+| add_update, list_updates | Append a dated `###` entry under `## Updates`; never edit an old one |
+| list_statuses | The six values above |
+| list_labels, add_label, remove_label | The `**Labels:**` field; labels are free text |
+
+`updated_at` is the date of the entry's latest comment or update, or the file's last
+commit when there is none (`git log -1 --format=%cI -- <file>`).
+
+## Limits
+
+- Ticket numbers come from `NEXT_ID`. Two sessions creating tickets on different
+  branches can collide; resolve it at merge by renumbering the later one.
+- No notifications. Other sessions see changes when they pull.
+- Staleness is coarse: a ticket's activity is its latest dated comment.
+
+## Initialising a backlog
+
+```sh
+mkdir -p backlog/projects backlog/initiatives
+echo 1 > backlog/NEXT_ID
+printf '# Project: Maintenance\n\n**Status:** in_progress\n\nSmall, unrelated tickets.\n\n## Tickets\n\n## Comments\n\n## Updates\n' \
+  > backlog/projects/maintenance.md
 ```

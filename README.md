@@ -6,17 +6,15 @@ It provides a structured approach to extending Claude Code's capabilities throug
 
 
 ## Some Cool Things You'll Find Here (i.e. My Favorites)
-### Linear Product Ops
-Transform ideas into execution-ready Linear issues with AI-optimized templates:
-- **Issue Refinement Suite** (`/refine-*` commands) - Dual-mode commands that refine existing issues OR create new ones from scratch
-  - `/refine-epic` - Full PRD template for comprehensive epics
-  - `/refine-epic-lite` - Quick 1-pager for MVPs and personal projects
-  - `/refine-feature` - Right-sized features with automatic subtask generation
-  - `/refine-issue` - Flexible refinement for tasks, bugs, and chores
-- **Sprint Management** - Parallel AI agent execution for entire sprints
-- **Epic Breakdown** - Automatically decompose epics into features and tasks
+### Linear workflow
+Skills for running agent work in Linear, where projects are workstreams, tickets are one to three units of value and initiatives cover large efforts (no time boxes). See [plugins/README.md](./plugins/README.md):
+- **`refining-work-items`** - turn an idea into a ticket with a checkable "Done when", or a project brief
+- **`breaking-down-work`** - split a project or an oversized ticket into tickets with blocking links
+- **`executing-work-items`** - implement named tickets with parallel agents, one branch and pull request at a time
+- **`reconciling-linear-projects`** - make a project's tickets match the pull requests and the running system
+- **`reporting-workstream-status`** - report what is stuck, stale or colliding across projects
 
-You'll need to tweak them to work with your Linear setup.
+Each skill is agent-neutral, with per-agent notes in `platforms/` (Claude Code and Hermes).
 
 ### Meta-Agents
 - **[Subagent Architect](./apps/dot-claude/agents/subagent-architect/)** - Builds Claude Code subagents using best practice patterns from Anthropic and others
@@ -61,17 +59,17 @@ See [SUBAGENTS_README.md](./apps/dot-claude/agents/SUBAGENTS_README.md) for spec
 ## Quick Start: Idea to Execution
 
 ```bash
-# Create and refine an epic from an idea
-/refine-epic --team "Your Team"
+# Write a project brief for a new workstream
+/refining-work-items "Sync engine" --type project-lite
 
-# Break it down into features and tasks
-/epic-breakdown --epic CCC-123
+# Break it into tickets with blocking links
+/breaking-down-work "Sync engine"
 
-# Refine individual features if needed
-/refine-feature CCC-124
+# Implement the tickets that can start now
+/executing-work-items ABC-120 ABC-123
 
-# Execute the sprint with AI agents
-/sprint-execute sprint-2024-12
+# Keep the record true at the end of the workstream
+/reconciling-linear-projects "Sync engine"
 ```
 
 ## Getting Started

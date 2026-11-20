@@ -1,82 +1,80 @@
 ---
 name: pm-context
-description: Provides project management tool abstraction layer. Auto-loads when working with work items, epics, features, tasks, sprints, or backlogs. Detects PM tool (Linear, markdown) from project configuration and loads appropriate adapter for seamless operations across different PM systems.
+description: One interface for project-management operations - tickets, projects, initiatives, blocking links, comments and project updates - with a Linear adapter and a markdown adapter. Auto-loads when a skill reads or writes work items. Detects the project's tool from its configuration and loads the matching adapter, so skills never call a tracker directly.
 user-invocable: false
+version: 2.0.0
+metadata:
+  hermes:
+    category: productivity
+    tags: [project-management, linear, markdown]
+    related_skills: [linear-workflow]
 ---
 
-# Project Management Context
+# Project management context
 
-Provides a unified interface for project management operations across different tools. This skill auto-loads when Claude detects work related to project management.
+The skills in this plugin are written against the operations in
+[interface.md](interface.md), never against one tracker. An adapter maps each
+operation onto a tool. Two adapters ship: Linear and markdown. The markdown adapter
+exists partly to prove the interface holds without Linear.
 
-## PM Tool Detection
+The model is the one in the `linear-workflow` skill: initiatives group projects,
+projects are workstreams or buckets, tickets are one to three units of value, and order
+comes from blocking links. There are no time boxes in the interface.
 
-Detect the project's PM tool in this order:
+## Detecting the tool
 
-1. **CLAUDE.md configuration**:
+Check, in this order, and stop at the first hit:
+
+1. **The project's instructions file** (for example `CLAUDE.md` or `AGENTS.md`):
    ```markdown
    ## Project Management
    pm_tool: linear
-   pm_team: Chronicle
+   pm_team: ABC
    ```
-
-2. **Settings file** (`.claude/settings.json`):
+2. **The agent's settings**, under a `pm` key:
    ```json
-   {
-     "pm": {
-       "tool": "linear",
-       "project": "Chronicle"
-     }
-   }
+   { "pm": { "tool": "linear", "team": "ABC" } }
    ```
+3. **Files in the repository**: `BACKLOG.md` or `backlog/` means markdown.
+4. **Default**: markdown, which needs no external tool.
 
-3. **File detection**:
-   - `.linear/` directory → Linear
-   - `BACKLOG.md` or `backlog.md` → Markdown
+## Adapters
 
-4. **Default**: Markdown (no external tool required)
+| Tool | Adapter | How it is reached |
+|------|---------|-------------------|
+| Linear | [adapters/linear.md](adapters/linear.md) | Per platform, see Platform notes |
+| Markdown | [adapters/markdown.md](adapters/markdown.md) | Files in the repository |
 
-## Loading the Appropriate Adapter
+The Jira and GitHub adapters are archived in `docs/archive/pm-context-adapters/`.
+Their rewrites against this interface are tracked separately and are not shipped.
 
-Once detected, load the corresponding adapter:
+## Terms
 
-| Tool | Adapter File | CLI |
-|------|--------------|-----|
-| Linear | [adapters/linear.md](adapters/linear.md) | `linctl` |
-| Markdown | [adapters/markdown.md](adapters/markdown.md) | filesystem |
+Use these words in every skill's output, whatever the tool:
 
-The Jira and GitHub adapters are archived in `docs/archive/pm-context-adapters/`; their rewrites are tracked in CCC-138 and CCC-139.
+| Term | Meaning |
+|------|---------|
+| ticket | One work item, one to three units of value |
+| sub-issue | A ticket with a parent ticket |
+| project | A workstream or a bucket of related tickets |
+| initiative | A large effort that groups projects |
+| blocking link | "A blocks B": B cannot finish before A |
+| project update | A dated note on a project: a checkpoint, a reconciliation, a status |
+| owner action | A ticket only the owner can do, labelled `owner-action` |
 
-## Operations Interface
+## How a skill uses it
 
-All adapters implement the operations defined in [interface.md](interface.md). Use these generic operations in skills rather than tool-specific commands.
+1. Detect the tool as above and load its adapter.
+2. Call operations from [interface.md](interface.md), for example
+   `list_items({project: "Sync engine", status_type: "in_progress"})`.
+3. Report in the terms above, not the tool's.
 
-## Terminology
+If an operation is not supported by the active adapter (the adapter says so), report
+that the step was skipped and why. Do not fall back to calling the tool directly.
 
-Use generic terminology in all skill interactions:
+## Platform notes
 
-| Generic Term | Description |
-|--------------|-------------|
-| work item | Any trackable unit (issue, ticket, task) |
-| epic | Large body of work containing features |
-| feature | Discrete capability within an epic |
-| task | Atomic implementation unit |
-| sprint | Time-boxed execution container |
-| backlog | Prioritized list of work items |
-| project | Container for related work |
+How to reach Linear from each agent platform:
 
-## Usage in Skills
-
-Skills should:
-1. Call pm-context to detect the active PM tool
-2. Load the appropriate adapter
-3. Use interface operations, not direct CLI calls
-4. Use generic terminology in outputs
-
-Example pattern:
-```markdown
-## Step 1: Get Work Item Context
-Use pm-context to fetch the work item:
-- Detect PM tool from project config
-- Load [interface.md](../pm-context/interface.md) for operation spec
-- Call `get_item(item_id)` via the appropriate adapter
-```
+- [platforms/claude-code.md](platforms/claude-code.md)
+- [platforms/hermes.md](platforms/hermes.md)

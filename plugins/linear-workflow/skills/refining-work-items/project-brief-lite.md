@@ -1,13 +1,14 @@
-# Epic Lite Template (1-Pager)
+# Project brief, lite (one page)
 
-Quick epic definition for when you need to move fast. Use the full [epic-template.md](epic-template.md) for comprehensive planning.
+A one-page brief for a new project (a workstream). It goes in the project description.
+Use the full [project-brief.md](project-brief.md) for a risky or cross-team project.
 
 ## Template
 
 ```markdown
-# Epic: {title}
+# Project: {title}
 
-**Priority**: {P0|P1|P2|P3|P4} | **Complexity**: {S|M|L|XL} | **Owner**: {assignee}
+**Lead**: {person or session} | **Initiative**: {initiative, if any}
 
 ---
 
@@ -27,8 +28,8 @@ Quick epic definition for when you need to move fast. Use the full [epic-templat
 
 ---
 
-## ✅ Success Criteria
-{5-6 measurable outcomes - when is this done?}
+## ✅ Finished when
+{3-6 measurable outcomes - when does this workstream close?}
 
 - [ ] {Criterion 1}
 - [ ] {Criterion 2}
@@ -49,16 +50,15 @@ Quick epic definition for when you need to move fast. Use the full [epic-templat
 
 ---
 
-## 📦 Features
-{3-6 features that make up this epic}
+## 📦 First tickets
+{3-6 tickets, each one to three units of value. Order them with blocking links.}
 
-| Feature | Complexity | Phase |
-|---------|------------|-------|
-| {Feature 1} | {S/M/L} | Foundation |
-| {Feature 2} | {S/M/L} | Features |
-| {Feature 3} | {S/M/L} | Features |
-| {Feature 4} | {S/M/L} | Features |
-| {Feature 5} | {S/M/L} | Integration |
+| Ticket | Blocked by |
+|--------|------------|
+| {Ticket 1} | - |
+| {Ticket 2} | Ticket 1 |
+| {Ticket 3} | - |
+| {Ticket 4} | Ticket 2, Ticket 3 |
 
 ---
 
@@ -72,14 +72,11 @@ Quick epic definition for when you need to move fast. Use the full [epic-templat
 **Dependencies:**
 - {Blocking dependency}
 
----
-
-*Refined with /refining-work-items --type epic-lite*
 ```
 
 ## Quick Prompts (Create Mode)
 
-When creating a new epic-lite, ask these 5 questions:
+When creating a new project brief, ask these 5 questions:
 
 ```
 1️⃣ What problem does this solve? (2-3 sentences)
@@ -88,13 +85,13 @@ When creating a new epic-lite, ask these 5 questions:
 2️⃣ How will you solve it? (3-5 bullet points)
 >
 
-3️⃣ What does success look like? (3-5 criteria)
+3️⃣ When is the workstream finished? (3-5 criteria)
 >
 
 4️⃣ Technical approach? (1 paragraph or skip)
 >
 
-5️⃣ What features? (list 3-5 or auto-generate)
+5️⃣ What are the first tickets? (list 3-5 or propose them)
 >
 ```
 
@@ -110,24 +107,24 @@ When refining existing items, only prompt for missing essentials:
 
 ## Validation Checklist
 
-Lite epics need fewer sections but still require:
+A lite brief needs fewer sections but still requires:
 
 - [ ] Problem is clear (2-3 sentences)
 - [ ] Solution has concrete points (not vague)
-- [ ] Success criteria are measurable
-- [ ] Features are identified (3-6)
-- [ ] No feature is larger than "Large"
+- [ ] "Finished when" is measurable
+- [ ] First tickets are identified (3-6)
+- [ ] No ticket is bigger than one to three units of value
 
 ## When to Use
 
-**Use Epic-Lite when:**
-- Time is limited (< 30 min for planning)
+**Use the lite brief when:**
+- Planning time is short
 - Scope is relatively clear
 - Team is experienced with the domain
-- Not a critical/risky initiative
+- The project is not critical or risky
 
-**Use Full Epic when:**
-- High-risk or high-complexity initiative
+**Use the full brief when:**
+- The project is high-risk or complex
 - Cross-team coordination required
 - Significant architectural decisions
 - New domain for the team
