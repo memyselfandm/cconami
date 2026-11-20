@@ -228,6 +228,22 @@ export function parsePrUrl(url: string): { slug: string; number: number } | null
   return { slug: `${match[1]}/${match[2]}`, number: Number(match[3]) }
 }
 
+/**
+ * The branch's own open PR from `gh pr list --head <branch> --json
+ * number,url,isCrossRepository`, or null. `--head` ignores the owner, so a
+ * fork's PR from a branch of the same name is listed too, and skipped here.
+ */
+export function ownPr(list: unknown): { number: number; url: string } | null {
+  const own = rows(list).find(
+    row => row.isCrossRepository === false && typeof row.number === 'number',
+  )
+  if (own === undefined) {
+    return null
+  }
+
+  return { number: Number(own.number), url: typeof own.url === 'string' ? own.url : '' }
+}
+
 /** Whether an opened PR still needs reading on the pending poll. */
 export function isOpenedPending(pr: OpenedPr): boolean {
   if (pr.state === '') {

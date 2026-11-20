@@ -8,6 +8,7 @@ import {
   fromRest,
   isNotFound,
   isOpenedPending,
+  MAX_OPENED_FAILURES,
   isPrCreate,
   isPush,
   json,
@@ -16,6 +17,7 @@ import {
   parsePrUrl,
   parseRemote,
   parseUpstream,
+  ownPr,
   prUrls,
   settings,
   shortText,
@@ -31,10 +33,12 @@ const TICK_MS = 5_000
 const GRACE_MS = 120_000
 // After any change of state, a late check or a re-run started on GitHub can
 // still come: read every SETTLE_EVERY_MS for SETTLE_FOR_MS after the change.
-// The same slow read runs while HEAD is hidden but the branch has an upstream,
-// so a push made outside the session shows up.
+// The same slow read goes on, with no end, while GitHub does not have HEAD's
+// commit yet, so a push made outside the session shows up.
 const SETTLE_EVERY_MS = 180_000
 const SETTLE_FOR_MS = 900_000
+// While `gh` fails (offline, logged out), read only this often.
+const OFFLINE_EVERY_MS = 600_000
 // How long one `git` or `gh` call may run before it counts as a failure.
 const PROCESS_TIMEOUT_MS = 15_000
 // Keeps `gh` from prompting or printing an update notice into what it parses.
@@ -76,8 +80,20 @@ async function run($: EngineInterface, cwd: string, argv: readonly string[]): Pr
   }
 }
 
-/** Rows of a `gh api` list, or why not: `isOffline` unless GitHub said "no such". */
-type Rows = { ok: true; rows: unknown[] } | { ok: false; isOffline: boolean }
+/**
+ * Why a read failed: `isMissing` when GitHub said it has no such commit (not
+ * pushed yet), `isOffline` when `gh` itself failed; neither for an odd answer.
+ */
+type Failed = { ok: false; isOffline: boolean; isMissing: boolean }
+
+function failure(stderr: string): Failed {
+  const isMissing = isNotFound(stderr)
+
+  return { ok: false, isOffline: !isMissing, isMissing }
+}
+
+/** Rows of a `gh api` list, or why not. */
+type Rows = { ok: true; rows: unknown[] } | Failed
 
 /**
  * The `key` rows of a REST answer that carries `total_count`, every page of
@@ -86,13 +102,13 @@ type Rows = { ok: true; rows: unknown[] } | { ok: false; isOffline: boolean }
 async function apiRows($: EngineInterface, cwd: string, path: string, key: string): Promise<Rows> {
   const first = await run($, cwd, ['gh', 'api', path])
   if (!first.ok) {
-    return { ok: false, isOffline: !isNotFound(first.stderr) }
+    return failure(first.stderr)
   }
   const body = json(first.stdout) as Record<string, unknown> | null
   const rows = body?.[key]
   if (!Array.isArray(rows)) {
     debug($, `gh api ${path} answered without ${key}`)
-    return { ok: false, isOffline: false }
+    return { ok: false, isOffline: false, isMissing: false }
   }
   const total = Number(body?.total_count ?? rows.length)
   if (!(total > rows.length)) {
@@ -100,13 +116,13 @@ async function apiRows($: EngineInterface, cwd: string, path: string, key: strin
   }
   const all = await run($, cwd, ['gh', 'api', '--paginate', '--jq', `.${key}[]`, path])
   if (!all.ok) {
-    return { ok: false, isOffline: !isNotFound(all.stderr) }
+    return failure(all.stderr)
   }
 
   return { ok: true, rows: jsonLines(all.stdout) }
 }
 
-type Read<T> = { ok: true; value: T } | { ok: false; isOffline: boolean }
+type Read<T> = { ok: true; value: T } | Failed
 
 /** The checks on one commit; a failed call is never read as "no checks". */
 async function readCommit(
@@ -132,7 +148,13 @@ async function readCommit(
   return { ok: true, value: fromRest(runs.rows, statuses.rows) }
 }
 
-type HeadRead = { head: Head | null; isOffline: boolean; hasUpstream: boolean }
+/**
+ * HEAD's state, or why it is hidden: `isOffline` when `gh` failed, `isMissing`
+ * when GitHub does not have the commit yet.
+ */
+type HeadRead = { head: Head | null; isOffline: boolean; isMissing: boolean }
+
+const HIDDEN: HeadRead = { head: null, isOffline: false, isMissing: false }
 
 /** The CI state of HEAD in `cwd`, or null whenever it cannot be shown. */
 async function readHead(
@@ -140,11 +162,6 @@ async function readHead(
   cwd: string,
   at: { sha: string; branch: string },
 ): Promise<HeadRead> {
-  const hidden = (isOffline: boolean, hasUpstream: boolean): HeadRead => ({
-    head: null,
-    isOffline,
-    hasUpstream,
-  })
   const tracked = await run($, cwd, [
     'git',
     'rev-parse',
@@ -161,12 +178,14 @@ async function readHead(
   const repo = url.ok ? parseRemote(url.stdout) : null
   if (repo === null) {
     debug($, `no GitHub remote in ${cwd}`)
-    return hidden(false, false)
+    return HIDDEN
   }
   const slug = `${repo.owner}/${repo.name}`
 
   // The PR is found by the upstream branch's name, never `gh pr view <branch>`,
-  // which reads a branch named `123` as PR #123.
+  // which reads a branch named `123` as PR #123. `--head` ignores the owner,
+  // so forks' PRs from a branch of the same name (say `main`) are listed too;
+  // ownPr skips them.
   let pr: number | null = null
   let prUrl: string | null = null
   if (upstream !== null) {
@@ -181,32 +200,32 @@ async function readHead(
       '--state',
       'open',
       '--json',
-      'number,url,headRefOid',
+      'number,url,isCrossRepository',
       '--limit',
-      '1',
+      '30',
     ])
     if (!listed.ok) {
-      return hidden(true, true)
+      return { ...HIDDEN, isOffline: true }
     }
-    const found = (json(listed.stdout) as Record<string, unknown>[] | null)?.[0]
-    pr = typeof found?.number === 'number' ? found.number : null
-    prUrl = typeof found?.url === 'string' ? found.url : null
+    const own = ownPr(json(listed.stdout))
+    pr = own?.number ?? null
+    prUrl = own?.url ?? null
   }
 
   const checks = await readCommit($, cwd, slug, at.sha)
   if (!checks.ok) {
-    return hidden(checks.isOffline, upstream !== null)
+    return { head: null, isOffline: checks.isOffline, isMissing: checks.isMissing }
   }
   const summary = summarize(checks.value)
   if (summary === null) {
     debug($, `no checks on ${slug}@${at.sha.slice(0, 7)}`)
-    return hidden(false, upstream !== null)
+    return HIDDEN
   }
 
   return {
     head: { cwd, branch: at.branch, sha: at.sha, summary, pr, prUrl },
     isOffline: false,
-    hasUpstream: upstream !== null,
+    isMissing: false,
   }
 }
 
@@ -240,10 +259,13 @@ let isTicking = false
 let isDue = false
 let isTurnEnded = false
 let lastRefresh = 0
+// The last read that was not a fast poll: the slow reads are timed from it,
+// so pending polls do not keep putting them off.
+let lastFullRefresh = 0
 let lastChange = 0
 let lastSignature = ''
 let graceUntil = 0
-let hasUpstream = false
+let isMissing = false
 // Where the last refresh looked, so a turn that moves HEAD triggers one.
 let lastCwd = ''
 let lastHeadKey = ''
@@ -262,24 +284,42 @@ async function headAt($: EngineInterface, cwd: string) {
   return got.ok ? parseHead(got.stdout) : null
 }
 
-async function refresh($: EngineInterface): Promise<void> {
+/**
+ * How much a read covers. `pending`, the fast poll, reads HEAD and only the
+ * opened PRs still pending. `slow` also reads the finished open ones. `due`, a
+ * read asked for by a push, a new PR, a moved HEAD or the session's start,
+ * also tries again the PRs that failed MAX_OPENED_FAILURES times.
+ */
+type Reach = 'pending' | 'slow' | 'due'
+
+function isOpenedRead(pr: OpenedPr, reach: Reach): boolean {
+  if ((pr.state === 'MERGED' || pr.state === 'CLOSED') && pr.failures === 0) {
+    return false
+  }
+  if (pr.failures >= MAX_OPENED_FAILURES) {
+    return reach === 'due'
+  }
+
+  return reach !== 'pending' || isOpenedPending(pr)
+}
+
+async function refresh($: EngineInterface, reach: Reach): Promise<void> {
   const now = await $.clock.now()
   lastRefresh = now
+  if (reach !== 'pending') {
+    lastFullRefresh = now
+  }
   const cwd = await $.session.cwd()
   const at = await headAt($, cwd)
   lastCwd = cwd
   lastHeadKey = at === null ? '' : `${at.branch} ${at.sha}`
-  const found: HeadRead =
-    at === null
-      ? { head: null, isOffline: false, hasUpstream: false }
-      : await readHead($, cwd, at)
-  hasUpstream = found.hasUpstream
+  const found = at === null ? HIDDEN : await readHead($, cwd, at)
+  isMissing = found.isMissing
 
   const prior = await read($, view)
   const opened: OpenedPr[] = []
   for (const pr of prior.opened) {
-    const isFinished = (pr.state === 'MERGED' || pr.state === 'CLOSED') && pr.failures === 0
-    opened.push(isFinished ? pr : await readOpened($, cwd, pr))
+    opened.push(isOpenedRead(pr, reach) ? await readOpened($, cwd, pr) : pr)
   }
   const next = await update($, view, current => ({
     head: found.head,
@@ -310,19 +350,31 @@ async function tick($: EngineInterface): Promise<void> {
         isDue = true
       }
     }
-    const { head, opened } = await read($, view)
+    const { head, opened, isOffline } = await read($, view)
     const since = now - lastRefresh
+    const sinceFull = now - lastFullRefresh
     const isRunning = head?.summary.state === 'pending' || opened.some(isOpenedPending)
-    const isSettling = now - lastChange < SETTLE_FOR_MS || (head === null && hasUpstream)
-    const isReadDue =
-      isDue ||
-      ((isRunning || now < graceUntil) && since >= config.pollMs) ||
-      (isSettling && since >= SETTLE_EVERY_MS) ||
-      (config.idleMs > 0 && since >= config.idleMs)
-    if (isReadDue) {
+    const isFast = (isRunning || now < graceUntil) && since >= config.pollMs
+    const isSlow =
+      ((now - lastChange < SETTLE_FOR_MS || (head === null && isMissing)) &&
+        sinceFull >= SETTLE_EVERY_MS) ||
+      (config.idleMs > 0 && sinceFull >= config.idleMs)
+    // While `gh` fails, every timed read waits for the offline period.
+    const reach: Reach | null = isDue
+      ? 'due'
+      : isOffline
+        ? since >= OFFLINE_EVERY_MS
+          ? 'slow'
+          : null
+        : isSlow
+          ? 'slow'
+          : isFast
+            ? 'pending'
+            : null
+    if (reach !== null) {
       isDue = false
       isTurnEnded = false
-      await refresh($)
+      await refresh($, reach)
     }
   } finally {
     isTicking = false
@@ -336,6 +388,8 @@ export const register: Register = (on, options) => {
     isDue = true
     $.clock.every(TICK_MS, () => {
       void tick($).catch(error => {
+        // The read that threw is asked for again at the next tick.
+        isDue = true
         debug($, `refresh failed: ${reason(error)}`)
       })
     })

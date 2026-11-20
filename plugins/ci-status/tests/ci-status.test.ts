@@ -8,6 +8,7 @@ import {
   ciText,
   fromRest,
   isOpenedPending,
+  ownPr,
   isPrCreate,
   isPush,
   jsonLines,
@@ -29,6 +30,7 @@ import {
   K8S_STATUS,
   NEXT_RERUN_CHECK_RUNS,
   VSCODE_CHECK_RUNS,
+  VSCODE_PR_LIST_MAIN,
 } from './fixtures'
 
 const rest = (runs: { check_runs: readonly unknown[] }, status: { statuses: readonly unknown[] }) =>
@@ -74,6 +76,17 @@ describe('parsing gh output', () => {
     expect(shortText(rest(VSCODE_CHECK_RUNS, CCONAMI_MAIN_STATUS), 'OPEN')).toBe('✗ 3 failing')
     expect(shortText(null, CCONAMI_PR_11_VIEW.state)).toBe('merged')
     expect(shortText(null, 'OPEN')).toBe('no checks')
+  })
+
+  test("the branch's own PR, never a fork's PR from a branch of the same name", () => {
+    expect(ownPr(VSCODE_PR_LIST_MAIN)).toBeNull()
+    expect(ownPr(CCONAMI_PR_LIST)).toEqual({
+      number: 13,
+      url: 'https://github.com/memyselfandm/cconami/pull/13',
+    })
+    expect(ownPr([...VSCODE_PR_LIST_MAIN, ...CCONAMI_PR_LIST])?.number).toBe(13)
+    expect(ownPr([])).toBeNull()
+    expect(ownPr(null)).toBeNull()
   })
 
   test('one JSON value per line, as gh api --paginate --jq prints', () => {
@@ -241,7 +254,7 @@ function setUp(on: On) {
     branch: 'feature',
     upstream: 'origin/feature',
     remoteUrl: 'git@github.com:acme/widgets.git',
-    prList: [{ number: 7, url: 'https://github.com/acme/widgets/pull/7', headRefOid: SHA }],
+    prList: [{ number: 7, url: 'https://github.com/acme/widgets/pull/7', isCrossRepository: false }],
     runs: { [SHA]: VSCODE_CHECK_RUNS, [PR_SHA]: K8S_CHECK_RUNS },
     statuses: { [SHA]: CCONAMI_MAIN_STATUS, [PR_SHA]: K8S_STATUS },
     prView: { state: 'OPEN', headRefOid: PR_SHA },
@@ -302,14 +315,25 @@ describe('the band', () => {
     const { world, repo, clock } = setUp(on)
     repo.branch = '123'
     repo.upstream = 'origin/123'
-    repo.prList = CCONAMI_PR_LIST.slice(0, 0)
+    repo.prList = []
     await start($, clock)
 
     expect((await band($)).pr).toBeUndefined()
     expect(world.calls).toContain(
-      'gh pr list -R acme/widgets --head 123 --state open --json number,url,headRefOid --limit 1',
+      'gh pr list -R acme/widgets --head 123 --state open --json number,url,isCrossRepository --limit 30',
     )
     expect(world.calls.some(line => line.startsWith('gh pr view'))).toBe(false)
+  })
+
+  test("on main, forks' PRs from their own main are not this branch's PR", async ($, on) => {
+    const { repo, clock } = setUp(on)
+    repo.branch = 'main'
+    repo.upstream = 'origin/main'
+    repo.prList = VSCODE_PR_LIST_MAIN
+    await start($, clock)
+
+    expect((await band($)).pr).toBeUndefined()
+    expect((await band($)).ci).toBeDefined()
   })
 
   test('follows pending, then passing, then failing, through the clock alone', async ($, on) => {
@@ -344,9 +368,10 @@ describe('the band', () => {
     expect(world.calls.length).toBe(settled)
   })
 
-  test('while HEAD is hidden but has an upstream, a slow poll goes on', async ($, on) => {
+  test('while the commit is not on GitHub yet, a slow poll goes on', async ($, on) => {
     const { world, repo, clock } = setUp(on)
-    repo.runs[SHA] = K8S_CHECK_RUNS
+    delete repo.runs[SHA]
+    delete repo.statuses[SHA]
     await start($, clock)
     expect(await band($)).toEqual(NOTHING)
 
@@ -354,9 +379,72 @@ describe('the band', () => {
     const before = world.calls.length
     // A push from another terminal: the checks appear without any hook firing.
     repo.runs[SHA] = CCONAMI_MAIN_CHECK_RUNS
+    repo.statuses[SHA] = CCONAMI_MAIN_STATUS
     await clock.advance(180_000)
     expect(world.calls.length).toBeGreaterThan(before)
     expect((await band($)).ci).toBe('CI ✓ 1/1')
+  })
+
+  test('a repository with no CI stops polling once the settle window ends', async ($, on) => {
+    const { world, repo, clock } = setUp(on)
+    repo.runs[SHA] = K8S_CHECK_RUNS
+    await start($, clock)
+    expect(await band($)).toEqual(NOTHING)
+
+    await clock.advance(16 * 60_000)
+    const settled = world.calls.length
+    await clock.advance(60 * 60_000)
+    expect(world.calls.length).toBe(settled)
+  })
+
+  test('while gh fails, it reads only every 10 minutes', async ($, on) => {
+    const { world, repo, clock } = setUp(on)
+    repo.first = line => (line.startsWith('gh ') ? OFFLINE : undefined)
+    await start($, clock)
+    const after = world.calls.length
+
+    await clock.advance(9 * 60_000)
+    expect(world.calls.length).toBe(after)
+    await clock.advance(60_000)
+    expect(world.calls.length).toBeGreaterThan(after)
+  })
+
+  test('the fast poll skips opened PRs that are not pending', async ($, on) => {
+    const { world, repo, clock } = setUp(on)
+    world.toolText = `${OPENED_URL}\n`
+    repo.runs[PR_SHA] = CCONAMI_MAIN_CHECK_RUNS
+    repo.statuses[PR_SHA] = CCONAMI_MAIN_STATUS
+    repo.runs[SHA] = { total_count: 1, check_runs: [{ name: 'lint', status: 'queued', conclusion: null }] }
+    await start($, clock)
+    await $.tool.call({ tool: 'Bash', command: 'gh pr create' })
+    await clock.advance(TICK)
+    expect((await band($)).opened).toBe('· opened #42 ✓ 1/1')
+
+    const views = () => world.calls.filter(line => line.startsWith(`gh pr view ${OPENED_URL}`)).length
+    const before = views()
+    const headReads = world.calls.length
+    // Past the push's grace period, HEAD is still pending: 30 s polls run.
+    await clock.advance(150_000)
+    expect(world.calls.length).toBeGreaterThan(headReads)
+    expect(views()).toBe(before)
+    // The settle read, 3 minutes after the last, reads it again.
+    await clock.advance(60_000)
+    expect(views()).toBeGreaterThan(before)
+  })
+
+  test('an opened PR that failed 3 reads is no longer read on a timer', async ($, on) => {
+    const { world, repo, clock } = setUp(on)
+    world.toolText = `${OPENED_URL}\n`
+    repo.first = line => (line.startsWith(`gh pr view ${OPENED_URL}`) ? done('', 1, 'HTTP 502') : undefined)
+    repo.runs[SHA] = { total_count: 1, check_runs: [{ name: 'lint', status: 'queued', conclusion: null }] }
+    await start($, clock)
+    await $.tool.call({ tool: 'Bash', command: 'gh pr create' })
+    await clock.advance(10 * 60_000)
+
+    const views = () => world.calls.filter(line => line.startsWith(`gh pr view ${OPENED_URL}`)).length
+    expect(views()).toBe(3)
+    await clock.advance(30 * 60_000)
+    expect(views()).toBe(3)
   })
 
   test(

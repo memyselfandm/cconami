@@ -71,7 +71,8 @@ and `closed` once they are.
   statuses of HEAD, through `gh api`. Of a check that was re-run, only the latest
   attempt counts. Skipped and neutral checks count as passed. It finds the
   repository from the branch's upstream remote, or `origin`, and the PR with
-  `gh pr list --head <upstream branch> --state open`.
+  `gh pr list --head <upstream branch> --state open`, skipping forks' PRs from a
+  branch of the same name.
 - **When it reads.** Every read runs from one five-second timer that the session
   starts; the timer reads GitHub only when a read is due:
   - at session start;
@@ -81,15 +82,20 @@ and `closed` once they are.
     while GitHub registers the new checks;
   - every 3 minutes for 15 minutes after the state last changed, so a late check, a
     re-run started on GitHub or a merged PR still shows;
-  - every 3 minutes while HEAD is hidden but the branch has an upstream, so a push
-    from another terminal shows.
+  - every 3 minutes while GitHub does not have HEAD's commit yet, so a push from
+    another terminal shows. A commit GitHub has, with no checks, is not polled
+    past the 15 minutes.
 
-  Otherwise it does not poll, unless an idle poll is configured.
+  Otherwise it does not poll, unless an idle poll is configured. While `gh` fails
+  (offline, logged out) it reads at most every 10 minutes. The 30-second poll reads
+  only what is pending; PRs the session opened that have finished are read again on
+  the slower reads.
 - **Hidden, never an error.** The band shows nothing outside a git repository, with
   no GitHub remote, when `gh` is missing, logged out or offline, when HEAD has no
   checks, and when the commit is not on GitHub. A failed call is never read as "no
   checks". A PR the session opened is shown only from a read that worked, and none
-  are shown while `gh` fails. After three failed reads such a PR is no longer polled.
+  are shown while `gh` fails. After three failed reads such a PR is no longer polled;
+  a push, a new PR or a moved HEAD tries it again.
   The session keeps at most 10, dropping the oldest merged or closed first. The
   reason for anything hidden goes to the debug log (`claude --debug`), never to the
   chat.
