@@ -29,9 +29,11 @@ invalid; the tests fail if the two differ.
 bao and vault use Go's flag parser, which stops at the first positional
 argument: in `bao read auth/token/lookup-self -field=ttl` the `-field` is
 ignored and the whole token is printed. So only a `-field` placed before the
-path counts. Write a flag that takes a value as `-flag=value` before the path;
-`-format json` (a value as a separate word) ends the options early, and the
-guard then refuses, which is the safe direction.
+path counts. The rule lists the bao/vault flags that take a value
+(`value_options`: `-format`, `-address`, `-namespace` and the rest), so
+`-format json -field=ttl` before the path is read correctly. An unlisted flag
+given its value as a separate word ends the options early, and the guard then
+refuses, which is the safe direction; `-flag=value` always works.
 
 A repository that does require status checks can turn off `gh-pr-merge-auto`
 (see below). `token-lookup` is locked and cannot be turned off.
@@ -55,7 +57,7 @@ rules are added to the generic ones; they never replace them.
         { "command": ["coder"], "words": ["templates", "push"] },
         { "command": ["coder"], "words": ["template", "push"] }
       ],
-      "raw": ["\\bcoder\\b[^;&|\\n]*\\btemplates?\\s+push\\b"]
+      "raw": ["\\bcoder\\b(?:(?!\\bcoder\\b)[^;&|\\n])*?\\btemplates?\\s+push\\b"]
     }
   ]
 }
@@ -93,7 +95,7 @@ A rule:
 | `id` | yes | Lowercase letters, digits and hyphens. |
 | `message` | yes | The refusal. Say why, and name the safe form. |
 | `when` | yes | A list of match entries. The rule fires if **any** entry matches. |
-| `raw` | no | Python regular expressions, used only when the shell parser fails. Write one per `when` entry so that a parser failure does not open the guard. |
+| `raw` | no | Python regular expressions, used only when the shell parser fails or a command is nested past six levels. Write one per `when` entry so that a parser failure does not open the guard. Keep each one linear: never follow a word with an open `[^…]*` scan for a later word, which backtracks in cubic time on repeated input. Instead stop each repeat at the next occurrence of the same word, as the shipped patterns do: `\bcoder\b(?:(?!\bcoder\b)[^;&|\n])*?\btemplates?\s+push\b`. |
 | `locked` | no | `true`: a project cannot turn this rule off. |
 | `$comment` | no | Ignored. |
 
@@ -106,7 +108,7 @@ A match entry matches a simple command when **all** of its keys hold:
 | `flag` | One of these appears after `words` (or after the command word), alone or as `--flag=value`. |
 | `arg_contains` | Some argument contains one of these strings. |
 | `arg_endswith` | Some argument, trailing `/` removed, ends with one of these. |
-| `unless_option` | `{"name": "field", "except": ["id"], "before_positional": true}`: the entry does **not** match when `-field`/`--field` is given after `words` (as `=value` or a separate word) and none of its values is in `except`. With `before_positional`, an option after the first positional word does not count. |
+| `unless_option` | `{"name": "field", "except": ["id"], "before_positional": true, "value_options": ["format"]}`: the entry does **not** match when `-field`/`--field` is given after `words` (as `=value` or a separate word) and none of its values is in `except`. With `before_positional`, an option after the first positional word does not count; `value_options` names the other flags whose value is a separate word, so that value is not taken for the first positional word. |
 
 Add refused and allowed cases for every new rule, covering each `when` entry
 and each condition. In this plugin that means `test-guard-bash-command.sh`,
@@ -119,7 +121,7 @@ It reads the command line as a shell would, tracking quotes, comments,
 here-documents, here-strings and substitutions, and looks at each simple
 command, so chained (`&&`, `;`), piped, prefixed (`sudo`, `timeout`,
 `ssh host`, `pct exec`) and quoted (`bash -c '...'`, `bash -ce '...'`,
-`$(...)`, `bash <<< '...'`, `eval '...' --flag`) forms are refused too.
+`$(...)`, `bash <<< '...'`, `eval '...' --flag`, `watch '...' --flag`, `env -S '...'`) forms are refused too.
 
 A banned command that is only text is allowed, so the rules can be written about:
 quoted as an argument (`git commit -m`, `grep`, `gh pr comment --body`,
@@ -136,14 +138,25 @@ script written to a file and then executed, an interpreter calling out
 above covers that case, and the test suite pins the gap so that closing it is a
 deliberate change.
 
-## Size limit
+## Size limit and time budget
 
-A command over 64 KiB or 5,000 words is refused outright, with a message that
-says why. Checking a very long command could outlast the hook's 10-second
-timeout, and a timed-out hook lets the command through, so a timeout must never
-be the way past the guard. Below the limit, the lookups each rule needs are
-computed once per simple command, so checking stays linear in its length (a
-20,000-word command is refused in well under a second).
+A timed-out hook lets the command through, so the hook's 10-second timeout must
+never be the way past the guard. Three things keep it from being one:
+
+- **Size limit.** A command over 64 KiB or 5,000 words is refused outright, with
+  a message that says why.
+- **Linear checking.** The lookups each rule needs are computed once per simple
+  command, and the raw patterns are written to run in linear time. A
+  20,000-word command is refused in well under a second.
+- **Time budget.** If checking still takes longer than 5 seconds, the command is
+  refused (exit 2) with a message. An interval timer (`SIGALRM`) interrupts even
+  a long regular-expression search, and a clock check between steps covers
+  platforms without it. `GUARD_TIME_BUDGET` can lower the budget, which is how
+  the tests force it, but cannot raise it.
+
+Every simple command at one level is matched through the parser before any
+command nested inside it is checked, so a slow nested command cannot hide a
+later banned one.
 
 ## When the guard cannot run a rule
 

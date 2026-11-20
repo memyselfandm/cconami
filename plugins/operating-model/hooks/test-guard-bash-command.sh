@@ -335,6 +335,30 @@ refused 'too long for the command guard' "echo $(printf 'a %.0s' $(seq 1 5001))"
 refused 'too long for the command guard' "echo $(head -c 70000 /dev/zero | tr '\0' 'x')"
 allowed "echo $(printf 'a %.0s' $(seq 1 4990))"
 
+
+# --- re-review findings
+# watch joins its arguments and runs them through sh -c; env -S splits its
+# argument into a command.
+refused "$AUTO" "watch 'gh pr' merge --auto"
+refused "$AUTO" "watch -n 5 'gh pr merge 7 --auto'"
+refused "$AUTO" "env -S 'gh pr merge 7 --auto'"
+refused "$AUTO" "env --split-string='gh pr merge 7' --auto"
+refused "$LOOKUP" "env -S'bao token lookup'"
+refused "$LOOKUP" "sudo env -S 'bao token lookup'"
+allowed "watch -n 5 'gh pr checks 7'"
+allowed "env -S 'gh pr merge 7 --squash'"
+allowed 'gh run watch 5'
+# Flags that take a value do not end bao's and vault's options early.
+allowed 'bao read -format json -field=ttl auth/token/lookup-self'
+allowed 'vault read -address https://vault.example:8200 -field=ttl auth/token/lookup-self'
+allowed 'bao write -format json -field=ttl auth/token/lookup-self'
+refused "$LOOKUP" 'bao read -format json auth/token/lookup-self'
+refused "$LOOKUP" 'bao write -format json auth/token/lookup-self'
+# eval and ssh are checked as one joined command line, not argument by argument.
+allowed "eval echo 'gh pr merge --auto'"
+allowed "ssh host echo 'bao token lookup'"
+refused "$LOOKUP" 'ssh root@host "bao token lookup"'
+
 # --- raw fallbacks of the generic rules
 raw_cases "$project" gh-pr-merge-auto \
   'banned:gh pr merge 5 --squash --auto' \
@@ -347,6 +371,8 @@ raw_cases "$project" token-lookup \
   'banned:bao read auth/token/lookup-self' \
   'banned:bao read auth/token/lookup-self -field=ttl' \
   'banned:bao read -field=id auth/token/lookup-self' \
+  'banned:bao read -format json auth/token/lookup-self' \
+  'safe:bao read -format json -field=ttl auth/token/lookup-self' \
   'banned:bao write -f auth/token/lookup-self' \
   'banned:vault write auth/token/lookup token=x' \
   'banned:vault write auth/token/lookup-accessor accessor=y' \
@@ -502,6 +528,71 @@ if shipped != guard.EMBEDDED_RULES:
     sys.exit(1)
 EOF
 
+# ===== the time budget =======================================================
+# A command that sends the original guard's raw patterns into cubic time must be
+# refused, fast, through the parsed path.
+count=$((count + 1))
+python3 - "$hook" <<'EOF' || failed
+import json, subprocess, sys, time
+command = "eval " * 8 + "bao read " * 800 + "; gh pr merge 7 --auto"
+payload = json.dumps({"tool_name": "Bash", "tool_input": {"command": command}})
+start = time.monotonic()
+done = subprocess.run([sys.executable, sys.argv[1]], input=payload, capture_output=True, text=True, timeout=10)
+took = time.monotonic() - start
+print(f"guard-bash-command: the crafted eval/bao-read command: exit {done.returncode} in {took:.2f}s")
+if done.returncode != 2 or "gh pr checks" not in done.stderr or took > 2:
+    print(f"FAIL: crafted command: exit {done.returncode}, {took:.2f}s: {done.stderr[:200]}", file=sys.stderr)
+    sys.exit(1)
+EOF
+
+# Forcing the budget down makes the guard refuse rather than run past it.
+count=$((count + 1))
+python3 - "$hook" <<'EOF' || failed
+import json, os, subprocess, sys
+command = "echo " + "word " * 4000
+payload = json.dumps({"tool_name": "Bash", "tool_input": {"command": command}})
+env = dict(os.environ, GUARD_TIME_BUDGET="0.000001")
+done = subprocess.run([sys.executable, sys.argv[1]], input=payload, capture_output=True, text=True,
+                      timeout=10, env=env)
+if done.returncode != 2 or "could not finish checking" not in done.stderr:
+    print(f"FAIL: forced time budget: exit {done.returncode}: {done.stderr[:200]}", file=sys.stderr)
+    sys.exit(1)
+EOF
+count=$((count + 1))
+python3 - "$hook" <<'EOF' || failed
+import importlib.util, os, sys
+spec = importlib.util.spec_from_file_location("guard", sys.argv[1])
+guard = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(guard)
+os.environ["GUARD_TIME_BUDGET"] = "600"
+if guard._budget() != guard.TIME_BUDGET:
+    print("FAIL: GUARD_TIME_BUDGET raised the budget", file=sys.stderr)
+    sys.exit(1)
+EOF
+
+# Every raw pattern runs in linear time: none takes long on 60 KB of the
+# repetition that would make a backtracking scan explode.
+count=$((count + 1))
+python3 - "$hook" "$example_project" <<'EOF' || failed
+import importlib.util, sys, time
+spec = importlib.util.spec_from_file_location("guard", sys.argv[1])
+guard = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(guard)
+rules = guard.load_rules(sys.argv[2], [], [])
+units = ["bao read ", "bao write ", "bao ", "read ", "bao token ", "bao print ", "vault read -field ",
+         "gh pr merge ", "gh ", "pr merge ", "coder templates ", "coder ", "auth/token/lookup "]
+bad = 0
+for unit in units:
+    text = unit * (60000 // len(unit))
+    start = time.monotonic()
+    guard.check_raw(text, rules)
+    took = time.monotonic() - start
+    if took > 1:
+        print(f"FAIL: raw patterns took {took:.2f}s on {unit!r} repeated", file=sys.stderr)
+        bad = 1
+sys.exit(bad)
+EOF
+
 # ===== a long command is refused fast ======================================
 count=$((count + 1))
 python3 - "$hook" <<'EOF' || failed
@@ -533,7 +624,7 @@ def pieces(rule):
             if key in when:
                 yield f"when[{w}].{key}", lambda r, w=w, key=key: r["when"][w].pop(key)
         option = when.get("unless_option", {})
-        for key in ("except", "before_positional"):
+        for key in ("except", "before_positional", "value_options"):
             if key in option:
                 yield f"when[{w}].unless_option.{key}", \
                     lambda r, w=w, key=key: r["when"][w]["unless_option"].pop(key)

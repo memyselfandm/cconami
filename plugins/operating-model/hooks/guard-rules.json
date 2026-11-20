@@ -31,7 +31,7 @@
         }
       ],
       "raw": [
-        "\\bgh\\b[^;&|\\n]*\\bpr\\s+merge\\b[^;&|\\n]*--auto\\b",
+        "\\bgh\\b(?:(?!\\bgh\\b)[^;&|\\n])*?\\bpr\\s+merge\\b(?:(?!\\bpr\\s+merge\\b)[^;&|\\n])*?--auto\\b",
         "enablePullRequestAutoMerge"
       ]
     },
@@ -76,7 +76,23 @@
             "except": [
               "id"
             ],
-            "before_positional": true
+            "before_positional": true,
+            "value_options": [
+              "address",
+              "agent-address",
+              "ca-cert",
+              "ca-path",
+              "client-cert",
+              "client-key",
+              "format",
+              "header",
+              "mfa",
+              "namespace",
+              "ns",
+              "policy-override",
+              "tls-server-name",
+              "wrap-ttl"
+            ]
           }
         },
         {
@@ -97,15 +113,31 @@
             "except": [
               "id"
             ],
-            "before_positional": true
+            "before_positional": true,
+            "value_options": [
+              "address",
+              "agent-address",
+              "ca-cert",
+              "ca-path",
+              "client-cert",
+              "client-key",
+              "format",
+              "header",
+              "mfa",
+              "namespace",
+              "ns",
+              "policy-override",
+              "tls-server-name",
+              "wrap-ttl"
+            ]
           }
         }
       ],
       "raw": [
-        "\\b(?:bao|vault)\\b[^;&|\\n]*\\btoken\\s+lookup\\b",
-        "\\b(?:bao|vault)\\b[^;&|\\n]*\\bprint\\s+token\\b",
-        "\\b(?:bao|vault)\\b[^;&|\\n]*\\bread\\b(?:(?!--?field[= ](?!id\\b))[^;&|\\n])*auth/token/lookup-self",
-        "\\b(?:bao|vault)\\b[^;&|\\n]*\\bwrite\\b(?:(?!--?field[= ](?!id\\b))[^;&|\\n])*auth/token/lookup(?:-self|-accessor)?\\b"
+        "\\b(?:bao|vault)\\b(?:(?!\\b(?:bao|vault)\\b)[^;&|\\n])*?\\btoken\\s+lookup\\b",
+        "\\b(?:bao|vault)\\b(?:(?!\\b(?:bao|vault)\\b)[^;&|\\n])*?\\bprint\\s+token\\b",
+        "\\b(?:bao|vault)\\b(?:(?!\\b(?:bao|vault)\\b)[^;&|\\n])*?\\bread\\b(?:(?!\\bread\\b|--?field[= ](?!id\\b)|auth/token/lookup-self)[^;&|\\n])*auth/token/lookup-self",
+        "\\b(?:bao|vault)\\b(?:(?!\\b(?:bao|vault)\\b)[^;&|\\n])*?\\bwrite\\b(?:(?!\\bwrite\\b|--?field[= ](?!id\\b)|auth/token/lookup)[^;&|\\n])*auth/token/lookup(?:-self|-accessor)?\\b"
       ]
     }
   ]

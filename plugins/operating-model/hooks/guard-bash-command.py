@@ -36,8 +36,9 @@ Failure behaviour:
   Claude Code shows to the user without blocking the call). A refusal still
   exits 2.
 - A command longer than MAX_COMMAND_BYTES or MAX_COMMAND_WORDS is refused
-  outright, so that a hook timeout (which lets a command through) is never a
-  way past the guard.
+  outright, and checking that takes longer than TIME_BUDGET seconds ends in a
+  refusal, so that a hook timeout (which lets a command through) is never a
+  way past the guard. The raw patterns are written to run in linear time.
 - A hook input that is not a Bash tool call with a string command passes
   silently (exit 0), as in the original guard.
 - If the shell parser itself fails on a command, the guard does not open: it
@@ -55,7 +56,9 @@ import bisect
 import json
 import os
 import re
+import signal
 import sys
+import time
 from pathlib import Path
 
 # Commands whose arguments are text, not something a shell will execute.
@@ -67,8 +70,9 @@ TEXT_TOOLS = {
 
 SHELLS = {"bash", "sh", "zsh", "dash", "ksh", "fish"}
 
-# Commands whose every quoted argument is a command line.
-RUNS_ARGUMENTS = {"eval", "ssh", "watch", "tmux", "parallel"}
+# Commands whose every quoted argument is a command line. (eval, watch, ssh and
+# env -S join their arguments instead; see _command_strings.)
+RUNS_ARGUMENTS = {"tmux", "parallel"}
 
 SHELL_KEYWORDS = {"if", "then", "else", "elif", "do", "while", "until", "{", "!", "time"}
 ASSIGNMENT = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
@@ -80,13 +84,25 @@ PROJECT_RULES = Path(".claude") / "guard-rules.json"
 RULE_ID = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 RULE_KEYS = {"id", "message", "when", "raw", "locked", "$comment"}
 WHEN_KEYS = {"command", "words", "flag", "arg_contains", "arg_endswith", "unless_option"}
-OPTION_KEYS = {"name", "except", "before_positional"}
+OPTION_KEYS = {"name", "except", "before_positional", "value_options"}
 MAX_RULES_BYTES = 256 * 1024
 
 # Above these sizes a command is refused outright: checking it could outlast
 # the hook timeout, and a timed-out hook lets the command through.
 MAX_COMMAND_BYTES = 64 * 1024
 MAX_COMMAND_WORDS = 5000
+
+# A hard time budget for checking one command, in seconds. Past it the command
+# is refused: the hook's own timeout lets a command through, so running out of
+# time must end in a refusal, never in that timeout. GUARD_TIME_BUDGET can only
+# lower it (the tests use that to force the budget).
+TIME_BUDGET = 5.0
+OUT_OF_TIME = (
+    "This command is refused because the command guard could not finish checking "
+    "it within {budget:g} seconds. Safe form: split it into smaller commands, or "
+    "put long content in a file with your file-writing tool and run a short "
+    "command that reads it."
+)
 TOO_LONG = (
     "This command is refused because it is too long for the command guard to "
     "check ({size}; the limit is {max_bytes} bytes and {max_words} words). Safe "
@@ -114,7 +130,7 @@ EMBEDDED_RULES = {
                 {"command": ["gh"], "words": ["api"], "arg_contains": ["enablePullRequestAutoMerge"]},
             ],
             "raw": [
-                r"\bgh\b[^;&|\n]*\bpr\s+merge\b[^;&|\n]*--auto\b",
+                r"\bgh\b(?:(?!\bgh\b)[^;&|\n])*?\bpr\s+merge\b(?:(?!\bpr\s+merge\b)[^;&|\n])*?--auto\b",
                 r"enablePullRequestAutoMerge",
             ],
         },
@@ -137,7 +153,12 @@ EMBEDDED_RULES = {
                     "command": ["bao", "vault"],
                     "words": ["read"],
                     "arg_endswith": ["auth/token/lookup-self"],
-                    "unless_option": {"name": "field", "except": ["id"], "before_positional": True},
+                    "unless_option": {
+                        "name": "field",
+                        "except": ["id"],
+                        "before_positional": True,
+                        "value_options": ["address", "agent-address", "ca-cert", "ca-path", "client-cert", "client-key", "format", "header", "mfa", "namespace", "ns", "policy-override", "tls-server-name", "wrap-ttl"],
+                    },
                 },
                 {
                     "command": ["bao", "vault"],
@@ -147,14 +168,19 @@ EMBEDDED_RULES = {
                         "auth/token/lookup-self",
                         "auth/token/lookup-accessor",
                     ],
-                    "unless_option": {"name": "field", "except": ["id"], "before_positional": True},
+                    "unless_option": {
+                        "name": "field",
+                        "except": ["id"],
+                        "before_positional": True,
+                        "value_options": ["address", "agent-address", "ca-cert", "ca-path", "client-cert", "client-key", "format", "header", "mfa", "namespace", "ns", "policy-override", "tls-server-name", "wrap-ttl"],
+                    },
                 },
             ],
             "raw": [
-                r"\b(?:bao|vault)\b[^;&|\n]*\btoken\s+lookup\b",
-                r"\b(?:bao|vault)\b[^;&|\n]*\bprint\s+token\b",
-                r"\b(?:bao|vault)\b[^;&|\n]*\bread\b(?:(?!--?field[= ](?!id\b))[^;&|\n])*auth/token/lookup-self",
-                r"\b(?:bao|vault)\b[^;&|\n]*\bwrite\b(?:(?!--?field[= ](?!id\b))[^;&|\n])*auth/token/lookup(?:-self|-accessor)?\b",
+                r"\b(?:bao|vault)\b(?:(?!\b(?:bao|vault)\b)[^;&|\n])*?\btoken\s+lookup\b",
+                r"\b(?:bao|vault)\b(?:(?!\b(?:bao|vault)\b)[^;&|\n])*?\bprint\s+token\b",
+                r"\b(?:bao|vault)\b(?:(?!\b(?:bao|vault)\b)[^;&|\n])*?\bread\b(?:(?!\bread\b|--?field[= ](?!id\b)|auth/token/lookup-self)[^;&|\n])*auth/token/lookup-self",
+                r"\b(?:bao|vault)\b(?:(?!\b(?:bao|vault)\b)[^;&|\n])*?\bwrite\b(?:(?!\bwrite\b|--?field[= ](?!id\b)|auth/token/lookup)[^;&|\n])*auth/token/lookup(?:-self|-accessor)?\b",
             ],
         },
     ],
@@ -209,7 +235,7 @@ class Words:
         return found
 
 
-def _option_values(tokens, start, name, before_positional):
+def _option_values(tokens, start, name, before_positional, value_options=()):
     """Values given to `-name`/`--name` after position `start`, as `-name=v`
     or `-name v`. With `before_positional`, only options before the first
     word that is not an option count: Go's flag parser, used by bao and
@@ -224,6 +250,8 @@ def _option_values(tokens, start, name, before_positional):
             if k + 1 < len(tokens):
                 values.append(tokens[k + 1])
             k += 1
+        elif before_positional and t.lstrip("-") in value_options and t.startswith("-") and "=" not in t:
+            k += 1                      # `-format json`: the next word is this flag's value
         elif before_positional and not t.startswith("-"):
             break
         k += 1
@@ -255,7 +283,10 @@ def _when_matches(words, i, when):
             return False
     if "unless_option" in when:
         option = when["unless_option"]
-        values = _option_values(tokens, start, option["name"], option.get("before_positional", False))
+        values = _option_values(
+            tokens, start, option["name"], option.get("before_positional", False),
+            option.get("value_options", ()),
+        )
         if values and not set(values) & set(option.get("except", [])):
             return False
     return True
@@ -312,6 +343,8 @@ def parse_rule(entry):
             _string_list(option.get("except", []), f"{where}.unless_option.except", allow_empty=True)
             if not isinstance(option.get("before_positional", False), bool):
                 raise ValueError(f"{where}.unless_option.before_positional must be true or false")
+            _string_list(option.get("value_options", []), f"{where}.unless_option.value_options",
+                         allow_empty=True)
     raw = []
     for pattern in _string_list(entry.get("raw", []), f"rule {rule_id}: raw", allow_empty=True):
         try:
@@ -690,33 +723,71 @@ class Parser:
 
 # --- decision --------------------------------------------------------------
 
+class OutOfTime(Exception):
+    """Raised when checking passes the time budget."""
+
+
+_deadline = None
+
+
+def _tick():
+    """Raise OutOfTime once the budget is spent. The interval timer in main
+    interrupts even a long regular-expression search; this check covers a
+    platform without SIGALRM."""
+    if _deadline is not None and time.monotonic() > _deadline:
+        raise OutOfTime()
+
+
 def check_raw(text, rules):
     """Judge raw text with each rule's `raw` patterns. Used only if the
     parser fails, or past MAX_DEPTH."""
     for rule in rules:
         for pattern in rule.raw:
+            _tick()
             if pattern.search(text):
                 return rule.message
     return None
 
 
+# Commands that join their arguments with spaces into one command line and run
+# it: `eval a b`, `watch a b` (through `sh -c`).
+JOINS_ARGUMENTS = {"eval", "watch"}
+
+
 def _command_strings(words):
-    """The arguments of a simple command that it will run as command lines:
-    every quoted argument of `ssh`, `eval` and the like, the arguments that
-    `eval` and `ssh` join into one command line, and the argument after any
-    option cluster holding `c` once a shell has been named (`bash -c`,
-    `bash -ce`, `kubectl exec -- sh -c`).
+    """The command lines a simple command will run that are not its own words:
+    - the arguments of `eval` and `watch`, and the remote command of `ssh`,
+      joined with spaces as the shell joins them (`eval 'gh pr merge 7' --auto`);
+    - the split string of `env -S` / `--split-string`, with what follows it;
+    - every quoted argument of `tmux` and `parallel`;
+    - the argument after any option cluster holding `c` once a shell has been
+      named (`bash -c`, `bash -ce`, `kubectl exec -- sh -c`).
     """
-    name = os.path.basename(words[0])
-    if name in RUNS_ARGUMENTS:
-        found = [w for w in words[1:] if re.search(r"\s", w)]
-        # The shell joins eval's arguments, and ssh's remote command, with
-        # spaces before running them: `eval 'gh pr merge 7' --auto`.
-        joined = words[1:] if name == "eval" else _ssh_remote_command(words) if name == "ssh" else []
-        if len(joined) > 1:
-            found.append(" ".join(joined))
-        return found
     found = []
+    for k, word in enumerate(words):
+        name = os.path.basename(word)
+        if name in JOINS_ARGUMENTS and len(words) > k + 1:
+            found.append(" ".join(words[k + 1:]))
+            break
+        if name == "env":
+            rest = words[k + 1:]
+            for j, arg in enumerate(rest):
+                if arg in ("-S", "--split-string") and j + 1 < len(rest):
+                    found.append(" ".join(rest[j + 1:]))
+                elif arg.startswith("--split-string="):
+                    found.append(" ".join([arg.split("=", 1)[1]] + rest[j + 1:]))
+                elif arg.startswith("-S") and len(arg) > 2:
+                    found.append(" ".join([arg[2:]] + rest[j + 1:]))
+                else:
+                    continue
+                break
+            break
+    name = os.path.basename(words[0])
+    if name == "ssh":
+        remote = _ssh_remote_command(words)
+        return found + ([" ".join(remote)] if remote else [])
+    if name in RUNS_ARGUMENTS:
+        return found + [w for w in words[1:] if re.search(r"\s", w)]
     seen_shell = name in SHELLS | {"su", "script", "flock"}
     for k, word in enumerate(words[1:], start=1):
         if seen_shell and re.fullmatch(r"-[A-Za-z]*c[A-Za-z]*", word):
@@ -727,18 +798,28 @@ def _command_strings(words):
 
 
 def check(command, rules, depth=0):
-    """Return a refusal message, or None if the command is allowed."""
+    """Return a refusal message, or None if the command is allowed.
+
+    Every simple command at this level is matched through the parser first;
+    only then are the command lines nested inside them (quoted, substituted,
+    here-documents) checked, so a slow nested one cannot hide a later banned
+    command at this level."""
+    _tick()
     if depth > MAX_DEPTH:
         return check_raw(command, rules)
     try:
         parser = Parser(command)
         parser.parse()
         parser.resolve_herestrings()
+    except OutOfTime:
+        raise
     except Exception:  # noqa: BLE001 - a parser bug must not open the guard
         return check_raw(command, rules)
 
     commands = {name for rule in rules for when in rule.when for name in when["command"]}
+    nested = []
     for words, _sep, _level in parser.segments:
+        _tick()
         name, words = _command_name(words)
         if not words or name in TEXT_TOOLS:
             continue
@@ -749,13 +830,10 @@ def check(command, rules, depth=0):
             for rule in rules:
                 if rule_matches(rule, indexed, i):
                     return rule.message
-        for inner in _command_strings(words):
-            message = check(inner, rules, depth + 1)
-            if message:
-                return message
+        nested.extend(_command_strings(words))
 
-    for script in parser.scripts:
-        message = check(script, rules, depth + 1)
+    for inner in nested + parser.scripts:
+        message = check(inner, rules, depth + 1)
         if message:
             return message
     return None
@@ -776,11 +854,24 @@ def too_long(command):
 
 def _report(lines):
     for line in lines:
-        sys.stderr.write(line if line.startswith("guard-bash-command:") else f"guard-bash-command: {line}")
+        sys.stderr.write(line if line.startswith("guard-bash-command: ") else f"guard-bash-command: {line}")
         sys.stderr.write("\n")
 
 
+def _budget():
+    try:
+        requested = float(os.environ.get("GUARD_TIME_BUDGET", TIME_BUDGET))
+    except ValueError:
+        requested = TIME_BUDGET
+    return min(TIME_BUDGET, requested) if requested > 0 else TIME_BUDGET
+
+
+def _on_alarm(_signum, _frame):
+    raise OutOfTime()
+
+
 def main():
+    global _deadline
     try:
         payload = json.load(sys.stdin)
     except (ValueError, RecursionError):
@@ -797,21 +888,35 @@ def main():
         sys.stderr.write(message + "\n")
         return 2
 
-    # The project directory, and whether it came from Claude Code itself.
-    # The cwd field follows the session's working directory, so a project
-    # file found through it may add rules but may not turn any off.
-    project_dir = os.environ.get("CLAUDE_PROJECT_DIR")
-    from_env = bool(project_dir)
-    if not project_dir:
-        cwd = payload.get("cwd")
-        project_dir = cwd if isinstance(cwd, str) else None
-
-    problems, notices = [], []
-    rules = load_rules(project_dir, problems, notices, from_env=from_env)
+    budget = _budget()
+    _deadline = time.monotonic() + budget
+    timer = hasattr(signal, "setitimer") and hasattr(signal, "SIGALRM")
+    if timer:
+        signal.signal(signal.SIGALRM, _on_alarm)
+        signal.setitimer(signal.ITIMER_REAL, budget)
     try:
-        message = check(command, rules)
-    except RecursionError:
-        message = check_raw(command, rules)
+        # The project directory, and whether it came from Claude Code itself.
+        # The cwd field follows the session's working directory, so a project
+        # file found through it may add rules but may not turn any off.
+        project_dir = os.environ.get("CLAUDE_PROJECT_DIR")
+        from_env = bool(project_dir)
+        if not project_dir:
+            cwd = payload.get("cwd")
+            project_dir = cwd if isinstance(cwd, str) else None
+
+        problems, notices = [], []
+        rules = load_rules(project_dir, problems, notices, from_env=from_env)
+        try:
+            message = check(command, rules)
+        except RecursionError:
+            message = check_raw(command, rules)
+    except OutOfTime:
+        sys.stderr.write(OUT_OF_TIME.format(budget=budget) + "\n")
+        return 2
+    finally:
+        if timer:
+            signal.setitimer(signal.ITIMER_REAL, 0)
+
     if message:
         sys.stderr.write(
             message
@@ -832,6 +937,9 @@ def main():
 if __name__ == "__main__":
     try:
         sys.exit(main())
+    except OutOfTime:
+        sys.stderr.write(OUT_OF_TIME.format(budget=TIME_BUDGET) + "\n")
+        sys.exit(2)
     except Exception as exc:  # noqa: BLE001 - fail open, and say so
         sys.stderr.write(
             f"guard-bash-command: internal error ({type(exc).__name__}: {exc}); "

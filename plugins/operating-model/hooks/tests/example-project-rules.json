@@ -11,7 +11,7 @@
         { "command": ["coder"], "words": ["template", "push"] },
         { "command": ["coder"], "words": ["template", "create"] }
       ],
-      "raw": ["\\bcoder\\b[^;&|\\n]*\\btemplates?\\s+(?:push|create)\\b"]
+      "raw": ["\\bcoder\\b(?:(?!\\bcoder\\b)[^;&|\\n])*?\\btemplates?\\s+(?:push|create)\\b"]
     }
   ]
 }
