@@ -12,6 +12,7 @@ installed from this repository by name.
 | [`mcp-health`](mcp-health/) | Shows a band above the prompt when a plugin's MCP server is not connected, naming the server and the next step |
 | [`token-budget`](token-budget/) | Shows the session's token spend against a budget in a band above the prompt, with a warning at 90% and an alert at 100% |
 | [`guardrail-notice`](guardrail-notice/) | Shows a card in the chat and an entry above the prompt when a hook refuses a tool call, with the hook's message and the safe form it names |
+| [`omc-watchdog`](omc-watchdog/) | Shows a band above the prompt when an oh-my-claudecode run in this session is dead (active but stale) or looping, with its mode and phase |
 
 ## Install
 
@@ -24,6 +25,7 @@ At the prompt of a terminal session:
 /plugin install mcp-health --marketplace memyselfandm/cconami
 /plugin install token-budget --marketplace memyselfandm/cconami
 /plugin install guardrail-notice --marketplace memyselfandm/cconami
+/plugin install omc-watchdog --marketplace memyselfandm/cconami
 ```
 
 Or from a shell:
@@ -35,6 +37,7 @@ claude plugin install ci-status --marketplace memyselfandm/cconami
 claude plugin install mcp-health --marketplace memyselfandm/cconami
 claude plugin install token-budget --marketplace memyselfandm/cconami
 claude plugin install guardrail-notice --marketplace memyselfandm/cconami
+claude plugin install omc-watchdog --marketplace memyselfandm/cconami
 ```
 
 Choose the user scope to have a mod in every session. To pick up a change after the
@@ -379,6 +382,146 @@ by hand:
    reaching the mod as `deny`: do not rely on the mod, and report it.
 5. Ask for `git status`: nothing new appears. Press Dismiss: the line goes, and the
    card shows "Cleared".
+
+## omc-watchdog
+
+A band above the prompt, shown only when an oh-my-claudecode (OMC) run in this
+session is dead or looping:
+
+```
+autopilot active but stale for 3h; cancel or resume (phase: execution)
+ralph looping: reinforcement 7, iteration 9/10
+```
+
+One line per mode in trouble, in the warning colour. With no OMC state, with
+every mode healthy or ended, or while a survey is showing, nothing is drawn. OMC's
+HUD shows the active mode, but not whether the run behind it is still alive.
+
+- **Which modes.** ralph, autopilot, team and ultragoal: the modes whose stop hook
+  keeps a run going.
+- **Stale.** The mode is `active: true`, and its latest activity time is more than
+  2 hours old (`staleHours`). The activity time is the latest of
+  `last_checked_at`, `updated_at` and `started_at`, which is OMC's own
+  `isStaleState` rule in `scripts/persistent-mode.mjs`, and also of
+  `_meta.updatedAt`, which OMC's `state_write` tool stamps on files (such as
+  team's) that carry none of the others. Exactly the threshold is not yet stale,
+  as in OMC. An active state with no readable time at all is shown as stale "with
+  no activity time recorded". A stale run is reported as stale even when its
+  counters are high: a dead run is not looping.
+- **Looping.** The mode is active and fresh, and its `reinforcement_count` has
+  reached 5 (`reinforcementLimit`), or its `iteration` has reached
+  `max_iterations`. Counts stored as strings, as `state_write` stores some, are
+  read as numbers.
+- **The phase.** `current_phase ?? phase ?? stage`, the order OMC reads it in.
+  Left out of the line when none is set.
+- **Read only.** The mod reads the state files with `$.fs.read`, and runs `git`
+  only to locate them (`rev-parse` and `remote get-url`). It never writes or
+  deletes OMC state and never calls OMC's tools. The tests fail if a write or any
+  other command happens.
+- **When it reads.** At session start, every 60 seconds, after a `/clear` or a
+  `/resume` (the session id changes), and at once after a tool call that may
+  have changed OMC's state: one of OMC's `state_*` or cancel tools, a call that
+  names an OMC mode skill (`oh-my-claudecode:cancel`, `:ralph`, `:autopilot`,
+  `:team`, `:ultragoal`), or any call whose input mentions `.omc/state`. That hook
+  only observes: it returns the call's result unchanged and reads on a zero-delay
+  timer.
+
+### The session id
+
+The mod reads only this session's state. OMC keys session-scoped state by the
+Claude Code session id ("When a session ID is present, state is stored in
+session scope under `.omc/state/sessions/{sessionId}/`", OMC `docs/HOOKS.md`, Mode
+State Management), which its hooks get as `session_id`. A mod gets the same id
+from `$.session.id()`, which the engine types document as "the session's id (the
+transcript file's name)"; `session.end` names it as "`$.session.id()` until
+now". A session id that OMC would refuse in a path (anything but letters, digits,
+`-` and `_`) is not used.
+
+For each mode it reads `<root>/state/sessions/<id>/<mode>-state.json`. A file
+there that names another session in `session_id` is ignored. If none is usable, it
+reads the legacy `<root>/state/<mode>-state.json`, but only when that file's
+`session_id` is this session's, as OMC's `readStateFileWithSession` does.
+
+### The state root
+
+Found as OMC 5.8.6's `getOmcRoot()` finds it (`src/lib/worktree-paths.ts`), from
+the session's working directory:
+
+1. **`OMC_STATE_DIR`** set: `$OMC_STATE_DIR/<project id>`, or
+   `$OMC_STATE_DIR/non-git` with neither a repository nor a workspace marker. The
+   project id is `getProjectIdentifier()`'s: with a `.omc-workspace` marker,
+   `<id>-<hash of id>` when the marker names an `id`, else
+   `<directory name>-<hash of its path>`; otherwise
+   `<name of the primary checkout>-<hash of the origin URL, or of that checkout's path>`.
+   The hash is the first 16 hex digits of SHA-256. A linked worktree resolves to
+   its primary checkout (`git rev-parse --git-common-dir`), so all its worktrees
+   share one id.
+2. A **`.omc-workspace`** marker in the working directory or a parent, nearest
+   first, stopping before the home directory: `<marker directory>/.omc`.
+   `OMC_DISABLE_MULTIREPO=1` turns the marker off, as in OMC.
+3. The **git top level**'s `.omc`, climbed to the outermost superproject when
+   inside a submodule.
+4. **Outside a repository**, `$HOME/.omc`. OMC 5.8.6 no longer uses a `.omc` in
+   the working directory there ("all cwd variants use the canonical `$HOME/.omc/`
+   root", OMC `docs/REFERENCE.md`). Since the mod reads only this session's
+   files, that shared root shows nothing from other sessions.
+
+The root is worked out once per working directory and kept until the directory
+changes or the session restarts.
+
+### What it does not do
+
+- It does not apply OMC's check that refuses a workspace marker in a sensitive
+  location (`~/.ssh`, `~/.config` and similar). A marker there is unlikely, and
+  the files read would still be keyed by this session's id.
+- It does not scan other session directories for a file whose `session_id`
+  names this session, which OMC's reader also tries. OMC writes session state
+  under the session's own directory, so that fallback covers only files moved by
+  hand.
+- It does not watch other modes (ultrapilot, pipeline, swarm, omc-teams), which
+  OMC 5.0 retired.
+
+Settings, under `/config` or `pluginConfigs.omc-watchdog.options` in
+`settings.json`:
+
+| Setting | Default | What it does |
+|---|---|---|
+| `staleHours` | 2 | Hours without activity after which an active mode is stale; 0 or less uses 2 |
+| `reinforcementLimit` | 5 | The `reinforcement_count` at which an active mode is looping; 0 or less uses 5 |
+
+Its tests run with `claude plugin test plugins/omc-watchdog`. Their state files
+are copies of real ones OMC 5.8.6 wrote (autopilot and ralph by its hooks, team by
+its `state_write` tool), with prompts, paths and ids replaced. Hooks of the test's
+own stand for the session's id and directory, the environment, the files and
+`git`, and the project ids are checked against `shasum -a 256`.
+`bash plugins/omc-watchdog/tests/mutation-check.sh` breaks one behaviour at a time
+and fails if the tests miss any; CI runs it.
+
+### Owner check before relying on it
+
+The tests cannot run a live session, so three things are unverified: that
+`$.session.id()` in a live session equals the id OMC's hooks write under, that
+`$.fs.read` reads the state root without a prompt (it can lie outside the
+project, under `$HOME/.omc` or `OMC_STATE_DIR`), and that the band draws. Check
+once, by hand, in a scratch repository:
+
+1. `d=$(mktemp -d) && git -C "$d" init -q && cd "$d"`, then
+   `claude --plugin-dir <cconami checkout>/plugins/omc-watchdog`.
+2. Start a run: `/oh-my-claudecode:ralph count to three slowly`. Once it has
+   started, stop it with Esc. Expect no band: the run is fresh.
+3. In another terminal, find the state file:
+   `ls "$d"/.omc/state/sessions/*/ralph-state.json`. The directory name should be
+   the session id shown by `/status`. If it is not, the mod reads the wrong
+   directory: report it.
+4. Make it look looping, keeping a backup: in that terminal, run
+   `f=$(ls "$d"/.omc/state/sessions/*/ralph-state.json) && cp "$f" "$f.bak"`, then
+   `python3 -c 'import json,sys,datetime as d; p=sys.argv[1]; s=json.load(open(p)); s.pop("_meta",None); s.update(active=True, reinforcement_count=7, iteration=9, max_iterations=10, last_checked_at=d.datetime.now(d.timezone.utc).isoformat()); json.dump(s,open(p,"w"))' "$f"`.
+   Within a minute the band reads `ralph looping: reinforcement 7, iteration 9/10`.
+5. Make it look dead:
+   `python3 -c 'import json,sys,datetime as d; p=sys.argv[1]; s=json.load(open(p)); t=(d.datetime.now(d.timezone.utc)-d.timedelta(hours=3)).isoformat(); s.update(last_checked_at=t, started_at=t, updated_at=t); json.dump(s,open(p,"w"))' "$f"`.
+   Within a minute the band reads `ralph active but stale for 3h; cancel or resume`.
+6. Run `/oh-my-claudecode:cancel`, or `mv "$f.bak" "$f"`. The band goes at the
+   next read.
 
 ## Working on a mod
 

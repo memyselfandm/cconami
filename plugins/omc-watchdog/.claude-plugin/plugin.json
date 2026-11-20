@@ -1,0 +1,22 @@
+{
+  "name": "omc-watchdog",
+  "version": "0.1.0",
+  "description": "Shows a band above the prompt when an oh-my-claudecode run in this session is dead or looping: ralph, autopilot, team or ultragoal marked active but not touched for hours, or reinforced past a limit or at its iteration cap. Names the mode and phase. Read only; hidden when all is well.",
+  "license": "MIT",
+  "author": { "name": "memyselfandm" },
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "staleHours": {
+      "type": "number",
+      "title": "Stale after (hours)",
+      "description": "An active mode whose state has not been touched for longer than this is shown as stale. OMC itself treats state older than 2 hours as stale. A value of 0 or less uses 2.",
+      "default": 2
+    },
+    "reinforcementLimit": {
+      "type": "number",
+      "title": "Looping at reinforcement count",
+      "description": "An active mode whose reinforcement_count reaches this is shown as looping, as is one whose iteration reaches max_iterations. A value of 0 or less uses 5.",
+      "default": 5
+    }
+  }
+}
