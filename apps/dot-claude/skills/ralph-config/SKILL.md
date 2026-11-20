@@ -1,7 +1,7 @@
 ---
 name: ralph-config
 description: Generate ralph.yml and PROMPT.md configuration files for Ralph Orchestrator workflows from plans, tickets, or ideas. Use when setting up Ralph Orchestrator, creating hat-based workflows, or adapting Linear/Jira/markdown plans into ralph.yml + PROMPT.md files.
-argument-hint: [--from <source>] [--preset <name>] [--pattern <pattern>] [--backend <backend>] [--traditional]
+argument-hint: "[--from <source>] [--preset <name>] [--pattern <pattern>] [--backend <backend>] [--traditional]"
 disable-model-invocation: true
 allowed-tools: Read, Write, Edit, Grep, Glob, Bash, WebFetch, Task, TodoWrite
 ---

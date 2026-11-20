@@ -1,0 +1,30 @@
+name: skills
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.12.5"
+      # `claude plugin validate` is added here by CCC-133, with the plugin layout.
+      - name: Lint SKILL.md files
+        run: uv run --script scripts/lint-skills.py
+      - name: Test the lint
+        run: bash scripts/test-lint-skills.sh
+      - name: Test the Hermes renderer
+        run: bash platforms/hermes/test-render.sh
+      - name: Render every skill for Hermes (dry run)
+        run: bash platforms/hermes/install.sh --dry-run "$RUNNER_TEMP/hermes"
