@@ -35,8 +35,9 @@ export const BUILT_IN: readonly Source[] = [
 // ("`gh pr merge --auto` is refused: ...").
 const NAMED = [/Git guardrail: blocked "([^"\n]{1,80})"/, /^`([^`\n]{1,80})` is refused/m]
 
-// A user pattern with a quantified group that is itself quantified, such as
+// A `re:` pattern with a quantified group that is itself quantified, such as
 // (a+)+ or (x*){2,}, can take exponential time; it is refused at parse time.
+// The check is a partial guard: other shapes, such as (a|aa)+, still pass.
 const NESTED = /\([^)]*[+*]\)[+*{]/
 const MAX_PATTERN = 500
 // Patterns are matched against at most this much of a refusal's text.
@@ -48,15 +49,28 @@ const MAX_LABEL = 60
 /** Keeps at most this many refusals waiting in the band. */
 export const MAX_ACTIVE = 5
 
+/** Keeps the per-call card entry for at most this many refused calls. */
+export const MAX_CALLS = 50
+
+/** The prefix that makes a pattern body a regular expression rather than a substring. */
+const REGEX_PREFIX = 're:'
+
+/** Escapes text so a RegExp matches it literally. */
+function escapeLiteral(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
 /** A settings entry that was not used, and why. */
 export type Skipped = { entry: string; why: string }
 
 /**
- * Reads the `patterns` setting: `Label=expression`, or a bare expression named
- * `hook`. Everything before the first `=` is the label, so an expression that
- * contains `=` must be written with a label. An entry that is too long, not a
- * valid expression, or has a nested quantifier is skipped and returned with
- * the reason.
+ * Reads the `patterns` setting: `Label=body`, or a bare body named `hook`.
+ * Everything before the first `=` is the label, so a body that contains `=`
+ * must be written with a label. A body is a plain case-insensitive substring;
+ * a body that starts with `re:` is a regular expression (case-sensitive, as
+ * written). An entry that is too long, has an invalid `re:` expression, or a
+ * `re:` expression with a nested quantifier is skipped and returned with the
+ * reason.
  */
 export function parsePatterns(value: unknown): { sources: Source[]; skipped: Skipped[] } {
   const sources: Source[] = []
@@ -79,11 +93,15 @@ export function parsePatterns(value: unknown): { sources: Source[]; skipped: Ski
       skipped.push({ entry, why: 'empty label' })
     } else if (body.length > MAX_PATTERN) {
       skipped.push({ entry, why: `longer than ${MAX_PATTERN} characters` })
+    } else if (body === REGEX_PREFIX) {
+      skipped.push({ entry, why: 'empty expression' })
+    } else if (!body.startsWith(REGEX_PREFIX)) {
+      sources.push({ label, pattern: new RegExp(escapeLiteral(body), 'i') })
     } else if (NESTED.test(body)) {
       skipped.push({ entry, why: 'nested quantifier (can take exponential time)' })
     } else {
       try {
-        sources.push({ label, pattern: new RegExp(body) })
+        sources.push({ label, pattern: new RegExp(body.slice(REGEX_PREFIX.length)) })
       } catch {
         skipped.push({ entry, why: 'not a valid regular expression' })
       }
@@ -382,6 +400,16 @@ export function isShown(list: readonly Refusal[], refusal: Refusal): boolean {
 /** Removes every waiting refusal whose call key is exactly this one. */
 export function clearKey(list: readonly Refusal[], key: string): Refusal[] {
   return list.filter(item => item.key !== key)
+}
+
+/**
+ * Records a refused call's id, newest first, and says which ids fell off the
+ * end: those calls' card entries are dropped.
+ */
+export function trackCall(ids: readonly string[], toolUseId: string): { ids: string[]; evicted: string[] } {
+  const next = [toolUseId, ...ids.filter(id => id !== toolUseId)]
+
+  return { ids: next.slice(0, MAX_CALLS), evicted: next.slice(MAX_CALLS) }
 }
 
 /** Removes one waiting refusal (the person dismissed it). */
