@@ -126,11 +126,24 @@ printf -- '---\nname: no-newline-skill\ndescription: No final newline.\n---\n# T
 "${RENDER[@]}" "$CR" "$OUT" >/dev/null 2>&1
 "${RENDER[@]}" "$NN" "$OUT" >/dev/null 2>&1
 "${RENDER[@]}" "$FIX/skills/dashes" "$OUT" >/dev/null 2>&1
-for pair in "$FIX/skills/plain:plain-skill" "$CR:crlf-skill" "$NN:no-newline-skill" "$FIX/skills/dashes:dashes-skill"; do
+for pair in "$CR:crlf-skill" "$NN:no-newline-skill" "$FIX/skills/dashes:dashes-skill"; do
   src="${pair%%:*}" name="${pair##*:}"
   check "body byte-identical: $name" -- \
     cmp <(after_fence "$src/SKILL.md") <(after_fence "$OUT/general/$name/SKILL.md")
 done
+# The one exception: lines linking another platform's notes are dropped.
+check "body identical to source minus the claude-code link line: plain-skill" -- \
+  cmp <(after_fence "$FIX/skills/plain/SKILL.md" | grep -vF 'platforms/claude-code.md') \
+      <(after_fence "$P/SKILL.md")
+check "bare-list and labelled link styles are dropped" -- bash -c \
+  '! grep -q "claude-code" "$1" && grep -q "platforms/hermes.md" "$1"' _ "$P/SKILL.md"
+LK="$WORK/src/links"
+mkdir -p "$LK"
+printf -- '---\r\nname: links-skill\r\ndescription: d\r\n---\r\n## Platform notes\r\n\r\n- [platforms/claude-code.md](platforms/claude-code.md)\r\n- Codex: [x](./platforms/codex.md)\r\n- [platforms/hermes.md](platforms/hermes.md)\r\n```\r\n- [platforms/claude-code.md](platforms/claude-code.md)\r\n```\r\nsee [a](platforms/claude-code.md) inline\r\n- [platforms/claude-code.md](platforms/claude-code.md)' > "$LK/SKILL.md"
+"${RENDER[@]}" "$LK" "$OUT" >/dev/null 2>&1
+printf -- '## Platform notes\r\n\r\n- [platforms/hermes.md](platforms/hermes.md)\r\n```\r\n- [platforms/claude-code.md](platforms/claude-code.md)\r\n```\r\nsee [a](platforms/claude-code.md) inline\r\n' > "$WORK/links-want"
+check "links: CRLF and final-line (no newline) drops, fences and prose kept" -- \
+  cmp "$WORK/links-want" <(after_fence "$OUT/general/links-skill/SKILL.md")
 check "CRLF body keeps its CR bytes" -- grep -q $'\r' "$OUT/general/crlf-skill/SKILL.md"
 check "fence-like lines in the body survive" -- grep -qx 'name: not-frontmatter' "$OUT/general/dashes-skill/SKILL.md"
 
@@ -472,6 +485,43 @@ mkdir -p "$WORK/dash/-skills/plain"
 cp "$FIX/skills/plain/SKILL.md" "$WORK/dash/-skills/plain/"
 expect "a root starting with - is a path" 0 'wrote: .*plain-skill' -- \
   bash -c 'cd "$1" && bash "$2" out -skills' _ "$WORK/dash" "$HERE/install.sh"
+
+# --- every real skill: each relative link resolves in the output ---------------
+ALL="$WORK/all-out"
+expect "every repo skill renders" 0 'wrote: ' -- "${RENDER[@]}" --all "$ALL"
+cat > "$WORK/linkcheck.py" <<'PYEOF'
+import os, re, sys
+root, bad, n = sys.argv[1], [], 0
+link = re.compile(r"(?<!!)\[[^\]\n]*\]\(([^)\s]+)\)")
+for here, dirs, files in os.walk(root):
+    dirs[:] = [d for d in dirs if not d.startswith(".")]
+    for f in files:
+        if not f.endswith(".md"):
+            continue
+        path = os.path.join(here, f)
+        fenced = False
+        for i, line in enumerate(open(path, encoding="utf-8"), 1):
+            if re.match(r"\s{0,3}(```|~~~)", line):
+                fenced = not fenced
+            if fenced:
+                continue
+            for target in link.findall(line):
+                if re.match(r"[a-z][a-z0-9+.-]*:|#", target, re.I):
+                    continue
+                t = target.split("#")[0]
+                if not t:
+                    continue
+                n += 1
+                dest = os.path.normpath(os.path.join(here, t))
+                if not os.path.exists(dest):
+                    bad.append(f"{os.path.relpath(path, root)}:{i}: {target}")
+print(f"{n} relative links checked")
+for b in bad:
+    print("dangling:", b)
+sys.exit(1 if bad or n == 0 else 0)
+PYEOF
+out="$("${PY[@]}" "$WORK/linkcheck.py" "$ALL" 2>&1)"; rc=$?
+if [[ "$rc" -eq 0 ]]; then ok "rendered tree: every relative link resolves ($out)"; else bad "rendered tree has dangling links"; printf '    %s\n' "$out"; fi
 
 if [[ "$fail" -ne 0 ]]; then
   echo "test-render: FAILED"

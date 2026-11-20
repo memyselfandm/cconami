@@ -35,7 +35,14 @@ It writes `<out-root>/<category>/<name>/SKILL.md`:
   `^[a-z0-9][a-z0-9-]{0,63}$`. YAML aliases are rejected (an alias is
   written out in full, so a small input could render a huge file). The
   frontmatter, as written and as rendered, is capped at 64 KiB.
-- The body is copied byte for byte, line endings included.
+- The body is copied byte for byte, line endings included, with one
+  exception: a line whose only content is a link to another platform's notes
+  file (`platforms/<other>.md`, not `hermes.md`) is dropped, since that file is
+  not copied and the link would dangle. Both styles in use match:
+  `- [platforms/claude-code.md](platforms/claude-code.md)` and
+  `- Claude Code: [platforms/claude-code.md](platforms/claude-code.md)`.
+  Lines inside fenced code blocks are never touched. A test renders every
+  skill in the repo and checks that each relative link resolves in the output.
   `platforms/hermes.md` and other supporting files are copied; other
   platforms' files are not. Copies get mode 0644, or 0755 when the
   owner-exec bit is set, so no setuid, setgid or world-write bit survives.

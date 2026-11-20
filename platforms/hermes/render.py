@@ -28,8 +28,15 @@ Frontmatter (scripts/lint-skills.py applies the same rules by importing this):
   * YAML aliases are rejected. The frontmatter, as written and as rendered,
     is capped at 64 KiB.
 
-Files: the body is copied byte for byte. platforms/hermes.md is copied, other
-files under platforms/ are not. Every other file is copied with mode 0644, or
+Files: the body is copied byte for byte, with one exception: a line whose only
+content is a link to another platform's notes file (platforms/<other>.md, not
+hermes.md) is dropped, because that file is not copied and the link would
+dangle. Both styles in use match, with the line ending dropped too:
+`- [platforms/claude-code.md](platforms/claude-code.md)` and
+`- Claude Code: [platforms/claude-code.md](platforms/claude-code.md)`. Lines
+inside fenced code blocks are never touched, and every other line keeps its
+exact bytes, CRLF and a missing final newline included. platforms/hermes.md is
+copied, other files under platforms/ are not. Every other file is copied with mode 0644, or
 0755 when the owner-exec bit is set. Hidden files, __pycache__ and
 node_modules are ignored. Symlinks are skipped with a warning. A hardlinked or
 special file (FIFO, device, socket) is an error, and so is a file that cannot
@@ -67,6 +74,13 @@ SLUG = re.compile(r"[a-z0-9][a-z0-9-]{0,63}")
 MAX_FRONTMATTER = 64 * 1024
 PLATFORM_FILE = Path("platforms") / "hermes.md"
 PRUNED_DIRS = ("__pycache__", "node_modules")
+# A list item (or bare line) whose only content is a link to platforms/<x>.md,
+# optionally after a short "Label:" prefix.
+PLATFORM_LINK_LINE = re.compile(
+    r"[ \t]*(?:[-*+][ \t]+)?(?:[^\[\]()\n]*?:[ \t]*)?"
+    r"\[[^\]\n]*\]\((?:\./)?platforms/([^/()\s]+)\.md\)[ \t]*"
+)
+FENCE = re.compile(r"[ \t]{0,3}(```|~~~)")
 
 
 class SkillError(Exception):
@@ -342,6 +356,25 @@ def plan_files(skill_dir):
     return planned
 
 
+def drop_foreign_platform_links(body):
+    """Drop lines that only link another platform's notes file.
+
+    Every other line is returned byte for byte. Fenced code blocks are skipped.
+    """
+    out, fence = [], None
+    for line in re.findall(r"[^\n]*\n|[^\n]+", body):
+        text = line.rstrip("\r\n")
+        m = FENCE.match(text)
+        if m and fence in (None, m.group(1)):
+            fence = None if fence else m.group(1)
+        elif fence is None:
+            m = PLATFORM_LINK_LINE.fullmatch(text)
+            if m and m.group(1) != "hermes":
+                continue
+        out.append(line)
+    return "".join(out)
+
+
 def prepare(skill_dir):
     """Validate one skill. Returns a plan dict, or None if it is skipped."""
     skill_md = Path(skill_dir) / "SKILL.md"
@@ -370,7 +403,7 @@ def prepare(skill_dir):
         "name": fm["name"],
         "frontmatter": dumped,
         "fence": fence,
-        "body": body,
+        "body": drop_foreign_platform_links(body),
         "files": plan_files(Path(skill_dir)),
     }
 
