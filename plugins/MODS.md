@@ -10,6 +10,7 @@ installed from this repository by name.
 | [`peer-messages`](peer-messages/) | Draws a message from another session, agent or channel as a bordered card with the sender's name |
 | [`ci-status`](ci-status/) | Shows the GitHub CI state of the current branch, and of the PRs this session opened, in a band above the prompt |
 | [`mcp-health`](mcp-health/) | Shows a band above the prompt when a plugin's MCP server is not connected, naming the server and the next step |
+| [`token-budget`](token-budget/) | Shows the session's token spend against a budget in a band above the prompt, with a warning at 90% and an alert at 100% |
 
 ## Install
 
@@ -20,6 +21,7 @@ At the prompt of a terminal session:
 /plugin install peer-messages --marketplace memyselfandm/cconami
 /plugin install ci-status --marketplace memyselfandm/cconami
 /plugin install mcp-health --marketplace memyselfandm/cconami
+/plugin install token-budget --marketplace memyselfandm/cconami
 ```
 
 Or from a shell:
@@ -29,6 +31,7 @@ claude plugin install owner-inbox --marketplace memyselfandm/cconami
 claude plugin install peer-messages --marketplace memyselfandm/cconami
 claude plugin install ci-status --marketplace memyselfandm/cconami
 claude plugin install mcp-health --marketplace memyselfandm/cconami
+claude plugin install token-budget --marketplace memyselfandm/cconami
 ```
 
 Choose the user scope to have a mod in every session. To pick up a change after the
@@ -189,6 +192,67 @@ surrounding spaces are ignored:
 
 A server that started before the mod loaded (installed or enabled in the middle of a
 session) is not seen, so it is not checked until the next session.
+
+## token-budget
+
+A band above the prompt with the session's token spend against a budget:
+
+```
+Budget 412k / 1.0M (41%)
+```
+
+It is dim below 90%, in the warning colour from 90%, and bold in the error colour
+from 100%. The percentage is rounded down, so it never reads 90% before the warning
+or 100% before the alert. With no budget set, nothing is drawn.
+
+- **The budget.** The `budget` setting when it is more than 0, else the
+  `OMC_RUN_BUDGET_TOKENS` environment variable, read with `Number` as
+  oh-my-claudecode's budget guard reads it (`1000000` and `1e6` are both a
+  million). Anything that is not a positive number counts as unset. The budget is
+  read when the session starts and whenever the mod reloads, which a change to the
+  setting does.
+- **Which tokens count.** All four counts the API reports for a request:
+  `input_tokens` (uncached input), `output_tokens`, `cache_read_input_tokens` and
+  `cache_creation_input_tokens`, added together. These are the same four that OMC's
+  guard sums.
+- **Where they come from.** The `usage` on each `turn.complete` event. The engine
+  raises `turn.complete` for every model turn, the main conversation's and each
+  subagent's (`agentId` set), and its `usage` is "its real requests' token counts
+  ... summed" for that turn alone, so adding each turn's counts every request once.
+  A turn with no `usage` (an interrupt, an API error) adds nothing.
+- **When it starts over.** On `/clear`. The count lives in the session's `$.state`,
+  so a reload of the mod keeps it. A new process, including `claude --resume`,
+  starts again from 0: the mod counts what it saw, not the transcript.
+
+What it does not count, because no `turn.complete` carries it:
+
+- a compaction's summarising request, and other requests outside a turn;
+- another mod's `$.model` calls;
+- anything spent before the mod loaded in this process.
+
+**Why not `$.session.usage()`.** It has no cumulative token count. Its `context`
+is the last response's input side against the context window, which falls after a
+compaction, and its `cost` is an estimate in dollars. Neither is a session token
+total.
+
+**How it differs from OMC's guard.** OMC's `budget-guard.mjs` sums the same four
+counts over the assistant messages in the last 2 MB of the main transcript, at each
+Stop. So it leaves out subagents (their transcripts are separate files) and can
+undercount a long session, but does count compactions in that tail and a resumed
+session's earlier turns. This mod counts subagents and the whole session it saw.
+Expect it to read higher than OMC's log on a run that uses subagents.
+
+One setting, under `/config` or `pluginConfigs.token-budget.options`:
+
+| Setting | Default | What it does |
+|---|---|---|
+| `budget` | 0 | The session's budget in tokens; 0 uses `OMC_RUN_BUDGET_TOKENS` |
+
+Its tests run with `claude plugin test plugins/token-budget`. They drive the
+arithmetic, the thresholds and the band through raised `turn.complete` and
+`session.end` events, and include a mutation check: altered copies of the logic
+(cache tokens dropped, the variable winning over the setting, thresholds moved)
+must each fail.
 
 ## Working on a mod
 

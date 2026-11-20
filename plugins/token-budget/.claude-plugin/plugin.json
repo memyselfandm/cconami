@@ -1,0 +1,16 @@
+{
+  "name": "token-budget",
+  "version": "0.1.0",
+  "description": "Shows this session's token spend against a budget (OMC_RUN_BUDGET_TOKENS or a setting) in a band above the prompt, turning to a warning at 90% and an alert at 100%. Hidden when no budget is set.",
+  "license": "MIT",
+  "author": { "name": "memyselfandm" },
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "budget": {
+      "type": "number",
+      "title": "Token budget",
+      "description": "Tokens this session may spend before the band turns to an alert. 0 or blank uses OMC_RUN_BUDGET_TOKENS; when both are set, this value wins.",
+      "default": 0
+    }
+  }
+}

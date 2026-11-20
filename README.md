@@ -39,6 +39,7 @@ then also addressable as `<plugin>@cconami`. To pick up changes, run
 | [`peer-messages`](plugins/peer-messages/) | Messages from other sessions, agents and channels drawn as a card in the chat | mod |
 | [`ci-status`](plugins/ci-status/) | The GitHub CI state of the current branch and of the PRs this session opened, above the prompt | mod |
 | [`mcp-health`](plugins/mcp-health/) | A band above the prompt when a plugin's MCP server is not connected | mod |
+| [`token-budget`](plugins/token-budget/) | The session's token spend against a budget, above the prompt, with a warning at 90% | mod |
 
 Each plugin's README lists its skills, agents or settings. Mods are small plugins
 that change what a Claude Code session shows; see [plugins/MODS.md](plugins/MODS.md).
