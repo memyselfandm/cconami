@@ -15,13 +15,20 @@ const call = atom({ plugin: 'guardrail-notice', key: 'call' } as const, null as 
 const BAND_ROWS = 3
 
 export const register: Register = (on, options) => {
-  const { sources, skipped } = parsePatterns(options.patterns)
+  const { sources, skipped, hinted } = parsePatterns(options.patterns)
   configure([...sources, ...BUILT_IN], options.toast !== false)
 
   on('session.start', ($, e, next) => {
     // Said once per load, in the transcript, so a mistyped pattern is seen.
     for (const { entry, why } of skipped) {
       $.ui.log(`guardrail-notice: pattern skipped (${why}): ${entry}`, { to: 'transcript' })
+    }
+
+    if (hinted.length > 0) {
+      $.ui.log(
+        `guardrail-notice: plain patterns are matched as text, not as regular expressions; prefix with re: to use one: ${hinted.join(', ')}`,
+        { to: 'transcript' },
+      )
     }
 
     return next(e)

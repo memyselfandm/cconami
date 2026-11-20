@@ -368,8 +368,10 @@ Changes:
 - **0.2.0.** The `patterns` setting changed meaning: an entry is now a plain
   case-insensitive substring, and a regular expression needs the `re:` prefix
   (`Label=re:...`). An existing entry that relied on regular-expression syntax must
-  gain `re:`. The card entry kept for each refused call is capped at the newest 50
-  (older cards stop showing), and a refusal recorded while an identical call
+  gain `re:`; a plain entry containing `^ $ \ ( [ | * +` is reported once in the
+  transcript at session start with that suggestion. The card entry kept for each
+  refused call is capped at the newest 50 (older cards stop showing, except those of
+  refusals still waiting), and a refusal recorded while an identical call
   succeeds no longer leaves a stale entry above the prompt.
 
 ### Owner check before relying on it

@@ -47,11 +47,16 @@ function log($: EngineInterface, what: string, error: unknown): void {
   }
 }
 
-async function record($: EngineInterface, e: ToolCallEnvelope, reason: string, seen: number): Promise<void> {
+async function record($: EngineInterface, e: ToolCallEnvelope, reason: string): Promise<void> {
   const refusal = describe({ tool: e.tool, toolUseId: e.tool_use_id, input: e }, reason, settings.sources)
+  // Read before the first write: a success that lands after this point is
+  // one the re-check below must catch.
+  const seen = successes.get(refusal.key) ?? 0
+  // A call whose refusal still waits keeps its card, whatever the cap says.
+  const waiting = (await read($, active)).map(item => item.toolUseId)
   let evicted: string[] = []
   await update($, calls, ids => {
-    const tracked = trackCall(ids, refusal.toolUseId)
+    const tracked = trackCall(ids, refusal.toolUseId, waiting)
     evicted = tracked.evicted
 
     return tracked.ids
@@ -69,10 +74,12 @@ async function record($: EngineInterface, e: ToolCallEnvelope, reason: string, s
   // The entry and the list are two atoms, so they cannot change in one
   // update. If an identical call succeeded while they were written, its
   // clear may have run before the entry existed: clear it again.
+  let isCleared = false
   if ((successes.get(refusal.key) ?? 0) !== seen) {
+    isCleared = true
     await update($, active, list => clearKey(list, refusal.key))
   }
-  if (settings.isToasting && isNew) {
+  if (settings.isToasting && isNew && !isCleared) {
     $.ui.toast(summary(refusal))
   }
 }
@@ -81,6 +88,7 @@ async function record($: EngineInterface, e: ToolCallEnvelope, reason: string, s
 // and input) clears the waiting refusal.
 async function clear($: EngineInterface, e: ToolCallEnvelope): Promise<void> {
   const key = callKey(e.tool, e)
+  markSuccess(key)
   if ((await read($, active)).some(item => item.key === key)) {
     await update($, active, list => clearKey(list, key))
   }
@@ -95,9 +103,8 @@ export const onDecision: Hook<'classic.PreToolUse'> = async ($, e, next) => {
   const result = await next(e)
   if (typeof result.deny === 'string') {
     const reason = result.deny
-    const seen = successes.get(callKey(e.tool, e)) ?? 0
     $.clock.after(0, () => {
-      record($, e, reason, seen).catch(error => log($, 'could not record a refusal', error))
+      record($, e, reason).catch(error => log($, 'could not record a refusal', error))
     })
   }
 
@@ -108,7 +115,6 @@ export const onDecision: Hook<'classic.PreToolUse'> = async ($, e, next) => {
 export const onCall: Hook<'tool.call'> = async ($, e, next) => {
   const result = await next(e)
   if (result.deny === undefined && result.isError !== true) {
-    markSuccess(callKey(e.tool, e))
     $.clock.after(0, () => {
       clear($, e).catch(error => log($, 'could not clear a refusal', error))
     })

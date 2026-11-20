@@ -87,7 +87,7 @@ test('extra patterns: Label=body or a bare body; a body is a substring unless it
   ])
   expect(classify('This session is isolated in the worktree /x', [...sources, ...BUILT_IN])).toBe('Worktree guard')
   expect(classify('THIS SESSION IS ISOLATED IN THE WORKTREE', [...sources, ...BUILT_IN])).toBe('Worktree guard')
-  expect(parsePatterns('not a list')).toEqual({ sources: [], skipped: [] })
+  expect(parsePatterns('not a list')).toEqual({ sources: [], skipped: [], hinted: [] })
 })
 
 test('a substring pattern matches literally; an re: pattern is a regular expression', () => {
@@ -680,4 +680,50 @@ test('an identical call that succeeds while a refusal is recorded leaves no stal
   await clock.settle()
   expect(isInjected).toBe(true)
   expect(await bandLines($)).toEqual([])
+})
+
+test('a waiting refusal keeps its card when later refusals of another call overflow the cap', async ($, on) => {
+  const map = new Map<string, string>([['git push', OMC]])
+  for (let i = 0; i <= MAX_CALLS; i += 1) {
+    map.set('rm -rf d', OTHER)
+  }
+  const { clock } = session(on, refusing(map))
+  await bash($, 'first', 'git push')
+  await clock.settle()
+  for (let i = 0; i <= MAX_CALLS; i += 1) {
+    await bash($, `retry${i}`, 'rm -rf d')
+    await clock.settle()
+  }
+  const mounted = await $.ui.mount({
+    plugin: 'guardrail-notice',
+    surface: 'terminal',
+    component: 'ToolUse',
+    requestId: 'first',
+    props: rowProps('first', 'git push'),
+  })
+  expect(await mounted.find({ type: 'Text', text: /^Blocked/ })).toBeDefined()
+  await mounted.unmount()
+})
+
+test('trackCall never evicts an id it was told to keep', () => {
+  const ids = Array.from({ length: MAX_CALLS }, (_, i) => `c${i}`).reverse()
+  const tracked = trackCall(ids, 'new', ['c0'])
+  expect(tracked.ids).toHaveLength(MAX_CALLS)
+  expect(tracked.ids).toContain('c0')
+  expect(tracked.evicted).toEqual(['c1'])
+})
+
+test('a plain pattern with regular-expression syntax is hinted', () => {
+  const { hinted } = parsePatterns(['Re=^start', 'plain text', 'Dot=a.b', 'f(x)', 'Ok=re:^x'])
+  expect(hinted).toEqual(['Re=^start', 'f(x)'])
+})
+
+test('a hinted pattern is reported once, in the transcript, suggesting re:', { options: { patterns: ['A=^x', 'ok=fine'] } }, async ($, on) => {
+  const { logs } = session(on, () => undefined)
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  expect(logs).toHaveLength(1)
+  expect(logs[0]?.to).toBe('transcript')
+  expect(logs[0]?.text).toContain('prefix with re:')
+  expect(logs[0]?.text).toContain('A=^x')
 })

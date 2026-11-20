@@ -60,6 +60,9 @@ function escapeLiteral(text: string): string {
   return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
+// Characters that suggest a pattern was written as a regular expression.
+const REGEX_SYNTAX = /[\^$\\([|*+]/
+
 /** A settings entry that was not used, and why. */
 export type Skipped = { entry: string; why: string }
 
@@ -70,13 +73,15 @@ export type Skipped = { entry: string; why: string }
  * a body that starts with `re:` is a regular expression (case-sensitive, as
  * written). An entry that is too long, has an invalid `re:` expression, or a
  * `re:` expression with a nested quantifier is skipped and returned with the
- * reason.
+ * reason. A plain entry that contains regular-expression syntax is used as a
+ * substring and also returned in `hinted`, so the person can be told to add `re:`.
  */
-export function parsePatterns(value: unknown): { sources: Source[]; skipped: Skipped[] } {
+export function parsePatterns(value: unknown): { sources: Source[]; skipped: Skipped[]; hinted: string[] } {
   const sources: Source[] = []
   const skipped: Skipped[] = []
+  const hinted: string[] = []
   if (!Array.isArray(value)) {
-    return { sources, skipped }
+    return { sources, skipped, hinted }
   }
   for (const raw of value) {
     if (typeof raw !== 'string') {
@@ -97,6 +102,9 @@ export function parsePatterns(value: unknown): { sources: Source[]; skipped: Ski
       skipped.push({ entry, why: 'empty expression' })
     } else if (!body.startsWith(REGEX_PREFIX)) {
       sources.push({ label, pattern: new RegExp(escapeLiteral(body), 'i') })
+      if (REGEX_SYNTAX.test(body)) {
+        hinted.push(entry)
+      }
     } else if (NESTED.test(body)) {
       skipped.push({ entry, why: 'nested quantifier (can take exponential time)' })
     } else {
@@ -108,7 +116,7 @@ export function parsePatterns(value: unknown): { sources: Source[]; skipped: Ski
     }
   }
 
-  return { sources, skipped }
+  return { sources, skipped, hinted }
 }
 
 /** Names the hook behind a refusal: the first matching pattern's label, else `hook`. */
@@ -404,12 +412,26 @@ export function clearKey(list: readonly Refusal[], key: string): Refusal[] {
 
 /**
  * Records a refused call's id, newest first, and says which ids fell off the
- * end: those calls' card entries are dropped.
+ * end: those calls' card entries are dropped. Ids in `keep` (refusals still
+ * waiting) are never dropped, so the list can run a few past the cap.
  */
-export function trackCall(ids: readonly string[], toolUseId: string): { ids: string[]; evicted: string[] } {
+export function trackCall(
+  ids: readonly string[],
+  toolUseId: string,
+  keep: readonly string[] = [],
+): { ids: string[]; evicted: string[] } {
   const next = [toolUseId, ...ids.filter(id => id !== toolUseId)]
+  const evicted: string[] = []
+  // Drop the oldest ids first, but never the new one or one in `keep`.
+  for (let i = next.length - 1; i > 0 && next.length > MAX_CALLS; i -= 1) {
+    const id = next[i] as string
+    if (!keep.includes(id)) {
+      next.splice(i, 1)
+      evicted.push(id)
+    }
+  }
 
-  return { ids: next.slice(0, MAX_CALLS), evicted: next.slice(MAX_CALLS) }
+  return { ids: next, evicted }
 }
 
 /** Removes one waiting refusal (the person dismissed it). */
