@@ -22,7 +22,7 @@ and leave out completed and cancelled ones unless given `--include-completed`.
 | get_children | `mcp__claude_ai_Linear__list_issues` with `parentId` | not supported directly: `issue list` then filter `.parent` locally |
 | add_blocking_link, remove_blocking_link | `save_issue` with `blocks` / `blockedBy` (append-only), or `removeBlocks` / `removeBlockedBy` | not supported |
 | add_link | `save_issue` with `links: [{url, title}]` | not supported |
-| get_project, list_projects | `mcp__claude_ai_Linear__get_project`, `list_projects` | `linctl project get <project-id> --json`; `linctl project list --team <key> --state <planned\|started\|paused\|completed\|canceled> --newer-than all_time --json` |
+| get_project, list_projects | `mcp__claude_ai_Linear__get_project`, `list_projects` | `linctl project get <project-id> --json`; `linctl project list --team <key> --state <planned\|started\|paused\|completed\|canceled> --newer-than all_time --json`, plus `--include-completed` for `completed` or `canceled` |
 | create_project | `mcp__claude_ai_Linear__save_project` without `id` (`addTeams`, `addInitiatives`) | `linctl project create --team <key> --name ... --description ... --lead ... --state ... --json`; no initiative flag |
 | update_project | `save_project` with `id` (`description`, `state`, `lead`, `addInitiatives`) | `linctl project update <project-id> --description/--state/--lead --json`; no initiative flag |
 | get_initiative, list_initiatives | `mcp__claude_ai_Linear__get_initiative`, `list_initiatives` | not supported |

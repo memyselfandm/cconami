@@ -80,7 +80,7 @@ Log format merged; replay under review.
 ```markdown
 # Initiative: Version 2
 
-**Status:** in_progress
+**Status:** in_progress | **Owner:** @bob
 **Projects:** Sync engine, Settings page
 
 Goal of the effort.
@@ -129,7 +129,7 @@ Sync engine on track; settings page waiting on design.
 | update_project | Rewrite the project file's header line or brief; for `initiative`, also update `**Projects:**` in both initiative files |
 | assign_to_project | Move the entry, and its sub-issues, to the other file |
 | get_initiative, list_initiatives | Parse the initiative files |
-| create_initiative | Write a new initiative file with empty `**Projects:**`, `## Comments` and `## Updates` |
+| create_initiative | Write a new initiative file with `**Status:** planned`, `**Owner:**` if given, empty `**Projects:**`, `## Comments` and `## Updates` |
 | update_initiative | Rewrite the initiative file's header or goal |
 | add_comment, list_comments | For a ticket, the entry's `#### Comments` block; for a project or initiative, the file's `## Comments` section. One dated blockquote per comment, newest last in the file |
 | add_update, list_updates | Append a dated `###` entry under `## Updates`; never edit an old one |

@@ -44,8 +44,10 @@ A ticket is ready when:
 - it is not held by another person or session. Every session may post as the same
   Linear user, so the assignee alone cannot tell sessions apart. Treat a ticket as held
   when it is assigned to someone else, **or** it is in progress and its latest claim
-  comment (step 4) names a different session, role or branch from this run. If it is
-  held, stop for that ticket and tell that session; do not take it over;
+  comment (step 4) names a different session or role from this run. The branch in a
+  claim is information, not identity: one session may use several branches for one
+  ticket (step 5). A ticket whose latest claim-type comment is "Released" is free. If
+  it is held, stop for that ticket and tell that session; do not take it over;
 - it is in a project.
 
 Report the tickets that are not ready and why. Suggest `refining-work-items` for a

@@ -170,7 +170,8 @@ Initiative:
   id: string
   name: string
   description: string?
-  status: enum          # planned | in_progress | completed
+  status: enum          # planned | in_progress | completed | cancelled
+  owner: string?
   projects: string[]    # Project names
   url: string
 ```
