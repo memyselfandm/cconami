@@ -26,6 +26,11 @@
       "name": "peer-messages",
       "source": "./plugins/peer-messages",
       "description": "Messages from other Claude sessions, agents and channels, drawn as a card in the chat."
+    },
+    {
+      "name": "mcp-health",
+      "source": "./plugins/mcp-health",
+      "description": "A band above the prompt when a plugin's MCP server is not connected, naming the server and the next step."
     }
   ]
 }

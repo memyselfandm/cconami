@@ -1,0 +1,23 @@
+{
+  "name": "mcp-health",
+  "version": "0.1.0",
+  "description": "Shows a band above the prompt when a plugin's MCP server is not connected, naming the server and the next step. Hidden while every watched server is connected.",
+  "license": "MIT",
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "watch": {
+      "type": "string",
+      "multiple": true,
+      "title": "Servers to watch",
+      "description": "MCP server names as /mcp lists them, such as plugin:oh-my-claudecode:t or claude.ai Linear. Empty watches every plugin server.",
+      "default": []
+    },
+    "ignore": {
+      "type": "string",
+      "multiple": true,
+      "title": "Servers to ignore",
+      "description": "MCP server names as /mcp lists them that never raise the band.",
+      "default": []
+    }
+  }
+}
