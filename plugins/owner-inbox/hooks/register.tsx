@@ -2,11 +2,12 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { Ask, Inbox } from '../types'
+import { listIssuesArgs, settings } from './logic'
 
-// The inbox is the set of open Linear issues that carry this label, whoever
-// they are assigned to: agents do not reliably assign the owner. Linear is the
-// record, so every session shows the same list.
-const LABEL = 'owner-action'
+// The inbox is the set of open Linear issues that carry the ask label (the
+// `label` userConfig field), whoever they are assigned to: agents do not
+// reliably assign the owner. Linear is the record, so every session shows the
+// same list.
 const PANE = 'owner-inbox'
 const TITLE = 'Waiting on you'
 const REFRESH_MS = 120_000
@@ -20,6 +21,9 @@ const inbox = atom({ plugin: 'owner-inbox', key: 'inbox' } as const, EMPTY, {
 // The Linear connector, by the name /mcp lists it under. The mod calls it
 // with the session's own connection, so it needs no CLI and no credential.
 const LINEAR = 'claude.ai Linear'
+
+// The ask label, read from userConfig when the module registers.
+let label = settings({}).label
 
 type LinearIssue = {
   id?: string
@@ -62,13 +66,7 @@ function isInbox(value: unknown): value is Inbox {
 async function refresh($: EngineInterface): Promise<Inbox> {
   let fresh: Inbox
   try {
-    const answer = await $.mcp.call(LINEAR, 'list_issues', {
-      label: LABEL,
-      fields: ['id', 'title', 'url', 'status', 'statusType', 'project'],
-      // Closed asks come back too and are dropped in toAsks, so ask for the
-      // largest page the connector gives.
-      limit: 250,
-    })
+    const answer = await $.mcp.call(LINEAR, 'list_issues', listIssuesArgs(label))
     if (answer.isError) {
       throw new Error('the Linear connector refused the request')
     }
@@ -98,7 +96,7 @@ function filedAsk(tool: string, input: unknown): string | null {
   const labels = [fields.labels, fields.addLabels]
     .flatMap(value => (Array.isArray(value) ? value : []))
     .map(value => String(value).toLowerCase())
-  if (!labels.includes(LABEL)) {
+  if (!labels.includes(label.toLowerCase())) {
     return null
   }
 
@@ -124,7 +122,9 @@ function clock(at: number): string {
   return `${when.getHours()}:${minutes}`
 }
 
-export const register: Register = on => {
+export const register: Register = (on, options) => {
+  label = settings(options).label
+
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'inbox',
