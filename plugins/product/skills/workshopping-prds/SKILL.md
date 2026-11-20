@@ -36,6 +36,13 @@ Interactive product requirements document creation with structured phases.
 /running-prd-sessions --template technical
 ```
 
+## Modes
+
+Besides the PRD workshop, two supporting modes. Load the file only when the person asks for that mode.
+
+- **Feature prioritization** ([modes/feature-prioritization.md](modes/feature-prioritization.md)): rank candidate features with RICE, MoSCoW and Kano, then give a ranked recommendation. Use when the question is what to build first.
+- **Product overview** ([modes/product-overview.md](modes/product-overview.md)): a one-page product overview from a discovery conversation. Use for a new product with no written strategy.
+
 ## Session Phases
 
 ### Phase 1: PM Mode - Problem Discovery
@@ -224,8 +231,8 @@ Best for: Infrastructure changes, API design, technical debt.
 ## Output Options
 
 1. **Markdown file** - Save to docs/
-2. **Work item** - Create epic via pm-context
-3. **Both** - File + linked work item
+2. **Project** - Create a project via pm-context (`create_project`) with the PRD, or its brief, as the description; use `update_project` for an existing project. The brief templates are `project-brief.md` (full) and `project-brief-lite.md` (one page) in `refining-work-items`. Then break the work into tickets of one to three units of value
+3. **Both** - File + project whose description links the file
 
 ## Session Tips
 
@@ -258,7 +265,7 @@ Output: docs/prd-user-notifications.md
 ✅ PRD generated: docs/prd-user-notifications.md
 
 Would you like to:
-1. Create an epic from this PRD
+1. Create a project from this PRD
 2. Refine any section
 3. Done
 
