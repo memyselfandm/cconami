@@ -1,0 +1,23 @@
+{
+  "name": "guardrail-notice",
+  "version": "0.1.0",
+  "description": "Shows a card in the chat and an entry above the prompt when a PreToolUse hook refuses a tool call, so work blocked on you is not missed. It only observes: it never blocks, changes or delays a call.",
+  "license": "MIT",
+  "author": { "name": "memyselfandm" },
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "patterns": {
+      "type": "string",
+      "multiple": true,
+      "title": "Extra refusal patterns",
+      "description": "Name the hook behind a refusal. Each entry is Label=regular expression, or a bare expression (named 'hook'), matched against the refusal's text and checked before the built-in patterns. Every hook refusal is shown either way.",
+      "default": []
+    },
+    "toast": {
+      "type": "boolean",
+      "title": "Toast on refusal",
+      "description": "Also raise a toast when a hook refuses a tool call.",
+      "default": true
+    }
+  }
+}

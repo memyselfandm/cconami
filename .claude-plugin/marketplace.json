@@ -42,6 +42,11 @@
       "name": "mcp-health",
       "source": "./plugins/mcp-health",
       "description": "A band above the prompt when a plugin's MCP server is not connected, naming the server and the next step."
+    },
+    {
+      "name": "guardrail-notice",
+      "source": "./plugins/guardrail-notice",
+      "description": "A card in the chat and an entry above the prompt when a hook refuses a tool call, so work blocked on you is not missed."
     }
   ]
 }

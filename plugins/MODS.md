@@ -10,6 +10,7 @@ installed from this repository by name.
 | [`peer-messages`](peer-messages/) | Draws a message from another session, agent or channel as a bordered card with the sender's name |
 | [`ci-status`](ci-status/) | Shows the GitHub CI state of the current branch, and of the PRs this session opened, in a band above the prompt |
 | [`mcp-health`](mcp-health/) | Shows a band above the prompt when a plugin's MCP server is not connected, naming the server and the next step |
+| [`guardrail-notice`](guardrail-notice/) | Shows a card in the chat and an entry above the prompt when a hook refuses a tool call, with the hook's message and the safe form it names |
 
 ## Install
 
@@ -20,6 +21,7 @@ At the prompt of a terminal session:
 /plugin install peer-messages --marketplace memyselfandm/cconami
 /plugin install ci-status --marketplace memyselfandm/cconami
 /plugin install mcp-health --marketplace memyselfandm/cconami
+/plugin install guardrail-notice --marketplace memyselfandm/cconami
 ```
 
 Or from a shell:
@@ -29,6 +31,7 @@ claude plugin install owner-inbox --marketplace memyselfandm/cconami
 claude plugin install peer-messages --marketplace memyselfandm/cconami
 claude plugin install ci-status --marketplace memyselfandm/cconami
 claude plugin install mcp-health --marketplace memyselfandm/cconami
+claude plugin install guardrail-notice --marketplace memyselfandm/cconami
 ```
 
 Choose the user scope to have a mod in every session. To pick up a change after the
@@ -189,6 +192,63 @@ surrounding spaces are ignored:
 
 A server that started before the mod loaded (installed or enabled in the middle of a
 session) is not seen, so it is not checked until the next session.
+
+## guardrail-notice
+
+A hook that refuses a tool call, such as OMC's git guardrail or the
+`operating-model` command guard, shows its refusal only in the tool result, where
+it scrolls away. Work then waits on you and nobody notices. This mod makes the
+refusal visible:
+
+- **Above the prompt.** One line per refusal still waiting, newest first, one per
+  kind of call: `Blocked: git push (OMC guardrail). Needs you.`, each with a
+  **Dismiss** button. Up to three are listed; the rest are counted.
+- **In the chat.** A bordered card under the refused call's row, with the same
+  line, the hook's message (cut at 400 characters) and the safe form, when the
+  message names one after `Safe form:`. Once the refusal is cleared or dismissed
+  the card stays, marked "Cleared".
+- **Toast.** The same line as a toast, unless `toast` is off.
+
+**It only observes.** It never blocks, changes or delays a tool call. Both of its
+call hooks await the rest of the chain and return its result unchanged, and the
+recording work is started without being awaited. If a hook fails, it replays the
+chain's result.
+
+- **How it sees a refusal.** At the `classic.PreToolUse` event. The engine runs that
+  chain as [managed settings hooks, hooks modules, the other settings hooks], and a
+  plugin's `hooks.json` command hook counts as a settings hook. So the result the
+  mod's hook gets back from the chain beneath it is the decision of the settings
+  and plugin hooks. A refusal, whether a command hook's exit 2 or a JSON `deny`,
+  arrives there as a `deny` with the hook's message. The mod reads that field; it
+  does not guess from tool output text.
+- **What it names.** The patterns only name the hook behind a refusal; every hook
+  refusal is shown either way. Built in: `OMC guardrail` (a message containing
+  `Git guardrail: blocked`) and `command guard` (the `operating-model` guard's
+  suffix "Do not retry through another tool or wrap the command in a script", or
+  its size and time refusals). Anything else is named `hook`.
+- **When it clears.** When a later call of the same kind succeeds, or when you press
+  Dismiss. The kind of a Bash call is its program, plus the operation for tools such
+  as `git` and `gh` (`git push`, `gh pr`); setup steps (`cd`, `export`) and prefixes
+  (`sudo`, `VAR=value`) are skipped. Any other tool's kind is its name.
+- **What it cannot see.** A refusal by a managed-settings hook ends the chain above
+  every mod. A refusal by another mod's `classic.PreToolUse` hook that runs before
+  this one is not seen either. A refusal at the permission prompt, by a permission
+  rule, or by another mod's `tool.call` hook is not a PreToolUse refusal and is not
+  shown.
+
+Settings, under `/config` or `pluginConfigs.guardrail-notice.options` in
+`settings.json`:
+
+| Option | Default | Meaning |
+|---|---|---|
+| `patterns` | empty | Extra patterns that name the hook: `Label=regular expression`, or a bare expression (named `hook`). Checked before the built-in ones; an invalid one is skipped and noted in the debug log |
+| `toast` | on | Raise a toast for each refusal |
+
+Its tests run with `claude plugin test plugins/guardrail-notice`. In them, a hook of
+the test's own stands for the settings hooks and refuses with the real messages of
+OMC's guardrail and the `operating-model` guard.
+`bash plugins/guardrail-notice/tests/mutation-check.sh` breaks one behaviour at a
+time and checks that the tests catch each one.
 
 ## Working on a mod
 
