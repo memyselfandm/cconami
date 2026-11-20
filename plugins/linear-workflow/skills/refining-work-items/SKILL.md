@@ -1,234 +1,139 @@
 ---
 name: refining-work-items
-description: Refines work items (epics, features, tasks, bugs) into AI-ready specifications. Use when converting rough ideas into structured items, preparing epics for breakdown, enhancing existing items with acceptance criteria, or creating new items from scratch. Supports --type (epic|epic-lite|feature|task|bug), --analyze-codebase for technical context, and --interactive for guided refinement.
+description: Turns a rough idea or an existing ticket into a ticket an agent can pick up - one to three units of value, with a "Done when" section that names its evidence - or writes a project brief for a new workstream. Use when capturing an idea, tightening a vague ticket, adding acceptance criteria, or starting a project. Supports --type (ticket|small|bug|chore|project|project-lite), --analyze-codebase and --interactive.
+argument-hint: "[ticket-key | idea] [--type ticket|small|bug|chore|project|project-lite] [--project <name>] [--analyze-codebase] [--interactive] [--validate-only]"
+version: 2.0.0
+metadata:
+  hermes:
+    category: productivity
+    tags: [project-management, tickets, refinement]
+    related_skills: [pm-context, linear-workflow, breaking-down-work]
 ---
 
-# Refining Work Items
+# Refining work items
 
-Transform rough ideas or existing work items into well-structured, AI-agent-ready specifications using proven templates.
-
-## Usage
-
-```
-/refining-work-items [item-id] [options]
-/refining-work-items --new --type epic --team "TeamName"
-```
+Make a ticket ready for an agent, or a project brief ready for a workstream. Every
+operation goes through [pm-context](../pm-context/SKILL.md); the model is the one in
+`linear-workflow`.
 
 ## Arguments
 
-**Item ID** (optional):
-- Existing work item to refine (e.g., `CCC-123`, `PROJ-456`, `#42`)
-- Or full URL from PM tool
-- If omitted with `--team`, creates new item
+- **Ticket key** (`ABC-123`) or URL: refine that ticket. **An idea in words**: create one.
+- `--type`:
+  - `ticket` (default): one to three units of value, [ticket-template.md](ticket-template.md);
+  - `small`, `bug`, `chore`: quick items, [task-template.md](task-template.md);
+  - `project`: a full brief for a new workstream or initiative, [project-brief.md](project-brief.md);
+  - `project-lite`: a one-page brief, [project-brief-lite.md](project-brief-lite.md).
+- `--project <name>`: the project a new ticket goes in. Required to create a ticket; ask
+  if it is missing and unclear, or use the team's catch-all project if it has one.
+- `--parent <key>`: make the new ticket a sub-issue (only for steps that need their own
+  owner or status).
+- `--analyze-codebase`: add technical context from the repository.
+- `--interactive`: walk through each section with questions.
+- `--validate-only`: report gaps, change nothing.
 
-**Options:**
-- `--type` or `type`: epic | epic-lite | feature | task | bug | chore
-- `--analyze-codebase` or `analyze codebase`: Add codebase analysis for technical context
-- `--interactive` or `interactive`: Step through sections with guided prompts
-- `--validate-only` or `validate only`: Check readiness without making changes
-- `--team` followed by name: Target team (required for create mode)
-- `--parent` or `epic` followed by ID: Link to parent item
-- `--create-subtasks`: Auto-generate child items (features/tasks)
+Examples:
 
-## Examples
-
-```bash
-# Refine existing epic with full PRD template
-/refining-work-items CCC-123 --type epic
-
-# Quick 1-pager epic refinement
-/refining-work-items CCC-123 --type epic-lite
-
-# Refine with codebase analysis
-/refining-work-items CCC-123 --type epic --analyze-codebase
-
-# Create new feature for a team
-/refining-work-items --new --type feature --team Chronicle
-
-# Refine feature and auto-create subtasks
-/refining-work-items PROJ-456 --type feature --create-subtasks
-
-# Interactive bug report refinement
-/refining-work-items --new --type bug --team Chronicle --interactive
+```
+refining-work-items ABC-123
+refining-work-items "retry failed uploads" --project "Sync engine"
+refining-work-items ABC-140 --type bug --interactive
+refining-work-items "Version 2 settings" --type project-lite
 ```
 
-## Workflow
+## Steps
 
-### Step 1: Setup
+### 1. Detect the tool and the mode
 
-1. **Detect PM Tool**: Load [pm-context](../pm-context/SKILL.md) to detect project's PM tool
-2. **Parse Arguments**: Extract item ID, type, and options from input
-3. **Determine Mode**:
-   - Item ID provided → **Refine Mode**
-   - No ID + team provided → **Create Mode**
-   - Neither → Error with guidance
+Load pm-context. A key means **refine**; text means **create**; neither means ask.
 
-### Step 2: Context Gathering
+### 2. Gather context
 
-**For Refine Mode:**
-- Fetch item via pm-context `get_item(id)`
-- Extract current title, description, status
-- Check parent/child relationships
-- Identify existing labels and type
+- **Refine:** `get_item(key)`, `list_comments(key)`, its project (`get_project`), its
+  parent and children, and its blocking links.
+- **Create:** take the idea, suggest a title (an imperative sentence that says what
+  changes), and find the project. `search_items` for an existing ticket with the same
+  intent before creating a second one.
+- **Project brief:** `list_projects` to check the workstream does not already exist, and
+  `list_initiatives` to see whether it belongs to one.
 
-**For Create Mode:**
-- Prompt for initial idea/description
-- Auto-generate title suggestion
-- Determine type from keywords or prompt
+### 3. Pick the type and template
 
-### Step 3: Type Detection & Template Selection
+If `--type` is absent, infer it: a `bug` or `chore` label or wording means those
+templates; an idea that is clearly several units of value, or a whole workstream, means
+`project` (say so and confirm); otherwise `ticket`.
 
-If type not specified, detect from:
-1. Explicit labels (epic, feature, bug, etc.)
-2. Parent relationships (child of epic → feature)
-3. Keywords in title/description
-4. Interactive prompt if ambiguous
+### 4. Check readiness
 
-Load appropriate template:
-| Type | Template |
-|------|----------|
-| epic | [epic-template.md](epic-template.md) |
-| epic-lite | [epic-lite.md](epic-lite.md) |
-| feature | [feature-template.md](feature-template.md) |
-| task/bug/chore | [task-template.md](task-template.md) |
+**Ticket:**
+- [ ] Title says what changes
+- [ ] "Why" names who notices the result
+- [ ] "Done when" has three to six checkable lines, each naming its evidence
+- [ ] A live-check line if a running system changes (merged is not done)
+- [ ] In a project; blocking links set
+- [ ] Small enough for one to three pull requests; otherwise propose a split
 
-### Step 4: Readiness Assessment
+**Small ticket, bug, chore:** clear title, context, "Done when", priority, project.
+A bug also needs reproduction steps and expected versus actual behaviour.
 
-Check item against template requirements:
+**Project brief:** the problem, what "finished" means for the workstream, a lead, the
+first three to six tickets with their blocking links, and the initiative if any.
 
-**Epic Readiness:**
-- [ ] Problem statement defined
-- [ ] User stories or requirements
-- [ ] Acceptance criteria (measurable)
-- [ ] Technical requirements identified
-- [ ] Success metrics defined
+Report the gaps. In `--validate-only` mode, stop here.
 
-**Feature Readiness:**
-- [ ] Clear, specific title
-- [ ] User story or functional requirement
-- [ ] 3+ acceptance criteria
-- [ ] Complexity estimated
-- [ ] Parent epic linked (if applicable)
+### 5. Fill the template
 
-**Task/Bug Readiness:**
-- [ ] Clear title
-- [ ] Context/description
-- [ ] Definition of done
-- [ ] Priority set
+- **Interactive:** ask for each missing section in turn.
+- **Default:** fill what the existing text and comments support, and mark each section
+  that needs a human answer as `{needs input: ...}` rather than inventing it.
 
-Report gaps and offer to fill interactively.
+### 6. Add codebase context (with `--analyze-codebase`)
 
-### Step 5: Template Population
+For each technical area the ticket names, search the repository for the existing
+implementation, the patterns to follow and the constraints, in parallel where the
+platform allows. Summarise in a paragraph per area under "Context" and list the likely
+files. See Platform notes for how to run parallel searches.
 
-**Interactive Mode (`--interactive`):**
-Walk through each template section with prompts.
+### 7. Write it back
 
-**Auto Mode (default):**
-- Extract information from existing content
-- Infer missing sections where possible
-- Flag sections requiring input
+- **Refine a ticket:** `update_item(key, {title, description})`. Keep the original text
+  that still applies; do not discard someone's notes. Add a comment saying what changed.
+- **Create a ticket:** `create_item({title, project, description, type, parent,
+  blocked_by, blocks})`.
+- **Project brief:** write it into the project description: `create_project({name,
+  description, initiative})` for a new project, `update_project(name, {description})`
+  for an existing one. For an initiative brief, `create_initiative` or
+  `update_initiative(name, {description})`. Do not create the first tickets here; that is `breaking-down-work`.
 
-### Step 6: Codebase Analysis (Optional)
+Read the ticket back after writing and check the description landed.
 
-When `--analyze-codebase` is specified:
+### 8. Report
 
-1. Extract technical areas from description
-2. Launch parallel analysis agents:
-   ```
-   For each technical area:
-   - Search for existing implementations (Glob)
-   - Find patterns and constraints (Grep)
-   - Check ai_docs/knowledge/ for context
-   - Return brief technical context (1 paragraph)
-   ```
-3. Synthesize findings into Technical Context section
-
-### Step 7: Output
-
-**Update existing item:**
 ```
-pm-context.update_item(id, {
-    title: refined_title,
-    description: populated_template,
-    labels: [type_label, "refined"]
-})
+ABC-123 refined: "Replay the log on start"
+- Project: Sync engine (initiative: Version 2)
+- Done when: 4 lines, 1 live check
+- Blocked by: ABC-101 (done)
+- Needs input: none
+<url>
 ```
 
-**Create new item:**
-```
-pm-context.create_item({
-    type: item_type,
-    title: title,
-    description: populated_template,
-    parent: parent_id,
-    labels: [type_label]
-})
-```
+## Next steps
 
-### Step 8: Validation
+- **A project brief:** run `breaking-down-work <project>` to create its tickets.
+- **A ticket that turned out too big:** run `breaking-down-work <key>`.
+- **A ready ticket:** it can be picked up, or run with `executing-work-items <key>`.
 
-- [ ] All required template sections populated
-- [ ] Acceptance criteria are measurable
-- [ ] Technical context sufficient for AI agents
-- [ ] Dependencies identified
-- [ ] Item linked to parent (if applicable)
+## Errors
 
-## Output Examples
+| Problem | What to do |
+|---------|------------|
+| Ticket not found | Check the key and which team you can read |
+| No project for a new ticket | Ask; never create a ticket outside a project |
+| Not enough context | Use `--interactive`, or leave `{needs input}` markers |
+| A near-duplicate exists | Show it and ask whether to refine that one instead |
 
-### Epic Refinement
-```
-🔍 Analyzing work item CCC-123...
-✅ Found: "Add user authentication system"
-📋 Type: Epic (detected from labels)
+## Platform notes
 
-📝 Gathering Context:
-  ✅ Extracted requirements from description
-  ✅ Found 3 related items
-  ✅ Identified tech stack: React + FastAPI
-
-🤖 AI-Optimization:
-  📦 Estimated 4-6 features across 3 phases
-  🔧 Foundation: JWT infrastructure, user schema
-  ⚡ Features: Login, signup, OAuth (parallel)
-  🔗 Integration: Security testing, docs
-
-✅ Epic refined: CCC-123
-🔗 View: [URL]
-📊 Ready for /breaking-down-work
-```
-
-### Feature Creation
-```
-🆕 Creating New Feature
-
-📝 What feature do you want to build?
-> User can reset their password via email
-
-🏷️ Suggested title: "Password Reset via Email"
-🔗 Parent epic: CCC-123 (User Authentication)
-
-📋 Generating feature specification...
-  ✅ User story defined
-  ✅ 5 acceptance criteria
-  ✅ Technical approach outlined
-  ✅ Subtasks identified (3)
-
-✅ Feature created: CCC-456
-🔗 View: [URL]
-```
-
-## Next Steps
-
-After refining:
-- **Epic**: Run `/breaking-down-work <id>` to create features/tasks
-- **Feature**: Run with `--create-subtasks` or manually break down
-- **Task/Bug**: Ready for sprint assignment
-
-## Error Handling
-
-| Error | Solution |
-|-------|----------|
-| "Item not found" | Verify ID format and access permissions |
-| "Insufficient context" | Use `--interactive` mode for guided input |
-| "Type ambiguous" | Specify `--type` explicitly |
-| "Parent not found" | Verify parent ID exists |
+- [platforms/claude-code.md](platforms/claude-code.md)
+- [platforms/hermes.md](platforms/hermes.md)

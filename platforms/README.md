@@ -117,9 +117,9 @@ naming file and line, when:
   tuple at the top of the script. Files under `platforms/` and the
   frontmatter are not checked for names.
 
-Existing body violations are listed in `scripts/lint-skills.allowlist` and
-reported as warnings. An entry that no longer matches is an error, so the file
-only shrinks. CCC-127 empties it. Do not add to it.
+`scripts/lint-skills.allowlist` can list body violations to report as
+warnings. An entry that no longer matches is an error, so the file only
+shrinks. CCC-127 emptied it. Do not add to it.
 
 ## Tests
 

@@ -85,7 +85,7 @@ hats:
     publishes: ["implementation.ready", "build.blocked", "task.complete"]
     default_publishes: "task.complete"
     instructions: |
-      ## BUILDER MODE - TDD Cycle
+      ## BUILDER MODE - TDD loop
       1. EXPLORE - understand task and codebase context
       2. RED - write failing tests
       3. GREEN - minimal code to make tests pass

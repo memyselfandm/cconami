@@ -1,190 +1,62 @@
-# Structure Preparation Phase
+# Coverage check
 
-Detailed instructions for Phase 0 of epic breakdown - preparing the epic structure before analysis.
+Step 1 of a breakdown. Before proposing tickets, find out what the project already
+has, so nothing is proposed twice and stray tickets are noticed.
 
-## Overview
+## 1. Collect
 
-Structure preparation ensures the epic has a clean, complete hierarchy before breakdown begins. This phase:
-- Validates epic completeness
-- Creates missing features for coverage gaps
-- Matches orphan items to the epic
-- Fixes metadata inconsistencies
-
-## Step 1: Gather Epic Context
-
-```python
-# Fetch epic details via pm-context
-epic = pm_context.get_item(epic_id)
-
-# Get team/project context
-team_context = pm_context.list_statuses()
-available_labels = pm_context.list_labels()
-
-# Analyze current epic structure
-child_items = pm_context.get_children(epic_id)
-
-# Categorize children
-features = [item for item in child_items if item.type == "feature"]
-orphan_tasks = [item for item in child_items if item.type == "task" and not item.children]
+```
+source   = get_project(name) | get_initiative(name) | get_item(key)
+tickets  = list_items({project, include_closed: true})
+statuses = list_statuses()
 ```
 
-## Step 2: Epic Completeness Analysis
+For a ticket source, also `get_children(key)` and its blocking links.
 
-### Parse Epic Objectives
+## 2. List the goals
 
-Extract from epic description:
-- Explicit objectives (numbered lists, bullet points)
-- Implied objectives (from user stories)
-- Technical components mentioned
-- Success criteria
+From the source's description, take:
 
-### Map Existing Coverage
+- explicit goals (numbered or bulleted lists, "Finished when" or "Done when" lines);
+- goals implied by the problem statement;
+- technical components it names.
 
-```python
-coverage_gaps = []
-for objective in objectives:
-    matching_feature = find_matching_feature(objective, features)
-    if not matching_feature:
-        coverage_gaps.append(objective)
+## 3. Match goals to tickets
 
-# Identify what features are missing
-missing_features = identify_missing_features(coverage_gaps)
-```
+For each goal, look for a ticket (open or closed) whose title, "Done when" or
+description covers it. A closed ticket covers a goal only if its "Done when" was met;
+a cancelled one does not.
 
-## Step 3: Orphan Discovery
+The result is three lists:
 
-Find items that should belong to this epic but aren't linked:
+- **covered:** goal and the ticket that covers it;
+- **uncovered:** goals with no ticket, which the proposal must address;
+- **strays:** open tickets in the project that match no goal.
 
-```python
-# Query for potential orphans
-# Items in same project, no parent, possibly related
-orphan_candidates = pm_context.list_items({
-    project: epic.project,
-    parent: None,
-    status_type: "backlog"
-})
+Match conservatively. If a ticket only probably covers a goal, list it as covered with
+a question mark and say so in the proposal; do not silently skip the goal.
 
-# Conservative alignment analysis
-orphan_matches = []
-for orphan in orphan_candidates:
-    score = calculate_alignment_score(orphan, epic)
-    if score >= 70:  # High confidence threshold only
-        orphan_matches.append((orphan, score))
-```
+## 4. Strays
 
-### Alignment Scoring
+A stray ticket may belong to another project, or the brief may be missing a goal.
+List strays in the proposal and ask. Do not move or close them in a breakdown;
+`reconciling-linear-projects` is where tickets are moved and closed.
 
-Score based on:
-- Title keyword overlap (40%)
-- Description similarity (30%)
-- Label overlap (20%)
-- Project/team match (10%)
+**One exception:** when the source is an oversized ticket, the breakdown itself may close
+that original ticket once every one of its "Done when" lines is carried by a new ticket
+(step 5 of the skill). It closes nothing else.
 
-**Only match if score >= 70%** to avoid false positives.
-
-## Step 4: Generate Fixes
-
-```python
-prep_actions = []
-
-# Missing features
-for gap in coverage_gaps:
-    prep_actions.append({
-        "type": "create_feature",
-        "title": generate_feature_title(gap),
-        "description": f"Feature to address: {gap.description}",
-        "reason": f"Missing coverage for: {gap.objective}"
-    })
-
-# Orphan matches
-for orphan, score in orphan_matches:
-    prep_actions.append({
-        "type": "match_orphan",
-        "item": orphan,
-        "confidence": score,
-        "reason": f"High alignment score: {score}%"
-    })
-
-# Metadata fixes
-for item in child_items:
-    if item.priority != epic.priority:
-        prep_actions.append({
-            "type": "fix_metadata",
-            "item": item,
-            "field": "priority",
-            "from": item.priority,
-            "to": epic.priority
-        })
-```
-
-## Step 5: Apply Fixes
-
-```python
-for action in prep_actions:
-    if action["type"] == "create_feature":
-        new_feature = pm_context.create_item({
-            type: "feature",
-            title: action["title"],
-            description: action["description"],
-            parent: epic_id,
-            priority: epic.priority
-        })
-        print(f"✅ Created feature: {new_feature.key}")
-
-    elif action["type"] == "match_orphan":
-        pm_context.set_parent(action["item"].id, epic_id)
-        pm_context.add_comment(
-            action["item"].id,
-            f"Matched to epic {epic.key} with {action['confidence']}% confidence"
-        )
-        print(f"✅ Matched orphan: {action['item'].key}")
-
-    elif action["type"] == "fix_metadata":
-        pm_context.update_item(action["item"].id, {
-            action["field"]: action["to"]
-        })
-        print(f"✅ Fixed metadata: {action['item'].key}")
-```
-
-## Step 6: Report
+## 5. Output
 
 ```markdown
-## Preparation Summary
+## Coverage
 
-### Structure Fixes Applied: {len(prep_actions)}
-
-**Features Created**: {created_count}
-{for feature in created_features:}
-- {feature.key}: {feature.title}
-
-**Orphans Matched**: {matched_count}
-{for orphan in matched_orphans:}
-- {orphan.key}: {orphan.title} ({orphan.confidence}% match)
-
-**Metadata Corrections**: {metadata_count}
-{for fix in metadata_fixes:}
-- {fix.item.key}: {fix.field} {fix.from} → {fix.to}
-
-### Ready for Breakdown
-Epic now has {total_features} features covering all objectives.
+Covered (3): goal -> ABC-101 (done), goal -> ABC-104 (in progress), goal -> ABC-106?
+Uncovered (4): goal, goal, goal, goal
+Strays (1): ABC-110 "Rename the config key" matches no goal - another project?
 ```
 
-## Error Handling
+## When to stop
 
-### No Objectives Found
-If epic description lacks clear objectives:
-- Flag as not ready for breakdown
-- Suggest running `/refining-work-items` first
-- Exit gracefully
-
-### Conflicting Orphans
-If multiple epics could claim an orphan:
-- Skip the orphan (too ambiguous)
-- Log for manual review
-- Continue with other fixes
-
-### PM Tool Errors
-If item creation fails:
-- Log the error
-- Continue with other fixes
-- Report failures at end
+- **No goals can be found:** the source is not ready. Suggest `refining-work-items`.
+- **Every goal is covered:** say so; there is nothing to break down.

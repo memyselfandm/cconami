@@ -1,112 +1,63 @@
-# Code Analysis Agent Prompt
+# Code analysis prompt
 
-Use this prompt template for parallel codebase analysis during epic breakdown.
+One analysis per technical area, run in parallel during a breakdown. Give each the
+prompt below with the placeholders filled.
 
-## Prompt Template
+## Prompt
 
 ```
-ROLE: Technical analyst specializing in {work_area_type}
+ROLE: Technical analyst for {area_type}
 
-EPIC CONTEXT:
-{epic_title}
-{epic_description}
+WORK BEING BROKEN DOWN:
+{source_title}
+{source_description}
 
-ANALYSIS FOCUS: {work_area}
+AREA TO ANALYSE: {area}
 
 INSTRUCTIONS:
-1. Read relevant codebase documentation in ai_docs/knowledge/* (if exists)
-2. Use Glob to find main files/components related to "{work_area}"
-3. Use Grep to identify existing patterns and constraints
-4. Analyze existing code structure for this area
+1. Read the repository's own documentation for this area, if any.
+2. Find the main files and components for "{area}".
+3. Find the existing patterns and constraints that new code must follow.
+4. Do not change any file.
 
-DELIVERABLES:
-Return a structured analysis with:
+RETURN, in under 500 words:
 
-## Technical Context
-{1 paragraph on current implementation state}
+## Current state
+{One paragraph}
 
-## Implementation Requirements
-- {Requirement 1}
-- {Requirement 2}
-- {Requirement 3}
+## Patterns to follow
+- {Pattern, with a file that shows it}
 
-## Recommended Features
-1. **{Feature name}** (Complexity: {S/M/L})
-   - {Brief description}
-   - Parallelizable: {Yes/No}
-   - Phase: {Foundation/Features/Integration}
+## Risks
+- {Risk}
 
-2. **{Feature name}** ...
+## Likely files
+- `{path}`: {change or create}
 
-## Patterns to Follow
-- {Pattern 1 from existing code}
-- {Pattern 2 from existing code}
-
-## Risks & Complexities
-- {Risk 1}
-- {Risk 2}
-
-## Files to Focus On
-- `{path/to/file1}`: {what needs to change}
-- `{path/to/file2}`: {what needs to be created}
-
-Keep analysis focused and actionable. Target < 500 words.
+## Suggested tickets
+1. **{Imperative title}**
+   - Done when: {two or three checkable lines}
+   - Blocked by: {another suggested ticket, or none}
+   - Files: {paths}
 ```
 
-## Work Area Type Mapping
+## Area types
 
-Based on keywords, assign type:
-
-| Keywords | Type |
-|----------|------|
-| frontend, ui, component, react, vue | Frontend |
+| Keywords | Area type |
+|----------|-----------|
+| frontend, ui, component, page | Frontend |
 | backend, api, server, endpoint | Backend |
-| database, schema, migration, model | Database |
-| auth, authentication, security | Security |
-| infrastructure, deploy, docker, k8s | Infrastructure |
-| test, testing, e2e, unit | Testing |
+| database, schema, migration, model | Data |
+| auth, permission, secret, security | Security |
+| deploy, container, pipeline, infrastructure | Infrastructure |
+| test, e2e, fixture | Testing |
 
-## Launching Agents
+## Merging the results
 
-**CRITICAL**: Launch all analysis agents in a single response for maximum parallelization.
-
-```python
-# Example: Launch 4 agents in parallel
-work_areas = [
-    ("Database", "schema changes for user authentication"),
-    ("Backend", "JWT token implementation and validation"),
-    ("Frontend", "login and signup UI components"),
-    ("Security", "OAuth provider integration")
-]
-
-# In a SINGLE response, invoke all agents:
-for i, (type, area) in enumerate(work_areas):
-    Task.invoke(
-        prompt=generate_analysis_prompt(type, area, epic),
-        description=f"Analyze {type}: {area}"
-    )
-```
-
-## Synthesizing Results
-
-After all agents complete:
-
-1. **Merge Feature Suggestions**
-   - Deduplicate similar features
-   - Resolve conflicting recommendations
-   - Validate sizes are consistent
-
-2. **Build Dependency Graph**
-   - Foundation features from multiple analyses
-   - Cross-area dependencies
-   - Integration requirements
-
-3. **Identify Conflicts**
-   - File modification conflicts
-   - Incompatible approaches
-   - Resource contention
-
-4. **Final Feature List**
-   - Ordered by phase
-   - Parallelization marked
-   - Dependencies noted
+1. **Deduplicate** suggested tickets that describe the same change.
+2. **Resize** each to one to three units of value: merge fragments, split anything that
+   needs more than three pull requests.
+3. **Link**: turn each "Blocked by" into a blocking link; add links across areas where
+   one area's change needs another's.
+4. **Flag overlaps**: two tickets that list the same file need an order or a merge.
+5. **Fold tests and docs** into the "Done when" of the ticket that needs them.

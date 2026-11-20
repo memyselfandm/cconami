@@ -55,8 +55,8 @@ Do NOT front-load all questions. Extract what you can from the source first.
 Extract plan content based on source type:
 
 **Linear ticket** (`--from CHR-123`):
-```bash
-linctl issue get <ticket-id> --json
+Fetch the ticket with its sub-issues and comments (how: see Platform notes), then map:
+```
 # Title → PROMPT.md objective
 # Description → requirements and context
 # Subtasks → task breakdown
@@ -181,13 +181,9 @@ The epic workflow adds these hats on top of the standard pattern:
 
 ### Tracker Integration
 
-Epic mode integrates with your project management tool. Adapt commands:
-
-| Tool | Fetch Issue | Comment |
-|------|-------------|---------|
-| Linear | `linctl issue get KEY --json` | `linctl issue comment KEY "message"` |
-| Jira | `jira issue view KEY --plain` | `jira issue comment KEY "message"` |
-| GitHub | `gh issue view NUM` | `gh issue comment NUM -b "message"` |
+Epic mode integrates with your project management tool. Hats run in Ralph
+Orchestrator's shell, whichever agent generated the config, so they need tracker CLI
+commands. Take them from [references/tracker-commands.md](references/tracker-commands.md).
 
 All hats comment on tracker tickets to maintain an audit trail.
 
@@ -200,3 +196,10 @@ All hats comment on tracker tickets to maintain an audit trail.
 5. **Task Dependencies** - Ralph's task system manages story ordering
 
 See [examples/epic-multiagent-pipeline.md](examples/epic-multiagent-pipeline.md) for a complete worked example.
+
+## Platform notes
+
+How the agent reads a ticket, and which tracker commands to write into generated hats:
+
+- [platforms/claude-code.md](platforms/claude-code.md)
+- [platforms/hermes.md](platforms/hermes.md)

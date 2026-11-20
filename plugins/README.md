@@ -8,22 +8,24 @@ This directory contains Claude Code skills following the Agent Skills specificat
 
 | Skill | Description |
 |-------|-------------|
+| [linear-workflow](linear-workflow/skills/linear-workflow/) | **Background context skill** - The project, ticket and initiative model, and the rules for working in Linear. |
 | [pm-context](linear-workflow/skills/pm-context/) | **Background context skill** - Provides PM tool abstraction layer. Auto-loads when working with work items. Supports Linear and markdown backlogs. |
 
 ### Work Item Lifecycle
 
 | Skill | Description |
 |-------|-------------|
-| [refining-work-items](linear-workflow/skills/refining-work-items/) | Refines epics, features, tasks into AI-ready specifications with templates |
-| [breaking-down-work](linear-workflow/skills/breaking-down-work/) | Breaks down epics into features and tasks with parallel codebase analysis |
-| [executing-work-items](linear-workflow/skills/executing-work-items/) | Executes specific items ad-hoc with dependency resolution |
+| [refining-work-items](linear-workflow/skills/refining-work-items/) | Turns an idea into a ticket with a "Done when", or a project brief |
+| [breaking-down-work](linear-workflow/skills/breaking-down-work/) | Splits a project or an oversized ticket into tickets with blocking links |
+| [executing-work-items](linear-workflow/skills/executing-work-items/) | Implements named tickets with agents, one branch and pull request at a time |
 
 ### Analysis & Organization
 
 | Skill | Description |
 |-------|-------------|
-| [analyzing-dependencies](linear-workflow/skills/analyzing-dependencies/) | Maps dependencies, finds blockers and critical paths |
-| [shuffling-projects](linear-workflow/skills/shuffling-projects/) | Reorganizes work items between projects/sprints |
+| [analyzing-dependencies](linear-workflow/skills/analyzing-dependencies/) | Maps blocking links, finds blockers and the longest chain |
+| [reconciling-linear-projects](linear-workflow/skills/reconciling-linear-projects/) | Audits a project's tickets against pull requests and the running system; moves leftovers and re-homes tickets |
+| [reporting-workstream-status](linear-workflow/skills/reporting-workstream-status/) | Reports what is stuck, stale or colliding across projects |
 
 ### Development Utilities
 
@@ -45,7 +47,7 @@ All skills use the `pm-context` abstraction layer, supporting:
 
 | Tool | Adapter | CLI |
 |------|---------|-----|
-| Linear | [linear.md](linear-workflow/skills/pm-context/adapters/linear.md) | `linctl` |
+| Linear | [linear.md](linear-workflow/skills/pm-context/adapters/linear.md) | Linear MCP connector or `linctl` (per platform) |
 | Markdown | [markdown.md](linear-workflow/skills/pm-context/adapters/markdown.md) | filesystem |
 
 Configure in your project's CLAUDE.md:
@@ -95,14 +97,15 @@ These skills can be installed via Claude Code plugins:
 Invoke skills with slash commands:
 
 ```bash
-# Refine a work item
-/refining-work-items CCC-123 --type epic
+# Refine a ticket, or write a project brief
+/refining-work-items ABC-123
+/refining-work-items "Sync engine" --type project-lite
 
-# Break down an epic
-/breaking-down-work CCC-123
+# Break a project into tickets
+/breaking-down-work "Sync engine"
 
-# Execute a work item
-/executing-work-items CCC-123
+# Implement tickets
+/executing-work-items ABC-120 ABC-123
 ```
 
 ## Development

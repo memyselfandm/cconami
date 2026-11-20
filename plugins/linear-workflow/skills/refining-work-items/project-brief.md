@@ -1,22 +1,22 @@
-# Comprehensive Epic Template (PRD)
+# Project brief, full
 
-Use this template for full epic refinement. For quick 1-pager, use [epic-lite.md](epic-lite.md).
+A full brief for a new project (a workstream) or an initiative. It goes in the project
+or initiative description. For a one-pager, use [project-brief-lite.md](project-brief-lite.md).
 
 ## Template Sections
 
 ### 1. Executive Summary
 
 ```markdown
-# Epic: {title}
+# Project: {title}
 
-**ID**: {epic_id}
-**Priority**: {P0|P1|P2|P3|P4}
-**Complexity**: {Small|Medium|Large|XL}
-**Status**: {Draft|Ready|In Progress|Done}
-**Owner**: {assignee}
+**Initiative**: {initiative, if any}
+**Priority**: {urgent|high|normal|low|none}
+**Status**: {Planned|In Progress|Completed}
+**Lead**: {person or lead session}
 
 ## Overview
-{2-3 sentence summary of what this epic delivers and why it matters}
+{2-3 sentence summary of what this workstream delivers and why it matters}
 ```
 
 ### 2. Problem Space
@@ -28,7 +28,7 @@ Use this template for full epic refinement. For quick 1-pager, use [epic-lite.md
 {What users/systems face today - pain points and limitations}
 
 ### Desired Reality
-{The ideal end state after this epic is complete}
+{The ideal end state when this workstream closes}
 
 ### Business Value
 {Why this matters - revenue, user satisfaction, efficiency, etc.}
@@ -36,6 +36,14 @@ Use this template for full epic refinement. For quick 1-pager, use [epic-lite.md
 ### Success Metrics
 - {Metric 1}: {current} → {target}
 - {Metric 2}: {current} → {target}
+
+## Finished when
+{3-6 checkable lines that close the workstream. Each names its evidence, the same way a
+ticket's "Done when" does; a reconciliation checks them before the project closes.}
+
+- [ ] {Outcome, and the evidence that shows it}
+- [ ] {Outcome that needs a running system: "live, and <check> shows it"}
+- [ ] Every leftover sits on a named open ticket in another project
 ```
 
 **Prompts:**
@@ -147,32 +155,22 @@ As a {user type}, I want {capability} so that {benefit}.
 {GDPR, security considerations}
 ```
 
-### 8. Feature Decomposition
+### 8. Tickets
 
 ```markdown
-## Feature Breakdown
+## First tickets
 
-### Phase 1: Foundation
-{Features that must be done first - minimize this}
+Each ticket is one to three units of value with its own "Done when". Order comes from
+blocking links; keep the tickets that block others few, so most can run in parallel.
 
-| Feature | Complexity | Parallelizable |
-|---------|------------|----------------|
-| {name} | {S/M/L} | {Yes/No} |
-
-### Phase 2: Core Features
-{Main features - maximize parallelization here}
-
-| Feature | Complexity | Parallelizable |
-|---------|------------|----------------|
-| {name} | {S/M/L} | {Yes/No} |
-
-### Phase 3: Integration
-{Testing, documentation, polish}
-
-| Feature | Complexity | Parallelizable |
-|---------|------------|----------------|
-| {name} | {S/M/L} | {Yes/No} |
+| Ticket | Blocked by | Notes |
+|--------|------------|-------|
+| {title} | - | {foundation: others wait on it} |
+| {title} | {ticket} | |
+| {title} | - | |
 ```
+
+`breaking-down-work` turns this table into tickets.
 
 ### 9. Testing Strategy
 
@@ -252,9 +250,9 @@ As a {user type}, I want {capability} so that {benefit}.
 ## AI Execution Context
 
 ### Parallelization Strategy
-- **Foundation features**: Must complete before features phase
-- **Core features**: {X}% can run in parallel
-- **Integration features**: Depends on all features complete
+- **Blocking tickets**: {which tickets others wait on - keep these few}
+- **Parallel tickets**: {X}% have no unmet blocker
+- **Final tickets**: {integration, docs, live checks that wait on the rest}
 
 ### Implementation Hints
 - Follow existing patterns in {directory}
@@ -273,14 +271,15 @@ As a {user type}, I want {capability} so that {benefit}.
 
 ## Validation Checklist
 
-Before marking epic as "Ready":
+Before starting work on the project:
 
 - [ ] Problem statement is clear and compelling
 - [ ] Success metrics are measurable
+- [ ] "Finished when" has checkable lines with their evidence
 - [ ] User stories cover primary use cases
 - [ ] Acceptance criteria are testable
 - [ ] Technical approach is feasible
-- [ ] Features are properly sized (no XL features)
+- [ ] Tickets are one to three units of value each
 - [ ] Parallelization opportunities identified
 - [ ] Risks and dependencies documented
 - [ ] AI guidance section complete
