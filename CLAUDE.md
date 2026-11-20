@@ -16,7 +16,7 @@ plugins/<plugin>/
   agents/*.md                     # Subagents (authoring only)
   hooks/                          # Hooks (operating-model) or a mod's hooks module
   tests/                          # A mod's tests (*.test.ts, *.test.tsx)
-plugins/MODS.md                   # Detailed behaviour of the four mods
+plugins/MODS.md                   # Detailed behaviour of each mod
 platforms/hermes/                 # render.py, install.sh, test-render.sh
 scripts/lint-skills.py            # Cross-platform lint (allowlist must stay empty)
 scripts/check-catalog.py          # README table vs marketplace.json vs plugins/
