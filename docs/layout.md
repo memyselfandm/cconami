@@ -53,7 +53,7 @@ a plugin that is not in the marketplace.
 | `product` | Shaping work before it is ticketed: PRDs, feature prioritisation, product overviews and design brainstorms. Depends on `linear-workflow` for `pm-context` | Breaking work into tickets, which hands off to `linear-workflow` |
 | `authoring` | Building agent tooling: skills, subagents, Ralph configs, scraped docs; the six domain subagents | Anything that runs a workflow on a tracker |
 | `operating-model` | How several agent sessions and the owner work together: checkpoints, owner asks, isolated PR review, workstream leads, peer messages, and the Bash command guard hook | Tracker workflow skills; the interface (mods) |
-| `owner-inbox`, `peer-messages`, `ci-status`, `mcp-health`, `token-budget` | Mods: Claude Code interface changes, one concern each | Skills or agents |
+| `owner-inbox`, `peer-messages`, `ci-status`, `mcp-health`, `token-budget`, `guardrail-notice` | Mods: Claude Code interface changes, one concern each | Skills or agents |
 
 Mods are Claude Code only and have no Hermes rendering. Skills with
 `targets` that omit `hermes` (for example `orchestrating-workstreams`) are
