@@ -30,6 +30,13 @@ jobs:
           for plugin in plugins/*/; do
             claude plugin validate "$plugin"
           done
+      - name: Run each mod's tests
+        run: |
+          for plugin in plugins/*/; do
+            if [ -n "$(find "$plugin" \( -name '*.test.ts' -o -name '*.test.tsx' \) -print -quit)" ]; then
+              claude plugin test "$plugin"
+            fi
+          done
       - name: Lint SKILL.md files
         run: uv run --script scripts/lint-skills.py
       - name: Test the lint
