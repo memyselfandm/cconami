@@ -42,6 +42,11 @@
       "name": "mcp-health",
       "source": "./plugins/mcp-health",
       "description": "A band above the prompt when a plugin's MCP server is not connected, naming the server and the next step."
+    },
+    {
+      "name": "token-budget",
+      "source": "./plugins/token-budget",
+      "description": "The session's token spend against a budget (OMC_RUN_BUDGET_TOKENS or a setting), in a band above the prompt. Hidden when no budget is set."
     }
   ]
 }
