@@ -10,7 +10,7 @@
       "type": "string",
       "multiple": true,
       "title": "Extra refusal patterns",
-      "description": "Name the hook behind a refusal. Each entry is Label=regular expression, or a bare expression (named 'hook'), matched against the refusal's text and checked before the built-in patterns. Every hook refusal is shown either way.",
+      "description": "Name the hook behind a refusal. Each entry is Label=regular expression, or a bare expression (named 'hook'), matched against the first 2000 characters of the refusal's text and checked before the built-in patterns. Everything before the first = is the label, so an expression containing = must be written Label=expression. An expression with a nested quantifier, such as (a+)+, is rejected; a rejected or invalid entry is reported once in the transcript. Every hook refusal is shown either way.",
       "default": []
     },
     "toast": {

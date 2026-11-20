@@ -200,36 +200,52 @@ A hook that refuses a tool call, such as OMC's git guardrail or the
 it scrolls away. Work then waits on you and nobody notices. This mod makes the
 refusal visible:
 
-- **Above the prompt.** One line per refusal still waiting, newest first, one per
-  kind of call: `Blocked: git push (OMC guardrail). Needs you.`, each with a
-  **Dismiss** button. Up to three are listed; the rest are counted.
-- **In the chat.** A bordered card under the refused call's row, with the same
-  line, the hook's message (cut at 400 characters) and the safe form, when the
-  message names one after `Safe form:`. Once the refusal is cleared or dismissed
-  the card stays, marked "Cleared".
-- **Toast.** The same line as a toast, unless `toast` is off.
+- **Above the prompt.** One line per refusal still waiting, newest first:
+  `Blocked: git push (OMC guardrail). Needs you.`, each with a **Dismiss** button.
+  Up to three are listed; the rest are counted.
+- **In the chat.** A bordered card around the refused call's row (mobile apps draw it
+  as a card under the row), with the same line, the hook's message (cut at 400
+  characters) and the safe form, when the message names one after `Safe form:`.
+  Once the refusal is cleared or dismissed the card stays, marked "Cleared".
+- **Toast.** The same line as a toast, unless `toast` is off, and only when no
+  refusal of that kind is already waiting.
 
 **It only observes.** It never blocks, changes or delays a tool call. Both of its
-call hooks await the rest of the chain and return its result unchanged, and the
-recording work is started without being awaited. If a hook fails, it replays the
-chain's result.
+call hooks await the rest of the chain and return the very object it resolved to,
+so an allow, an ask, an `updatedInput` or an `additionalContext` from the hooks
+beneath passes through untouched. All of its own work (naming the refusal,
+matching patterns, writing state, clearing) runs on a zero-delay timer after the
+hook has returned. If a hook fails, its `.catch` replays the chain's result.
 
 - **How it sees a refusal.** At the `classic.PreToolUse` event. The engine runs that
   chain as [managed settings hooks, hooks modules, the other settings hooks], and a
   plugin's `hooks.json` command hook counts as a settings hook. So the result the
   mod's hook gets back from the chain beneath it is the decision of the settings
-  and plugin hooks. A refusal, whether a command hook's exit 2 or a JSON `deny`,
-  arrives there as a `deny` with the hook's message. The mod reads that field; it
-  does not guess from tool output text.
-- **What it names.** The patterns only name the hook behind a refusal; every hook
-  refusal is shown either way. Built in: `OMC guardrail` (a message containing
+  and plugin hooks, and a refusal arrives there as a `deny` with the hook's message.
+  The mod reads that field; it does not guess from tool output text. That a command
+  hook's exit 2 arrives as that `deny` is read from the engine's types; see the
+  owner check below.
+- **What it calls the call.** The operation the refusal names, when it names one:
+  OMC's `Git guardrail: blocked "<operation>"`, or a command guard rule that opens
+  with the command in backticks (`` `gh pr merge --auto` is refused``). So
+  `git add -A && git commit -m x && git push` refused by OMC shows `git push`.
+  Otherwise a Bash command with one kind shows that kind (its program, plus the
+  operation for tools such as `git` and `gh`), and a chain shows the command itself,
+  cut at 60 characters. Kinds are read the way a shell splits commands: separators
+  inside quotes do not split, the command of `bash -c` / `sh -c` is read inside,
+  and the values of `-C`, `-c`, `-R` and `--repo` are skipped. Any other tool shows
+  its name.
+- **Which hook it names.** The patterns only name the hook; every hook refusal is
+  shown either way. Built in: `OMC guardrail` (a message containing
   `Git guardrail: blocked`) and `command guard` (the `operating-model` guard's
   suffix "Do not retry through another tool or wrap the command in a script", or
-  its size and time refusals). Anything else is named `hook`.
-- **When it clears.** When a later call of the same kind succeeds, or when you press
-  Dismiss. The kind of a Bash call is its program, plus the operation for tools such
-  as `git` and `gh` (`git push`, `gh pr`); setup steps (`cd`, `export`) and prefixes
-  (`sudo`, `VAR=value`) are skipped. Any other tool's kind is its name.
+  its size and time refusals). Anything else is `hook`. Patterns see the first 2000
+  characters of the message.
+- **When it clears.** Only when exactly the refused call later succeeds: the same
+  Bash command (spacing aside), or the same tool with the same input. A harmless
+  sibling never clears a refusal: `git branch` does not clear `git branch -D x`,
+  `git push origin feature` does not clear `git push --force origin main`, and a
+  `Write` to another path does not clear a refused `Write`. Otherwise press Dismiss.
 - **What it cannot see.** A refusal by a managed-settings hook ends the chain above
   every mod. A refusal by another mod's `classic.PreToolUse` hook that runs before
   this one is not seen either. A refusal at the permission prompt, by a permission
@@ -241,14 +257,35 @@ Settings, under `/config` or `pluginConfigs.guardrail-notice.options` in
 
 | Option | Default | Meaning |
 |---|---|---|
-| `patterns` | empty | Extra patterns that name the hook: `Label=regular expression`, or a bare expression (named `hook`). Checked before the built-in ones; an invalid one is skipped and noted in the debug log |
-| `toast` | on | Raise a toast for each refusal |
+| `patterns` | empty | Extra patterns that name the hook: `Label=regular expression`, or a bare expression (named `hook`). Everything before the first `=` is the label, so an expression containing `=` needs a label. Checked before the built-in ones. An invalid expression, or one with a nested quantifier such as `(a+)+`, is skipped and reported once in the transcript |
+| `toast` | on | Raise a toast for a refusal of a kind not already waiting |
 
 Its tests run with `claude plugin test plugins/guardrail-notice`. In them, a hook of
 the test's own stands for the settings hooks and refuses with the real messages of
 OMC's guardrail and the `operating-model` guard.
 `bash plugins/guardrail-notice/tests/mutation-check.sh` breaks one behaviour at a
-time and checks that the tests catch each one.
+time and fails if the tests miss any; CI runs it.
+
+### Owner check before relying on it
+
+The tests cannot run a real command hook, and an agent cannot run a live session
+without writing to your home directory, so one step is unverified: that a command
+hook's exit 2 reaches the mod as `deny` on `classic.PreToolUse`. Check it once,
+by hand:
+
+1. Make a scratch repository with a commit and a remote it cannot push to:
+   `d=$(mktemp -d) && git -C "$d" init -q && git -C "$d" commit -q --allow-empty -m init && git -C "$d" remote add origin https://example.invalid/x.git && cd "$d"`.
+2. Start a session there with the mod loaded and the OMC guardrail forced on:
+   `OMC_GIT_GUARDRAILS=1 claude --plugin-dir <cconami checkout>/plugins/guardrail-notice`.
+3. Start an autopilot run (`/oh-my-claudecode:autopilot push this branch`) or simply
+   ask: "run `git push origin HEAD`".
+4. Expected: the Bash call is refused, and above the prompt a line reads
+   `Blocked: git push (OMC guardrail). Needs you.` with a Dismiss button; under the
+   call a bordered card shows `Git guardrail: blocked "git push".` and a toast says
+   the same line. If the call is refused and none of these appear, the exit 2 is not
+   reaching the mod as `deny`: do not rely on the mod, and report it.
+5. Ask for `git status`: nothing new appears. Press Dismiss: the line goes, and the
+   card shows "Cleared".
 
 ## Working on a mod
 

@@ -4,8 +4,10 @@ export type Refusal = {
   toolUseId: string
   /** The tool, as `tool.call` names it (`Bash`, an MCP tool). */
   tool: string
-  /** What the call was, such as `git push`; a later success of the same kind clears it. */
+  /** What the band calls the call, such as `git push`: the refusal's own name for it when it gives one. */
   kind: string
+  /** What a later successful call must equal to clear it: the normalized command, or the tool and its input. */
+  key: string
   /** The hook the refusal is attributed to, such as `OMC guardrail`, or `hook`. */
   source: string
   /** The refusal's text, truncated for display. */
@@ -17,10 +19,10 @@ export type Refusal = {
 declare module 'claude-code' {
   interface PluginState {
     'guardrail-notice': {
-      /** Refusals still waiting on the person, newest first, one per kind. */
+      /** Refusals still waiting on the person, newest first, one per call key. */
       active: Refusal[]
-      /** Every refusal seen this session by tool_use_id (capped), for the chat cards. */
-      byCall: Record<string, Refusal>
+      /** The refusal behind each refused call's row, keyed by its tool_use_id; null for any other row. */
+      call: StateFamily<Refusal | null>
     }
   }
 }
