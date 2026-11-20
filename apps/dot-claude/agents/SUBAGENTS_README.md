@@ -14,17 +14,6 @@ Specialized AI agents that extend Claude Code's capabilities for specific domain
 - Creates straightforward delegation patterns
 - Follows Claude Code best practices
 
-### 🔧 slash-command-architect
-**Purpose**: Specialist for Claude Code slash commands  
-**Use When**: Designing, creating, reviewing, or improving slash commands  
-**Tools**: Read, Grep, Glob, Write, WebFetch  
-**Key Features**:
-- **Creation Mode**: Builds new slash commands from scratch
-- **Review Mode**: Validates and improves existing commands
-- Ensures minimal tool permissions
-- Follows slash command best practices
-- Validates security and performance
-
 ### 📚 context-engineering-subagent
 **Purpose**: Optimizes AI agent context through research and documentation  
 **Use When**: Building comprehensive context for AI agents  
@@ -92,9 +81,9 @@ Claude Code will proactively use subagents when:
 ```bash
 # Example: Using Task tool to invoke a subagent
 Task.invoke({
-  subagent_type: "slash-command-architect",
-  description: "Review the git-status command",
-  prompt: "Review and validate the existing git-status slash command for best practices"
+  subagent_type: "subagent-architect",
+  description: "Review the context-engineering-subagent definition",
+  prompt: "Review and validate the existing subagent definition for best practices"
 })
 ```
 
@@ -152,7 +141,6 @@ Claude Code selects subagents based on:
 - **database-engineer**: NEW - Multi-database expertise with adaptive specialization modes
 
 ### Previous Updates (Aug 2025)
-- **slash-command-architect**: Added Review Mode for validating existing commands
 - **context-engineering-subagent**: Implemented arxiv best practices
 - **notion-workspace-architect**: Added support for complex database structures
 
@@ -167,6 +155,5 @@ When adding or modifying subagents:
 
 ## Related Documentation
 
-- [Claude Code Subagents Documentation](../../ai_docs/knowledge/claude-code-subagents-docs.md)
-- [CLAUDE.md Best Practices](../../CLAUDE.md)
-- [Commands Documentation](../commands/COMMANDS_README.md)
+- [Claude Code subagents documentation](https://code.claude.com/docs/en/sub-agents)
+- [CLAUDE.md Best Practices](../../../CLAUDE.md)

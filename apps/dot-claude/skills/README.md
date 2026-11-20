@@ -8,7 +8,7 @@ This directory contains Claude Code skills following the Agent Skills specificat
 
 | Skill | Description |
 |-------|-------------|
-| [pm-context](pm-context/) | **Background context skill** - Provides PM tool abstraction layer. Auto-loads when working with work items. Supports Linear, Jira, GitHub Projects, and markdown backlogs. |
+| [pm-context](pm-context/) | **Background context skill** - Provides PM tool abstraction layer. Auto-loads when working with work items. Supports Linear and markdown backlogs. |
 
 ### Work Item Lifecycle
 
@@ -17,12 +17,6 @@ This directory contains Claude Code skills following the Agent Skills specificat
 | [refining-work-items](refining-work-items/) | Refines epics, features, tasks into AI-ready specifications with templates |
 | [breaking-down-work](breaking-down-work/) | Breaks down epics into features and tasks with parallel codebase analysis |
 | [executing-work-items](executing-work-items/) | Executes specific items ad-hoc with dependency resolution |
-
-### Sprint Management
-
-| Skill | Description |
-|-------|-------------|
-| [managing-sprints](managing-sprints/) | Complete sprint lifecycle: planning, execution, monitoring, review |
 
 ### Analysis & Organization
 
@@ -52,8 +46,6 @@ All skills use the `pm-context` abstraction layer, supporting:
 | Tool | Adapter | CLI |
 |------|---------|-----|
 | Linear | [linear.md](pm-context/adapters/linear.md) | `linctl` |
-| Jira | [jira.md](pm-context/adapters/jira.md) | `jira` |
-| GitHub | [github.md](pm-context/adapters/github.md) | `gh` |
 | Markdown | [markdown.md](pm-context/adapters/markdown.md) | filesystem |
 
 Configure in your project's CLAUDE.md:
@@ -95,7 +87,7 @@ These skills can be installed via Claude Code plugins:
 /plugin install cconami/skills
 
 # Or install specific skills
-/plugin install cconami/skills/managing-sprints
+/plugin install cconami/skills/refining-work-items
 ```
 
 ## Usage
@@ -109,11 +101,8 @@ Invoke skills with slash commands:
 # Break down an epic
 /breaking-down-work CCC-123
 
-# Plan sprints
-/managing-sprints plan CCC-123
-
-# Execute a sprint
-/managing-sprints execute CCC-123.S01
+# Execute a work item
+/executing-work-items CCC-123
 ```
 
 ## Development
@@ -127,7 +116,7 @@ Invoke skills with slash commands:
 
 ### Skill Guidelines
 
-- Use gerund naming (e.g., `managing-sprints` not `sprint-manager`)
+- Use gerund naming (e.g., `refining-work-items` not `work-item-refiner`)
 - Write descriptions in third person
 - Keep SKILL.md under 500 lines
 - Use progressive disclosure for large content

@@ -1,6 +1,6 @@
 ---
 name: pm-context
-description: Provides project management tool abstraction layer. Auto-loads when working with work items, epics, features, tasks, sprints, or backlogs. Detects PM tool (Linear, Jira, GitHub Projects, markdown) from project configuration and loads appropriate adapter for seamless operations across different PM systems.
+description: Provides project management tool abstraction layer. Auto-loads when working with work items, epics, features, tasks, sprints, or backlogs. Detects PM tool (Linear, markdown) from project configuration and loads appropriate adapter for seamless operations across different PM systems.
 user-invocable: false
 ---
 
@@ -23,17 +23,14 @@ Detect the project's PM tool in this order:
    ```json
    {
      "pm": {
-       "tool": "jira",
-       "project": "PROJ",
-       "api_url": "https://company.atlassian.net"
+       "tool": "linear",
+       "project": "Chronicle"
      }
    }
    ```
 
 3. **File detection**:
    - `.linear/` directory → Linear
-   - `.jira.d/` or `jira.config` → Jira
-   - `.github/` with projects → GitHub Projects
    - `BACKLOG.md` or `backlog.md` → Markdown
 
 4. **Default**: Markdown (no external tool required)
@@ -45,9 +42,9 @@ Once detected, load the corresponding adapter:
 | Tool | Adapter File | CLI |
 |------|--------------|-----|
 | Linear | [adapters/linear.md](adapters/linear.md) | `linctl` |
-| Jira | [adapters/jira.md](adapters/jira.md) | `jira` |
-| GitHub | [adapters/github.md](adapters/github.md) | `gh` |
 | Markdown | [adapters/markdown.md](adapters/markdown.md) | filesystem |
+
+The Jira and GitHub adapters are archived in `docs/archive/pm-context-adapters/`; their rewrites are tracked in CCC-138 and CCC-139.
 
 ## Operations Interface
 

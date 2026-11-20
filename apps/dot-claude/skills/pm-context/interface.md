@@ -242,15 +242,17 @@ Remove a label from a work item.
 
 ## Terminology Mapping Reference
 
-| Generic | Linear | Jira | GitHub | Markdown |
-|---------|--------|------|--------|----------|
-| work item | issue | issue | issue | entry |
-| epic | issue + epic label | Epic issue type | milestone | `# Heading` |
-| feature | issue + feature label | Story issue type | issue | `## Heading` |
-| task | issue + task label | Task/Sub-task | issue | `- [ ] item` |
-| bug | issue + bug label | Bug issue type | issue + bug label | `- [ ] [BUG]` |
-| sprint | project | sprint | project | `## Sprint N` section |
-| backlog | no project | backlog | no project | unsectioned items |
-| status_type:todo | Backlog/Todo | To Do | open | `- [ ]` |
-| status_type:in_progress | In Progress | In Progress | open + label | `- [~]` |
-| status_type:done | Done | Done | closed | `- [x]` |
+| Generic | Linear | Markdown |
+|---------|--------|----------|
+| work item | issue | entry |
+| epic | issue + epic label | `# Heading` |
+| feature | issue + feature label | `## Heading` |
+| task | issue + task label | `- [ ] item` |
+| bug | issue + bug label | `- [ ] [BUG]` |
+| sprint | project | `## Sprint N` section |
+| backlog | no project | unsectioned items |
+| status_type:todo | Backlog/Todo | `- [ ]` |
+| status_type:in_progress | In Progress | `- [~]` |
+| status_type:done | Done | `- [x]` |
+
+The Jira and GitHub adapters are archived in `docs/archive/pm-context-adapters/`; their rewrites are tracked in CCC-138 and CCC-139.
