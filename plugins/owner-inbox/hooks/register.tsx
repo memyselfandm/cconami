@@ -2,11 +2,12 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { Ask, Inbox } from '../types'
+import { filedAsk, listIssuesArgs, settings } from './logic'
 
-// The inbox is the set of open Linear issues that carry this label, whoever
-// they are assigned to: agents do not reliably assign the owner. Linear is the
-// record, so every session shows the same list.
-const LABEL = 'owner-action'
+// The inbox is the set of open Linear issues that carry the ask label (the
+// `label` userConfig field), whoever they are assigned to: agents do not
+// reliably assign the owner. Linear is the record, so every session shows the
+// same list.
 const PANE = 'owner-inbox'
 const TITLE = 'Waiting on you'
 const REFRESH_MS = 120_000
@@ -59,16 +60,10 @@ function isInbox(value: unknown): value is Inbox {
   )
 }
 
-async function refresh($: EngineInterface): Promise<Inbox> {
+async function refresh($: EngineInterface, label: string): Promise<Inbox> {
   let fresh: Inbox
   try {
-    const answer = await $.mcp.call(LINEAR, 'list_issues', {
-      label: LABEL,
-      fields: ['id', 'title', 'url', 'status', 'statusType', 'project'],
-      // Closed asks come back too and are dropped in toAsks, so ask for the
-      // largest page the connector gives.
-      limit: 250,
-    })
+    const answer = await $.mcp.call(LINEAR, 'list_issues', listIssuesArgs(label))
     if (answer.isError) {
       throw new Error('the Linear connector refused the request')
     }
@@ -87,22 +82,6 @@ async function refresh($: EngineInterface): Promise<Inbox> {
   await update($, inbox, () => fresh)
 
   return fresh
-}
-
-/** The title of an issue a tool call files as an ask, or null. */
-function filedAsk(tool: string, input: unknown): string | null {
-  if (!/__(save|create)_issue$/.test(tool)) {
-    return null
-  }
-  const fields = (input ?? {}) as Record<string, unknown>
-  const labels = [fields.labels, fields.addLabels]
-    .flatMap(value => (Array.isArray(value) ? value : []))
-    .map(value => String(value).toLowerCase())
-  if (!labels.includes(LABEL)) {
-    return null
-  }
-
-  return typeof fields.title === 'string' ? fields.title : 'A new ask'
 }
 
 /** Opens the pane if it is closed and closes it if it is open. */
@@ -124,7 +103,9 @@ function clock(at: number): string {
   return `${when.getHours()}:${minutes}`
 }
 
-export const register: Register = on => {
+export const register: Register = (on, options) => {
+  const { label } = settings(options)
+
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'inbox',
@@ -137,9 +118,9 @@ export const register: Register = on => {
     if (isInbox(stored)) {
       await update($, inbox, () => ({ ...stored, error: null }))
     }
-    void refresh($)
+    void refresh($, label)
     $.clock.every(REFRESH_MS, () => {
-      void refresh($)
+      void refresh($, label)
     })
 
     return next(e)
@@ -150,7 +131,7 @@ export const register: Register = on => {
     if (!isOpen) {
       return { text: 'Inbox panel closed.' }
     }
-    const { asks, error } = await refresh($)
+    const { asks, error } = await refresh($, label)
     if (error !== null) {
       return { text: `Could not read Linear: ${error}` }
     }
@@ -166,10 +147,10 @@ export const register: Register = on => {
   // An agent filing an ask: say so at once, and pick it up in the inbox.
   on('tool.call', async ($, e, next) => {
     const ran = await next(e)
-    const title = filedAsk(String(e.tool), e)
+    const title = filedAsk(label, String(e.tool), e)
     if (title !== null && ran.deny === undefined && ran.isError !== true) {
       $.ui.toast(`Action for you: ${title}`)
-      void refresh($)
+      void refresh($, label)
     }
 
     return ran
@@ -177,7 +158,7 @@ export const register: Register = on => {
 
   // The same call's row in the chat, drawn as a card so it is not scrolled past.
   on('ui.render', { component: 'ToolUse' }, async ($, e, next) => {
-    const title = filedAsk(e.props.tool, e.props.input)
+    const title = filedAsk(label, e.props.tool, e.props.input)
     if (title === null || e.props.isErrored) {
       return next(e)
     }
@@ -294,7 +275,7 @@ export const register: Register = on => {
             key="refresh"
             label="Refresh"
             onPress={() => {
-              void refresh($)
+              void refresh($, label)
             }}
           />
           {fetchedAt !== null && <Text dimColor>read {clock(fetchedAt)}</Text>}

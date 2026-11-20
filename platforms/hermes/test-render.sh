@@ -126,11 +126,24 @@ printf -- '---\nname: no-newline-skill\ndescription: No final newline.\n---\n# T
 "${RENDER[@]}" "$CR" "$OUT" >/dev/null 2>&1
 "${RENDER[@]}" "$NN" "$OUT" >/dev/null 2>&1
 "${RENDER[@]}" "$FIX/skills/dashes" "$OUT" >/dev/null 2>&1
-for pair in "$FIX/skills/plain:plain-skill" "$CR:crlf-skill" "$NN:no-newline-skill" "$FIX/skills/dashes:dashes-skill"; do
+for pair in "$CR:crlf-skill" "$NN:no-newline-skill" "$FIX/skills/dashes:dashes-skill"; do
   src="${pair%%:*}" name="${pair##*:}"
   check "body byte-identical: $name" -- \
     cmp <(after_fence "$src/SKILL.md") <(after_fence "$OUT/general/$name/SKILL.md")
 done
+# The one exception: lines linking another platform's notes are dropped.
+check "body identical to source minus the claude-code link line: plain-skill" -- \
+  cmp <(after_fence "$FIX/skills/plain/SKILL.md" | grep -vF 'platforms/claude-code.md') \
+      <(after_fence "$P/SKILL.md")
+check "bare-list and labelled link styles are dropped" -- bash -c \
+  '! grep -q "claude-code" "$1" && grep -q "platforms/hermes.md" "$1"' _ "$P/SKILL.md"
+LK="$WORK/src/links"
+mkdir -p "$LK"
+printf -- '---\r\nname: links-skill\r\ndescription: d\r\n---\r\n## Platform notes\r\n\r\n- [platforms/claude-code.md](platforms/claude-code.md)\r\n- Codex: [x](./platforms/codex.md)\r\n- [platforms/hermes.md](platforms/hermes.md)\r\n```\r\n- [platforms/claude-code.md](platforms/claude-code.md)\r\n```\r\nsee [a](platforms/claude-code.md) inline\r\n- [platforms/claude-code.md](platforms/claude-code.md)' > "$LK/SKILL.md"
+"${RENDER[@]}" "$LK" "$OUT" >/dev/null 2>&1
+printf -- '## Platform notes\r\n\r\n- [platforms/hermes.md](platforms/hermes.md)\r\n```\r\n- [platforms/claude-code.md](platforms/claude-code.md)\r\n```\r\nsee [a](platforms/claude-code.md) inline\r\n' > "$WORK/links-want"
+check "links: CRLF and final-line (no newline) drops, fences and prose kept" -- \
+  cmp "$WORK/links-want" <(after_fence "$OUT/general/links-skill/SKILL.md")
 check "CRLF body keeps its CR bytes" -- grep -q $'\r' "$OUT/general/crlf-skill/SKILL.md"
 check "fence-like lines in the body survive" -- grep -qx 'name: not-frontmatter' "$OUT/general/dashes-skill/SKILL.md"
 
@@ -472,6 +485,86 @@ mkdir -p "$WORK/dash/-skills/plain"
 cp "$FIX/skills/plain/SKILL.md" "$WORK/dash/-skills/plain/"
 expect "a root starting with - is a path" 0 'wrote: .*plain-skill' -- \
   bash -c 'cd "$1" && bash "$2" out -skills' _ "$WORK/dash" "$HERE/install.sh"
+
+# --- unit cases for the link filter ------------------------------------------
+cat > "$WORK/unit.py" <<'PYEOF'
+import sys
+sys.path.insert(0, sys.argv[1])
+from render import drop_foreign_platform_links as drop
+L = "[x](platforms/claude-code.md)"
+keep = {
+    "A: 4-tick fence around a 3-tick one": f"````\n```\n- {L}\n```\n- {L}\n````\n",
+    "B: fence indented 4 spaces in a list is indented code": f"- item\n\n    ```\n    - {L}\n    ```\n",
+    "indented code block": f"para\n\n    - {L}\n",
+    "C: inner ```js is content, not a closer": f"```\n```js\n- {L}\n```\n",
+    "tilde fence is not closed by backticks": f"~~~\n```\n- {L}\n~~~\n",
+    "shorter closer does not close": f"````\n```\n- {L}\n",
+    "closer with trailing text does not close": f"```\n``` x\n- {L}\n```\n",
+    "blockquote": f"> Note: {L}\n",
+    "hermes in any case": "- [x](platforms/Hermes.md)\n- [x](platforms/HERMES.md)\n",
+    "link inside prose": f"see {L} for more\n",
+}
+drop_ = {
+    "D: ```x``` y is inline code, not an opener": (f"```x``` y\n- {L}\n", "```x``` y\n"),
+    "numbered items": (f"1. {L}\n2) {L}\n", ""),
+    "anchor": ("- [x](platforms/claude-code.md#setup)\n", ""),
+    "titles": ("- [x](platforms/claude-code.md \"Claude Code\")\n- [x](platforms/codex.md 't')\n", ""),
+    "case-insensitive name": ("- [x](platforms/Claude-Code.md)\n", ""),
+    "0-3 spaces of indent": (f"   - {L}\n", ""),
+    "label prefix, CRLF": (f"- Claude Code: {L}\r\nend\r\n", "end\r\n"),
+    "last line without newline": (f"a\n- {L}", "a\n"),
+    "fence closed, link after it": (f"```\n```\n- {L}\n", "```\n```\n"),
+}
+fail = 0
+for name, text in keep.items():
+    if drop(text) != text:
+        print("FAIL keep:", name)
+        fail = 1
+for name, (text, want) in drop_.items():
+    if drop(text) != want:
+        print("FAIL drop:", name, repr(drop(text)))
+        fail = 1
+sys.exit(fail)
+PYEOF
+out="$("${PY[@]}" "$WORK/unit.py" "$HERE" 2>&1)"; rc=$?
+if [[ "$rc" -eq 0 ]]; then ok "link filter unit cases (fences, indented code, link styles)"; else bad "link filter unit cases"; printf '    %s\n' "$out"; fi
+
+# --- every real skill: each relative link resolves in the output ---------------
+ALL="$WORK/all-out"
+expect "every repo skill renders" 0 'wrote: ' -- "${RENDER[@]}" --all "$ALL"
+cat > "$WORK/linkcheck.py" <<'PYEOF'
+import os, re, sys
+sys.path.insert(0, sys.argv[2])
+import render  # shares the renderer's CommonMark fence tracking
+root, bad, n = sys.argv[1], [], 0
+link = re.compile(r"(?<!!)\[[^\]\n]*\]\(\s*<?([^)\s>]+)>?(?:\s+(?:\"[^\"]*\"|'[^']*'))?\s*\)")
+for here, dirs, files in os.walk(root):
+    dirs[:] = [d for d in dirs if not d.startswith(".")]
+    for f in files:
+        if not f.endswith(".md"):
+            continue
+        path = os.path.join(here, f)
+        text = open(path, encoding="utf-8", newline="").read()
+        for i, (line, fenced) in enumerate(render.mark_fences(render.split_lines(text)), 1):
+            if fenced or line.startswith("    "):
+                continue
+            for target in link.findall(line):
+                if re.match(r"[a-z][a-z0-9+.-]*:|#", target, re.I):
+                    continue
+                t = target.split("#")[0]
+                if not t:
+                    continue
+                n += 1
+                dest = os.path.normpath(os.path.join(here, t))
+                if not os.path.exists(dest):
+                    bad.append(f"{os.path.relpath(path, root)}:{i}: {target}")
+print(f"{n} relative links checked")
+for b in bad:
+    print("dangling:", b)
+sys.exit(1 if bad or n == 0 else 0)
+PYEOF
+out="$("${PY[@]}" "$WORK/linkcheck.py" "$ALL" "$HERE" 2>&1)"; rc=$?
+if [[ "$rc" -eq 0 ]]; then ok "rendered tree: every relative link resolves ($out)"; else bad "rendered tree has dangling links"; printf '    %s\n' "$out"; fi
 
 if [[ "$fail" -ne 0 ]]; then
   echo "test-render: FAILED"
