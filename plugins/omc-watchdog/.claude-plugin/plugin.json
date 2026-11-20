@@ -1,7 +1,7 @@
 {
   "name": "omc-watchdog",
   "version": "0.1.0",
-  "description": "Shows a band above the prompt when an oh-my-claudecode run in this session is dead or looping: ralph, autopilot, team or ultragoal marked active but not touched for hours, or reinforced past a limit or at its iteration cap. Names the mode and phase. Read only; hidden when all is well.",
+  "description": "Shows a band above the prompt when an oh-my-claudecode run in this session is dead or looping: ralph, autopilot, team or ultragoal marked active but not touched for hours, or at the reinforcement or iteration ceiling OMC enforces while still marked active. Names the mode and phase. Read only; hidden when all is well.",
   "license": "MIT",
   "author": { "name": "memyselfandm" },
   "types": "./types/index.d.ts",
@@ -15,8 +15,8 @@
     "reinforcementLimit": {
       "type": "number",
       "title": "Looping at reinforcement count",
-      "description": "An active mode whose reinforcement_count reaches this is shown as looping, as is one whose iteration reaches max_iterations. A value of 0 or less uses 5.",
-      "default": 5
+      "description": "Overrides the reinforcement_count at which an active mode is shown as looping. 0 uses the ceilings OMC itself enforces: 20 for autopilot and team, max_reinforcements (default 50) for ultragoal. ralph is judged by its iteration reaching max_iterations (default 100) either way.",
+      "default": 0
     }
   }
 }

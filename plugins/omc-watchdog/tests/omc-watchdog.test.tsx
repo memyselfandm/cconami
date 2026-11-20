@@ -4,25 +4,33 @@ import type { Engine, MockClock } from 'claude-code/testing'
 
 import {
   age,
+  AUTOPILOT_CEILING,
   bandText,
   belongsTo,
-  DEFAULT_REINFORCEMENT_LIMIT,
   DEFAULT_STALE_HOURS,
   isSafeSessionId,
+  isSensitiveLocation,
+  iterationCap,
   judge,
   markerCandidates,
   markerId,
+  MAX_SESSION_SCAN,
   numberOf,
   omcRoot,
   parseState,
   projectIdentifier,
+  RALPH_MAX_ITERATIONS,
+  reinforcementCeiling,
+  sessionsToScan,
   sha16,
   statePaths,
+  TEAM_CEILING,
   thresholds,
   touchesOmcState,
+  ULTRAGOAL_CEILING,
 } from '../hooks/logic'
 import type { ModeState } from '../hooks/logic'
-import { REFRESH_MS } from '../hooks/register'
+import { REFRESH_MS, RESOLVE_EVERY } from '../hooks/register'
 import { autopilot, autopilotDone, OTHER_SID, ralph, SID, team } from './fixtures'
 
 const HOUR = 60 * 60 * 1000
@@ -38,18 +46,23 @@ function state(text: string): ModeState {
   return parsed
 }
 
+function textOf(mode: string, text: string, limits = LIMITS): string | null {
+  const finding = judge(mode, state(text), NOW, limits)
+
+  return finding === null ? null : bandText(finding)
+}
+
 // The pure logic.
 
 describe('settings', () => {
-  test('defaults are OMC’s two hours and five reinforcements', () => {
+  test('defaults: OMC’s two hours, and OMC’s own reinforcement ceilings', () => {
     expect(DEFAULT_STALE_HOURS).toBe(2)
-    expect(DEFAULT_REINFORCEMENT_LIMIT).toBe(5)
-    expect(thresholds({})).toEqual({ staleMs: 2 * HOUR, reinforcementLimit: 5 })
+    expect(thresholds({})).toEqual({ staleMs: 2 * HOUR, reinforcementLimit: null })
   })
 
   test('a set value is used; zero, negative or unreadable takes the default', () => {
     expect(thresholds({ staleHours: 6, reinforcementLimit: 9 })).toEqual({ staleMs: 6 * HOUR, reinforcementLimit: 9 })
-    expect(thresholds({ staleHours: 0.5 })).toEqual({ staleMs: HOUR / 2, reinforcementLimit: 5 })
+    expect(thresholds({ staleHours: 0.5 })).toEqual({ staleMs: HOUR / 2, reinforcementLimit: null })
     for (const bad of [0, -1, 'lots', null, NaN, Infinity, {}]) {
       expect(thresholds({ staleHours: bad, reinforcementLimit: bad })).toEqual(LIMITS)
     }
@@ -64,9 +77,9 @@ describe('settings', () => {
     }
   })
 
-  test('a session id is used in a path only when OMC would accept it', () => {
+  test('a session id is used in a path only when OMC’s stop hook would accept it', () => {
     expect(isSafeSessionId(SID)).toBe(true)
-    for (const bad of ['', '../x', 'a/b', 'a\\b', 'a b', 'x'.repeat(257)]) {
+    for (const bad of ['', '../x', 'a/b', 'a\\b', 'a b', '_x', '-x', 'x'.repeat(257)]) {
       expect(isSafeSessionId(bad)).toBe(false)
     }
   })
@@ -91,6 +104,40 @@ describe('the state root', () => {
     }
   })
 
+  test('sensitive locations follow isSensitiveStateLocation, lexically', () => {
+    const home = '/home/me'
+    const tmp = '/var/folders/xy/T'
+    for (const ok of ['/home/me/ws', '/home/me/code/.omc', '/srv/projects', '/home/me/work/repo']) {
+      expect(isSensitiveLocation(ok, home, tmp)).toBe(false)
+    }
+    for (const bad of [
+      '/home/me',
+      '/home/me/',
+      '/home/me/.config/ws',
+      '/home/me/.hidden',
+      '/home/me/Documents/ws',
+      '/home/me/Desktop',
+      '/Users/me/Library/x',
+      '/home/me/downloads/a',
+      '/',
+      '/tmp',
+      '/private/tmp',
+      '/var/lib/x',
+      '/opt/ws',
+      '/private/var/ws',
+      '/usr/local/ws',
+      '/etc/ws',
+      '/var/folders/xy/T/ws',
+    ]) {
+      expect(isSensitiveLocation(bad, home, tmp)).toBe(true)
+    }
+    // A directory merely named like a root is not under it.
+    expect(isSensitiveLocation('/optional/ws', home, null)).toBe(false)
+    // A temporary directory elsewhere is covered once named.
+    expect(isSensitiveLocation('/scratch/t/ws', home, '/scratch/t')).toBe(true)
+    expect(isSensitiveLocation('/scratch/t/ws', home, null)).toBe(false)
+  })
+
   test('sha16 is the first 16 hex digits of SHA-256 (checked against shasum)', async () => {
     expect(await sha16('git@github.com:acme/widgets.git')).toBe('44d052bc011d3b94')
     expect(await sha16('/repo/main')).toBe('14171f47651e1020')
@@ -98,19 +145,14 @@ describe('the state root', () => {
 
   test('project identifiers follow getProjectIdentifier', async () => {
     const base = { root: '/repo/main', workspace: null, workspaceId: null, remoteUrl: '', commonDir: '' }
-    // The remote URL is hashed; the name is the primary checkout's.
     expect(
       await projectIdentifier({ ...base, remoteUrl: 'git@github.com:acme/widgets.git', commonDir: '/repo/main/.git' }),
     ).toBe('main-44d052bc011d3b94')
-    // A linked worktree resolves to its primary checkout, so it shares the id.
     expect(await projectIdentifier({ ...base, root: '/repo/wt', commonDir: '/repo/main/.git' })).toBe(
       'main-14171f47651e1020',
     )
-    // No remote and no common dir: the root itself.
     expect(await projectIdentifier(base)).toBe('main-14171f47651e1020')
-    // A submodule's common dir is not used.
     expect(await projectIdentifier({ ...base, commonDir: '/super/.git/modules/main' })).toBe('main-14171f47651e1020')
-    // A workspace marker wins, by its id or else by its path.
     expect(await projectIdentifier({ ...base, workspace: '/work/space', workspaceId: 'my-org' })).toBe(
       'my-org-c6f029eb68756a03',
     )
@@ -131,24 +173,38 @@ describe('the state root', () => {
     expect(omcRoot({ ...facts, stateDir: '/state' })).toBeNull()
   })
 
-  test('the session file comes first, the legacy flat file second', () => {
-    expect(statePaths('/repo/.omc', SID, 'ralph')).toEqual({
+  test('where a mode’s state can be, in readStateFileWithSession’s order', () => {
+    expect(statePaths('/repo/.omc', SID, 'ralph', '/home/me')).toEqual({
       session: `/repo/.omc/state/sessions/${SID}/ralph-state.json`,
+      sessionsDir: '/repo/.omc/state/sessions',
       legacy: '/repo/.omc/state/ralph-state.json',
+      global: '/home/me/.omc/state/ralph-state.json',
     })
+    expect(statePaths('/repo/.omc', SID, 'ralph', null).global).toBeNull()
+  })
+
+  test('the session scan takes valid directories other than this one, at most 50', () => {
+    const dir = (name: string) => ({ name, kind: 'dir' })
+    expect(sessionsToScan([dir(SID), dir(OTHER_SID), { name: 'x', kind: 'file' }, dir('.hidden'), dir('_bad')], SID)).toEqual([
+      OTHER_SID,
+    ])
+    const many = Array.from({ length: 80 }, (_, i) => dir(`s${i}`))
+    expect(MAX_SESSION_SCAN).toBe(50)
+    expect(sessionsToScan(many, SID)).toHaveLength(50)
   })
 })
 
 describe('reading a state file', () => {
   test('the real autopilot shape: phase, counters and the latest activity time', () => {
-    const s = state(autopilot(NOW - HOUR))
-    expect(s).toEqual({
+    expect(state(autopilot(NOW - HOUR))).toEqual({
       isActive: true,
       sessionId: SID,
       phase: 'execution',
       iteration: null,
       maxIterations: null,
       reinforcement: 4,
+      maxReinforcements: null,
+      isAwaitingConfirmation: false,
       activityMs: NOW - HOUR,
     })
   })
@@ -177,11 +233,22 @@ describe('reading a state file', () => {
     expect(state('{}').activityMs).toBeNull()
   })
 
-  test('only active: true is active', () => {
+  test('numeric timestamps are ignored, as OMC’s isStaleState ignores them', () => {
+    expect(state(`{"active":true,"last_checked_at":${NOW},"updated_at":${NOW}}`).activityMs).toBeNull()
+    expect(state(`{"last_checked_at":${NOW},"started_at":"${new Date(NOW - HOUR).toISOString()}"}`).activityMs).toBe(NOW - HOUR)
+  })
+
+  test('active is true or "true"; anything else is not', () => {
     expect(state('{"active":true}').isActive).toBe(true)
-    for (const v of ['"true"', '1', 'false', 'null']) {
+    expect(state('{"active":"true"}').isActive).toBe(true)
+    for (const v of ['"false"', '"yes"', '1', 'false', 'null']) {
       expect(state(`{"active":${v}}`).isActive).toBe(false)
     }
+  })
+
+  test('awaiting confirmation only when it is true', () => {
+    expect(state('{"awaiting_confirmation":true}').isAwaitingConfirmation).toBe(true)
+    expect(state('{"awaiting_confirmation":"true"}').isAwaitingConfirmation).toBe(false)
   })
 
   test('anything but a JSON object is not a state', () => {
@@ -204,55 +271,103 @@ describe('reading a state file', () => {
 })
 
 describe('judging', () => {
+  test('OMC’s ceilings: autopilot and team 20, ultragoal max_reinforcements or 50, ralph none', () => {
+    expect([AUTOPILOT_CEILING, TEAM_CEILING, ULTRAGOAL_CEILING, RALPH_MAX_ITERATIONS]).toEqual([20, 20, 50, 100])
+    expect(reinforcementCeiling('autopilot', state('{}'), null)).toBe(20)
+    expect(reinforcementCeiling('team', state('{}'), null)).toBe(20)
+    expect(reinforcementCeiling('ultragoal', state('{}'), null)).toBe(50)
+    expect(reinforcementCeiling('ultragoal', state('{"max_reinforcements":0}'), null)).toBe(50)
+    expect(reinforcementCeiling('ultragoal', state('{"max_reinforcements":"12"}'), null)).toBe(12)
+    expect(reinforcementCeiling('ralph', state('{}'), null)).toBeNull()
+    expect(reinforcementCeiling('ralph', state('{}'), 5)).toBe(5)
+    expect(reinforcementCeiling('team', state('{}'), 5)).toBe(5)
+    expect(iterationCap('ralph', state('{}'))).toBe(100)
+    expect(iterationCap('ralph', state('{"max_iterations":0}'))).toBe(100)
+    expect(iterationCap('ralph', state('{"max_iterations":10}'))).toBe(10)
+    expect(iterationCap('team', state('{"max_iterations":10}'))).toBeNull()
+  })
+
   test('an active autopilot untouched for 3h is stale, with its phase', () => {
-    const finding = judge('autopilot', state(autopilot(NOW - 3 * HOUR)), NOW, LIMITS)
-    expect(finding).toEqual({ mode: 'autopilot', phase: 'execution', kind: 'stale', ageMs: 3 * HOUR })
-    expect(finding && bandText(finding)).toBe('autopilot active but stale for 3h; cancel or resume (phase: execution)')
+    expect(judge('autopilot', state(autopilot(NOW - 3 * HOUR)), NOW, LIMITS)).toEqual({
+      mode: 'autopilot',
+      phase: 'execution',
+      kind: 'stale',
+      ageMs: 3 * HOUR,
+    })
+    expect(textOf('autopilot', autopilot(NOW - 3 * HOUR))).toBe(
+      'autopilot active but stale for 3h; cancel or resume (phase: execution)',
+    )
   })
 
-  test('a ralph reinforced 7 times at iteration 9 of 10 is looping', () => {
-    const finding = judge('ralph', state(ralph(NOW, { iteration: 9, max_iterations: 10, reinforcement_count: 7 })), NOW, LIMITS)
-    expect(finding && bandText(finding)).toBe('ralph looping: reinforcement 7, iteration 9/10')
+  test('a fresh team run at count 6 is healthy: OMC keeps reinforcing up to 20', () => {
+    expect(textOf('team', team(NOW, { reinforcement_count: 6 }))).toBeNull()
+    expect(textOf('team', team(NOW, { reinforcement_count: '19' }))).toBeNull()
+    expect(textOf('team', team(NOW, { reinforcement_count: 20 }))).toBe('team looping: reinforcement 20/20 (phase: team-exec)')
+    expect(textOf('team', team(NOW, { reinforcement_count: 23 }))).toBe('team looping: reinforcement 23/20 (phase: team-exec)')
   })
 
-  test('reaching the iteration cap alone is looping', () => {
-    const finding = judge('ralph', state(ralph(NOW, { iteration: 100 })), NOW, LIMITS)
-    expect(finding && bandText(finding)).toBe('ralph looping: iteration 100/100')
+  test('autopilot at its ceiling of 20 is looping; below it is not', () => {
+    expect(textOf('autopilot', autopilot(NOW, { reinforcement_count: 19 }))).toBeNull()
+    expect(textOf('autopilot', autopilot(NOW, { reinforcement_count: 20 }))).toBe(
+      'autopilot looping: reinforcement 20/20 (phase: execution)',
+    )
   })
 
-  test('the reinforcement limit alone is looping, and the phase is named', () => {
-    const finding = judge('autopilot', state(autopilot(NOW, { reinforcement_count: 5 })), NOW, LIMITS)
-    expect(finding && bandText(finding)).toBe('autopilot looping: reinforcement 5 (phase: execution)')
+  test('ultragoal uses max_reinforcements, else 50', () => {
+    expect(textOf('ultragoal', team(NOW, { reinforcement_count: 49, current_phase: undefined }))).toBeNull()
+    expect(textOf('ultragoal', team(NOW, { reinforcement_count: 50, current_phase: undefined }))).toBe(
+      'ultragoal looping: reinforcement 50/50',
+    )
+    expect(textOf('ultragoal', team(NOW, { reinforcement_count: 10, max_reinforcements: 10, current_phase: undefined }))).toBe(
+      'ultragoal looping: reinforcement 10/10',
+    )
+  })
+
+  test('ralph is looping at its iteration cap, max_iterations or 100; its reinforcement count is not used', () => {
+    expect(textOf('ralph', ralph(NOW, { iteration: 10, max_iterations: 10 }))).toBe('ralph looping: iteration 10/10')
+    expect(textOf('ralph', ralph(NOW, { iteration: 9, max_iterations: 10 }))).toBeNull()
+    expect(textOf('ralph', ralph(NOW, { iteration: 100, max_iterations: undefined }))).toBe('ralph looping: iteration 100/100')
+    expect(textOf('ralph', ralph(NOW, { iteration: 99, max_iterations: undefined }))).toBeNull()
+    expect(textOf('ralph', ralph(NOW, { reinforcement_count: 40 }))).toBeNull()
+  })
+
+  test('the setting overrides every ceiling', () => {
+    const limits = thresholds({ reinforcementLimit: 5 })
+    expect(textOf('team', team(NOW, { reinforcement_count: 5 }), limits)).toBe('team looping: reinforcement 5/5 (phase: team-exec)')
+    expect(textOf('ralph', ralph(NOW, { reinforcement_count: 5 }), limits)).toBe('ralph looping: reinforcement 5/5')
+    expect(textOf('autopilot', autopilot(NOW, { reinforcement_count: 4 }), limits)).toBeNull()
+  })
+
+  test('a run awaiting confirmation is never looping, but can still be stale', () => {
+    expect(textOf('autopilot', autopilot(NOW, { reinforcement_count: 20, awaiting_confirmation: true }))).toBeNull()
+    expect(textOf('ralph', ralph(NOW, { iteration: 100, awaiting_confirmation: true }))).toBeNull()
+    expect(textOf('autopilot', autopilot(NOW - 3 * HOUR, { awaiting_confirmation: true }))).toBe(
+      'autopilot active but stale for 3h; cancel or resume (phase: execution)',
+    )
   })
 
   test('a healthy run, an inactive run, and the boundaries produce nothing', () => {
-    expect(judge('autopilot', state(autopilot(NOW - HOUR)), NOW, LIMITS)).toBeNull()
-    expect(judge('ralph', state(ralph(NOW)), NOW, LIMITS)).toBeNull()
-    expect(judge('team', state(team(NOW - HOUR)), NOW, LIMITS)).toBeNull()
-    expect(judge('autopilot', state(autopilotDone(NOW - 30 * HOUR)), NOW, LIMITS)).toBeNull()
+    expect(textOf('autopilot', autopilot(NOW - HOUR))).toBeNull()
+    expect(textOf('ralph', ralph(NOW))).toBeNull()
+    expect(textOf('team', team(NOW - HOUR))).toBeNull()
+    expect(textOf('autopilot', autopilotDone(NOW - 30 * HOUR))).toBeNull()
     // Exactly the threshold is not yet stale (OMC: age > threshold).
-    expect(judge('autopilot', state(autopilot(NOW - 2 * HOUR)), NOW, LIMITS)).toBeNull()
-    expect(judge('autopilot', state(autopilot(NOW, { reinforcement_count: 4 })), NOW, LIMITS)).toBeNull()
-    expect(judge('ralph', state(ralph(NOW, { iteration: 99 })), NOW, LIMITS)).toBeNull()
-    expect(judge('ralph', state(ralph(NOW, { max_iterations: 0, iteration: 3 })), NOW, LIMITS)).toBeNull()
+    expect(textOf('autopilot', autopilot(NOW - 2 * HOUR))).toBeNull()
   })
 
   test('a dead run is reported as stale even when its counters are high', () => {
-    const finding = judge('ralph', state(ralph(NOW - 4 * HOUR, { reinforcement_count: 9, iteration: 100 })), NOW, LIMITS)
-    expect(finding?.kind).toBe('stale')
+    expect(judge('ralph', state(ralph(NOW - 4 * HOUR, { iteration: 100 })), NOW, LIMITS)?.kind).toBe('stale')
   })
 
   test('an active state with no activity time is stale', () => {
-    const finding = judge('team', state('{"active":true,"stage":"exec"}'), NOW, LIMITS)
-    expect(finding && bandText(finding)).toBe(
+    expect(textOf('team', '{"active":true,"stage":"exec"}')).toBe(
       'team active with no activity time recorded; cancel or resume (phase: exec)',
     )
   })
 
-  test('the thresholds come from the settings', () => {
-    const limits = thresholds({ staleHours: 5, reinforcementLimit: 10 })
-    expect(judge('autopilot', state(autopilot(NOW - 3 * HOUR)), NOW, limits)).toBeNull()
-    expect(judge('autopilot', state(autopilot(NOW, { reinforcement_count: 9 })), NOW, limits)).toBeNull()
+  test('the stale threshold comes from the settings', () => {
+    const limits = thresholds({ staleHours: 5 })
+    expect(textOf('autopilot', autopilot(NOW - 3 * HOUR), limits)).toBeNull()
     expect(judge('autopilot', state(autopilot(NOW - 6 * HOUR)), NOW, limits)?.kind).toBe('stale')
   })
 
@@ -280,7 +395,6 @@ describe('which tool calls start a read', () => {
     expect(touchesOmcState('Bash', { command: 'git status' })).toBe(false)
     expect(touchesOmcState('mcp__plugin_oh-my-claudecode_t__lsp_diagnostics', { file: 'a.ts' })).toBe(false)
     expect(touchesOmcState('Skill', { skill: 'oh-my-claudecode:wiki' })).toBe(false)
-    // The envelope's own keys are not the input.
     expect(touchesOmcState('Read', { tool: 'Read', tool_use_id: '.omc/state', file_path: 'a.ts' })).toBe(false)
   })
 })
@@ -305,13 +419,18 @@ const BAND = {
 
 const REPO = '/home/me/repo'
 const ROOT = `${REPO}/.omc`
-const sessionFile = (root: string, mode: string) => `${root}/state/sessions/${SID}/${mode}-state.json`
+const sessionFile = (root: string, mode: string, sid = SID) => `${root}/state/sessions/${sid}/${mode}-state.json`
+/** A ralph run at its iteration cap, and the line it draws. */
+const LOOPING = () => ralph(NOW, { iteration: 100 })
+const LOOPING_LINE = 'ralph looping: iteration 100/100'
 
 type World = {
   files: Map<string, string>
   env: Record<string, string>
   cwd: string
   git: Map<string, string>
+  /** While set, every git command fails as a timeout would: not "not a repository". */
+  isGitBroken: boolean
   ran: string[][]
   writes: string[]
   clock: MockClock
@@ -323,6 +442,7 @@ function session(on: On, setup: Partial<Pick<World, 'env' | 'cwd'>> = {}): World
     env: { HOME: '/home/me', ...setup.env },
     cwd: setup.cwd ?? REPO,
     git: new Map([[`${REPO} rev-parse --show-toplevel`, REPO]]),
+    isGitBroken: false,
     ran: [],
     writes: [],
     clock: mock.clock(on, { now: NOW }),
@@ -332,13 +452,26 @@ function session(on: On, setup: Partial<Pick<World, 'env' | 'cwd'>> = {}): World
   on('session.cwd', () => ({ value: world.cwd }))
   on('fs.read', (_, e) => {
     const text = world.files.get(e.path)
-    if (text === undefined) {
+
+    return text === undefined ? { deny: `ENOENT: ${e.path}` } : { value: text }
+  })
+  on('fs.exists', (_, e) => ({ value: world.files.has(e.path) }))
+  on('fs.list', (_, e) => {
+    const prefix = `${e.path}/`
+    const names = new Map<string, 'file' | 'dir'>()
+    for (const path of world.files.keys()) {
+      if (path.startsWith(prefix)) {
+        const rest = path.slice(prefix.length)
+        const name = rest.split('/')[0] ?? ''
+        names.set(name, rest.includes('/') ? 'dir' : 'file')
+      }
+    }
+    if (names.size === 0) {
       return { deny: `ENOENT: ${e.path}` }
     }
 
-    return { value: text }
+    return { value: [...names].map(([name, kind]) => ({ name, kind, size: 0, mtimeMs: 0, isLink: false })) }
   })
-  on('fs.exists', (_, e) => ({ value: world.files.has(e.path) }))
   on('fs.write', (_, e) => {
     world.writes.push(e.path)
 
@@ -346,13 +479,13 @@ function session(on: On, setup: Partial<Pick<World, 'env' | 'cwd'>> = {}): World
   })
   on('process.run', (_, e) => {
     world.ran.push([...e.argv])
-    const out = world.git.get(`${e.init?.cwd ?? ''} ${e.argv.slice(1).join(' ')}`)
+    const out = world.isGitBroken ? undefined : world.git.get(`${e.init?.cwd ?? ''} ${e.argv.slice(1).join(' ')}`)
 
     return {
       value: {
         exitCode: out === undefined ? 128 : 0,
         stdout: out === undefined ? '' : `${out}\n`,
-        stderr: out === undefined ? 'fatal: not a git repository' : '',
+        stderr: out !== undefined ? '' : world.isGitBroken ? 'error: timed out' : 'fatal: not a git repository',
         isStdoutTruncated: false,
         isStderrTruncated: false,
       },
@@ -397,11 +530,18 @@ describe('the band', () => {
     expectReadOnly(world)
   })
 
-  test('a looping ralph shows', async ($, on) => {
+  test('a looping team shows', async ($, on) => {
     const world = session(on)
-    world.files.set(sessionFile(ROOT, 'ralph'), ralph(NOW, { iteration: 9, max_iterations: 10, reinforcement_count: 7 }))
+    world.files.set(sessionFile(ROOT, 'team'), team(NOW, { reinforcement_count: '20' }))
     await start($, world)
-    expect(await lines($)).toEqual(['ralph looping: reinforcement 7, iteration 9/10'])
+    expect(await lines($)).toEqual(['team looping: reinforcement 20/20 (phase: team-exec)'])
+  })
+
+  test('a fresh team run at count 6 shows no band', async ($, on) => {
+    const world = session(on)
+    world.files.set(sessionFile(ROOT, 'team'), team(NOW, { reinforcement_count: '6' }))
+    await start($, world)
+    expect(await lines($)).toEqual([])
   })
 
   test('a healthy run, an ended run, or no OMC state shows nothing', async ($, on) => {
@@ -418,25 +558,41 @@ describe('the band', () => {
 
   test('two modes in trouble show a line each', async ($, on) => {
     const world = session(on)
-    world.files.set(sessionFile(ROOT, 'ralph'), ralph(NOW, { reinforcement_count: 6 }))
+    world.files.set(sessionFile(ROOT, 'ralph'), LOOPING())
     world.files.set(sessionFile(ROOT, 'team'), team(NOW - 5 * HOUR))
     await start($, world)
-    expect(await lines($)).toEqual([
-      'ralph looping: reinforcement 6, iteration 12/100',
-      'team active but stale for 5h; cancel or resume (phase: team-exec)',
-    ])
+    expect(await lines($)).toEqual([LOOPING_LINE, 'team active but stale for 5h; cancel or resume (phase: team-exec)'])
   })
 
   test('another session’s state is not shown; a legacy file naming this session is', async ($, on) => {
     const world = session(on)
     world.files.set(sessionFile(ROOT, 'autopilot'), autopilot(NOW - 3 * HOUR, { session_id: OTHER_SID }))
-    world.files.set(`${ROOT}/state/sessions/${OTHER_SID}/ralph-state.json`, ralph(NOW - 9 * HOUR, { session_id: OTHER_SID }))
+    world.files.set(sessionFile(ROOT, 'ralph', OTHER_SID), ralph(NOW - 9 * HOUR, { session_id: OTHER_SID }))
     world.files.set(`${ROOT}/state/team-state.json`, team(NOW - 9 * HOUR))
     await start($, world)
     expect(await lines($)).toEqual([])
     world.files.set(`${ROOT}/state/ralph-state.json`, ralph(NOW - 9 * HOUR))
     await world.clock.advance(REFRESH_MS)
     expect(await lines($)).toEqual(['ralph active but stale for 9h; cancel or resume'])
+  })
+
+  test('a file in another session directory that names this session is read', async ($, on) => {
+    const world = session(on)
+    world.files.set(sessionFile(ROOT, 'autopilot', OTHER_SID), autopilot(NOW - 3 * HOUR))
+    await start($, world)
+    expect(await lines($)).toEqual(['autopilot active but stale for 3h; cancel or resume (phase: execution)'])
+  })
+
+  test('the global $HOME/.omc/state file counts when it names this session and the root has none', async ($, on) => {
+    const world = session(on)
+    world.files.set('/home/me/.omc/state/ralph-state.json', LOOPING())
+    world.files.set('/home/me/.omc/state/team-state.json', team(NOW - 9 * HOUR))
+    await start($, world)
+    expect(await lines($)).toEqual([LOOPING_LINE])
+    // The root's own legacy file, even another session's, hides the global one.
+    world.files.set(`${ROOT}/state/ralph-state.json`, ralph(NOW, { session_id: OTHER_SID, iteration: 100 }))
+    await world.clock.advance(REFRESH_MS)
+    expect(await lines($)).toEqual([])
   })
 
   test('the band stays out of the way of a survey', async ($, on) => {
@@ -462,24 +618,23 @@ describe('the band', () => {
     world.files.set(sessionFile(ROOT, 'ralph'), ralph(NOW))
     await start($, world)
     expect(await lines($)).toEqual([])
-    world.files.set(sessionFile(ROOT, 'ralph'), ralph(NOW, { reinforcement_count: 8 }))
-    // An unrelated call does not read.
+    world.files.set(sessionFile(ROOT, 'ralph'), LOOPING())
     await $.tool.call({ tool: 'Bash', command: 'git status', tool_use_id: 't1' })
     await world.clock.settle()
     expect(await lines($)).toEqual([])
     const result = await $.tool.call({ tool: 'mcp__plugin_oh-my-claudecode_t__state_write', mode: 'ralph', tool_use_id: 't2' })
     expect(result.text).toBe('ok')
     await world.clock.settle()
-    expect(await lines($)).toEqual(['ralph looping: reinforcement 8, iteration 12/100'])
+    expect(await lines($)).toEqual([LOOPING_LINE])
     expectReadOnly(world)
   })
 
   test('the settings move the thresholds', { options: { staleHours: 4, reinforcementLimit: 3 } }, async ($, on) => {
     const world = session(on)
     world.files.set(sessionFile(ROOT, 'autopilot'), autopilot(NOW - 3 * HOUR, { reinforcement_count: 0 }))
-    world.files.set(sessionFile(ROOT, 'ralph'), ralph(NOW, { reinforcement_count: 3 }))
+    world.files.set(sessionFile(ROOT, 'team'), team(NOW, { reinforcement_count: 3 }))
     await start($, world)
-    expect(await lines($)).toEqual(['ralph looping: reinforcement 3, iteration 12/100'])
+    expect(await lines($)).toEqual(['team looping: reinforcement 3/3 (phase: team-exec)'])
   })
 })
 
@@ -498,22 +653,19 @@ describe('where the state is read from', () => {
     const world = session(on, { cwd: sub })
     world.git.set(`${sub} rev-parse --show-toplevel`, sub)
     world.git.set(`${sub} rev-parse --show-superproject-working-tree`, REPO)
-    world.files.set(sessionFile(ROOT, 'ralph'), ralph(NOW, { reinforcement_count: 5 }))
+    world.files.set(sessionFile(ROOT, 'ralph'), LOOPING())
     world.files.set(sessionFile(`${sub}/.omc`, 'autopilot'), autopilot(NOW - 3 * HOUR))
     await start($, world)
-    expect(await lines($)).toEqual(['ralph looping: reinforcement 5, iteration 12/100'])
+    expect(await lines($)).toEqual([LOOPING_LINE])
   })
 
-  test('a .omc-workspace marker above the repository anchors the state there', async ($, on) => {
+  test('a marker at home or above is never used', async ($, on) => {
     const world = session(on)
     world.files.set('/home/me/.omc-workspace', '{}')
-    world.files.set(`${REPO}/../.omc-workspace`, '{}')
     world.files.set('/home/.omc-workspace', '{}')
+    world.files.set(sessionFile(ROOT, 'ralph'), LOOPING())
     await start($, world)
-    // A marker at home or above is never used: still the repository's .omc.
-    world.files.set(sessionFile(ROOT, 'ralph'), ralph(NOW, { reinforcement_count: 5 }))
-    await world.clock.advance(REFRESH_MS)
-    expect(await lines($)).toEqual(['ralph looping: reinforcement 5, iteration 12/100'])
+    expect(await lines($)).toEqual([LOOPING_LINE])
   })
 
   test('a workspace marker between home and the repository wins', async ($, on) => {
@@ -522,6 +674,33 @@ describe('where the state is read from', () => {
     world.files.set('/home/me/ws/.omc-workspace', '{}')
     world.files.set(sessionFile('/home/me/ws/.omc', 'team'), team(NOW - 3 * HOUR))
     world.files.set(sessionFile('/home/me/ws/repo/.omc', 'ralph'), ralph(NOW - 3 * HOUR))
+    await start($, world)
+    expect(await lines($)).toEqual(['team active but stale for 3h; cancel or resume (phase: team-exec)'])
+  })
+
+  test('a workspace marker in a sensitive location is skipped, in a repository', async ($, on) => {
+    const world = session(on, { cwd: '/home/me/Documents/ws/repo' })
+    world.git.set('/home/me/Documents/ws/repo rev-parse --show-toplevel', '/home/me/Documents/ws/repo')
+    world.files.set('/home/me/Documents/ws/.omc-workspace', '{}')
+    world.files.set(sessionFile('/home/me/Documents/ws/.omc', 'team'), team(NOW - 3 * HOUR))
+    world.files.set(sessionFile('/home/me/Documents/ws/repo/.omc', 'ralph'), ralph(NOW - 3 * HOUR))
+    await start($, world)
+    expect(await lines($)).toEqual(['ralph active but stale for 3h; cancel or resume'])
+  })
+
+  test('a workspace marker in a sensitive location is skipped outside a repository: $HOME/.omc', async ($, on) => {
+    const world = session(on, { cwd: '/home/me/.config/ws/sub' })
+    world.files.set('/home/me/.config/ws/.omc-workspace', '{}')
+    world.files.set(sessionFile('/home/me/.config/ws/.omc', 'team'), team(NOW - 3 * HOUR))
+    world.files.set(sessionFile('/home/me/.omc', 'ralph'), ralph(NOW - 3 * HOUR))
+    await start($, world)
+    expect(await lines($)).toEqual(['ralph active but stale for 3h; cancel or resume'])
+  })
+
+  test('outside a repository, a safe workspace marker anchors the state', async ($, on) => {
+    const world = session(on, { cwd: '/srv/ws/sub' })
+    world.files.set('/srv/ws/.omc-workspace', '{}')
+    world.files.set(sessionFile('/srv/ws/.omc', 'team'), team(NOW - 3 * HOUR))
     await start($, world)
     expect(await lines($)).toEqual(['team active but stale for 3h; cancel or resume (phase: team-exec)'])
   })
@@ -537,18 +716,42 @@ describe('where the state is read from', () => {
   })
 
   test('outside a repository, $HOME/.omc', async ($, on) => {
-    const world = session(on, { cwd: '/tmp/scratch' })
+    const world = session(on, { cwd: '/srv/scratch' })
     world.files.set(sessionFile('/home/me/.omc', 'autopilot'), autopilot(NOW - 3 * HOUR))
-    world.files.set(sessionFile('/tmp/scratch/.omc', 'ralph'), ralph(NOW - 3 * HOUR))
+    world.files.set(sessionFile('/srv/scratch/.omc', 'ralph'), ralph(NOW - 3 * HOUR))
     await start($, world)
     expect(await lines($)).toEqual(['autopilot active but stale for 3h; cancel or resume (phase: execution)'])
   })
 
   test('outside a repository with no home directory, nothing is read', async ($, on) => {
-    const world = session(on, { cwd: '/tmp/scratch', env: { HOME: '' } })
-    world.files.set(sessionFile('/tmp/scratch/.omc', 'ralph'), ralph(NOW - 3 * HOUR))
+    const world = session(on, { cwd: '/srv/scratch', env: { HOME: '' } })
+    world.files.set(sessionFile('/srv/scratch/.omc', 'ralph'), ralph(NOW - 3 * HOUR))
     await start($, world)
     expect(await lines($)).toEqual([])
+  })
+
+  test('a root found while git failed is not kept: the next read asks git again', async ($, on) => {
+    const world = session(on)
+    world.isGitBroken = true
+    world.files.set(sessionFile(ROOT, 'ralph'), LOOPING())
+    await start($, world)
+    expect(await lines($)).toEqual([])
+    world.isGitBroken = false
+    await world.clock.advance(REFRESH_MS)
+    expect(await lines($)).toEqual([LOOPING_LINE])
+  })
+
+  test('a sure root is kept, and worked out again after RESOLVE_EVERY reads', async ($, on) => {
+    const world = session(on, { cwd: '/srv/proj' })
+    world.files.set(sessionFile('/srv/proj/.omc', 'ralph'), LOOPING())
+    await start($, world)
+    expect(await lines($)).toEqual([])
+    // The directory becomes a repository; the kept root still says $HOME/.omc.
+    world.git.set('/srv/proj rev-parse --show-toplevel', '/srv/proj')
+    await world.clock.advance(REFRESH_MS)
+    expect(await lines($)).toEqual([])
+    await world.clock.advance(RESOLVE_EVERY * REFRESH_MS)
+    expect(await lines($)).toEqual([LOOPING_LINE])
   })
 
   test('OMC_STATE_DIR: $OMC_STATE_DIR/<project id>, the id from the origin remote', async ($, on) => {
@@ -563,16 +766,16 @@ describe('where the state is read from', () => {
   })
 
   test('OMC_STATE_DIR outside a repository: $OMC_STATE_DIR/non-git', async ($, on) => {
-    const world = session(on, { cwd: '/tmp/scratch', env: { OMC_STATE_DIR: '/state' } })
-    world.files.set(sessionFile('/state/non-git', 'ralph'), ralph(NOW, { reinforcement_count: 5 }))
+    const world = session(on, { cwd: '/srv/scratch', env: { OMC_STATE_DIR: '/state' } })
+    world.files.set(sessionFile('/state/non-git', 'ralph'), LOOPING())
     await start($, world)
-    expect(await lines($)).toEqual(['ralph looping: reinforcement 5, iteration 12/100'])
+    expect(await lines($)).toEqual([LOOPING_LINE])
   })
 
-  test('OMC_STATE_DIR with a workspace marker id', async ($, on) => {
-    const world = session(on, { cwd: '/home/me/ws/repo', env: { OMC_STATE_DIR: '/state' } })
-    world.git.set('/home/me/ws/repo rev-parse --show-toplevel', '/home/me/ws/repo')
-    world.files.set('/home/me/ws/.omc-workspace', '{"id":"my-org"}')
+  test('OMC_STATE_DIR with a workspace marker id, found from the working directory', async ($, on) => {
+    const world = session(on, { cwd: '/home/me/ws/repo/sub', env: { OMC_STATE_DIR: '/state' } })
+    world.git.set('/home/me/ws/repo/sub rev-parse --show-toplevel', '/home/me/ws/repo')
+    world.files.set('/home/me/ws/repo/sub/.omc-workspace', '{"id":"my-org"}')
     world.files.set(sessionFile('/state/my-org-c6f029eb68756a03', 'team'), team(NOW - 3 * HOUR))
     await start($, world)
     expect(await lines($)).toEqual(['team active but stale for 3h; cancel or resume (phase: team-exec)'])

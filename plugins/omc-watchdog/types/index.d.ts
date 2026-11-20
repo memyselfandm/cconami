@@ -13,9 +13,13 @@ export type Finding =
   | {
       mode: string
       phase: string | null
-      /** Active and fresh, but reinforced past the limit or at its iteration cap. */
+      /** Active and fresh, but at or past OMC's reinforcement ceiling or ralph's iteration cap. */
       kind: 'looping'
+      /** The count, when it is at or past the ceiling; else null. */
       reinforcement: number | null
+      /** The ceiling it reached (OMC's, or the setting); null when the count did not. */
+      reinforcementLimit: number | null
+      /** ralph's iteration and cap, when it reached the cap; else null. */
       iteration: number | null
       maxIterations: number | null
     }

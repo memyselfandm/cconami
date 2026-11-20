@@ -13,25 +13,63 @@ export const GUARDED_MODES = ['ralph', 'autopilot', 'team', 'ultragoal'] as cons
 
 /** OMC's freshness window: state not touched for two hours is stale. */
 export const DEFAULT_STALE_HOURS = 2
-/** Reinforcements without the run ending that count as looping. */
-export const DEFAULT_REINFORCEMENT_LIMIT = 5
+
+/**
+ * The reinforcement ceilings OMC's stop hook enforces (scripts/persistent-mode.mjs):
+ * autopilot and team keep going while the new count is at most 20, and
+ * ultragoal while it is at most `max_reinforcements || 50`. OMC never resets
+ * the count during a run, so only a count at its ceiling means the hook has
+ * stopped reinforcing a run that is still marked active.
+ */
+export const AUTOPILOT_CEILING = 20
+export const TEAM_CEILING = 20
+export const ULTRAGOAL_CEILING = 50
+/** ralph has no reinforcement ceiling; it caps `iteration` at `max_iterations || 100`. */
+export const RALPH_MAX_ITERATIONS = 100
 
 const HOUR_MS = 60 * 60 * 1000
 
-/** OMC's own rule for a session id it will use in a path (validateSessionId). */
+/** The session ids OMC's stop hook accepts in a path (SESSION_ID_ALLOWLIST). */
 export function isSafeSessionId(id: string): boolean {
-  return /^[A-Za-z0-9_-]{1,256}$/.test(id)
+  return /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,255}$/.test(id)
 }
 
-/** The thresholds the judge uses. */
-export type Thresholds = { staleMs: number; reinforcementLimit: number }
+/** The thresholds the judge uses; `reinforcementLimit` null means OMC's own ceilings. */
+export type Thresholds = { staleMs: number; reinforcementLimit: number | null }
 
 /** Reads the settings; a missing, non-numeric or non-positive value takes its default. */
 export function thresholds(options: { readonly [key: string]: unknown }): Thresholds {
   const hours = positive(options.staleHours) ?? DEFAULT_STALE_HOURS
-  const limit = positive(options.reinforcementLimit) ?? DEFAULT_REINFORCEMENT_LIMIT
 
-  return { staleMs: hours * HOUR_MS, reinforcementLimit: limit }
+  return { staleMs: hours * HOUR_MS, reinforcementLimit: positive(options.reinforcementLimit) }
+}
+
+/** The reinforcement count at which a mode is looping: the setting when set, else OMC's ceiling. */
+export function reinforcementCeiling(mode: string, state: ModeState, override: number | null): number | null {
+  if (override !== null) {
+    return override
+  }
+  if (mode === 'autopilot') {
+    return AUTOPILOT_CEILING
+  }
+  if (mode === 'team') {
+    return TEAM_CEILING
+  }
+  if (mode === 'ultragoal') {
+    // OMC: `max_reinforcements || 50`, so 0 or missing is 50.
+    return state.maxReinforcements !== null && state.maxReinforcements > 0 ? state.maxReinforcements : ULTRAGOAL_CEILING
+  }
+
+  return null
+}
+
+/** ralph's iteration cap: `max_iterations || 100`, as OMC reads it; other modes have none. */
+export function iterationCap(mode: string, state: ModeState): number | null {
+  if (mode !== 'ralph') {
+    return null
+  }
+
+  return state.maxIterations !== null && state.maxIterations > 0 ? state.maxIterations : RALPH_MAX_ITERATIONS
 }
 
 function positive(value: unknown): number | null {
@@ -95,6 +133,47 @@ export function markerCandidates(start: string, home: string | null): string[] {
   }
 
   return out
+}
+
+// OMC's SENSITIVE_DIR_BASENAMES (src/lib/worktree-paths.ts), compared lowercased.
+const SENSITIVE_NAMES = new Set([
+  '.ssh', '.gnupg', '.aws', '.azure', '.gcloud', '.kube', 'ssh', '.pki',
+  '.config', '.claude', '.claude.json', '.codex', '.gemini', '.cursor',
+  '.vscode', '.ollama', '.docker', '.npm', '.cache', '.local',
+  'desktop', 'documents', 'downloads', 'pictures', 'photos', 'music',
+  'movies', 'videos', 'public', 'library',
+])
+const SENSITIVE_ROOTS = ['/var', '/usr', '/etc', '/opt', '/private/var']
+
+function isWithin(root: string, path: string): boolean {
+  return path === root || path.startsWith(`${root}/`)
+}
+
+/**
+ * OMC's isSensitiveStateLocation, matched lexically (no symlinks resolved): a
+ * directory OMC will not anchor a workspace's state at. True for the home
+ * directory itself, for any path with a component that starts with a dot
+ * (other than `.omc`) or is a known personal or credential folder (`Documents`,
+ * `Library`, `.ssh`, ...), for the filesystem root, `/tmp` and `/private/tmp`,
+ * and for anything under the temporary directory, `/var`, `/usr`, `/etc`,
+ * `/opt` or `/private/var`.
+ */
+export function isSensitiveLocation(dir: string, home: string | null, tmp: string | null): boolean {
+  const path = dir.replace(/\/+$/, '') || '/'
+  if (home !== null && path === (home.replace(/\/+$/, '') || '/')) {
+    return true
+  }
+  for (const name of path.split('/')) {
+    if ((name.startsWith('.') && name !== '.omc') || SENSITIVE_NAMES.has(name.toLowerCase())) {
+      return true
+    }
+  }
+  if (path === '/' || path === '/tmp' || path === '/private/tmp') {
+    return true
+  }
+  const roots = tmp === null || tmp === '' ? SENSITIVE_ROOTS : [tmp.replace(/\/+$/, ''), ...SENSITIVE_ROOTS]
+
+  return roots.some(root => root !== '' && isWithin(root, path))
 }
 
 /** The `id` a `.omc-workspace` marker names, or null (an empty or unreadable marker names none). */
@@ -210,12 +289,36 @@ export function omcRoot(facts: RootFacts): string | null {
   return facts.home === null ? null : join(facts.home, '.omc')
 }
 
-/** Where a mode's state can be: the session's own file first, then the legacy flat file. */
-export function statePaths(root: string, sessionId: string, mode: string): { session: string; legacy: string } {
+/** At most this many other session directories are scanned for a file naming this session. */
+export const MAX_SESSION_SCAN = 50
+
+/**
+ * Where a mode's state can be, in readStateFileWithSession's order: the
+ * session's own file; `scanned` (the same file in each other session
+ * directory, read only when it names this session); then the legacy flat file
+ * in the root, else the global one under `$HOME/.omc/state` (both read only
+ * when they name this session).
+ */
+export function statePaths(
+  root: string,
+  sessionId: string,
+  mode: string,
+  home: string | null,
+): { session: string; sessionsDir: string; legacy: string; global: string | null } {
   return {
     session: join(root, 'state', 'sessions', sessionId, `${mode}-state.json`),
+    sessionsDir: join(root, 'state', 'sessions'),
     legacy: join(root, 'state', `${mode}-state.json`),
+    global: home === null ? null : join(home, '.omc', 'state', `${mode}-state.json`),
   }
+}
+
+/** The other session directories to scan: valid ids only, not this one, at most MAX_SESSION_SCAN. */
+export function sessionsToScan(entries: readonly { name: string; kind: string }[], sessionId: string): string[] {
+  return entries
+    .filter(entry => entry.kind === 'dir' && entry.name !== sessionId && isSafeSessionId(entry.name))
+    .map(entry => entry.name)
+    .slice(0, MAX_SESSION_SCAN)
 }
 
 /** One mode's state as the judge reads it. */
@@ -226,10 +329,15 @@ export type ModeState = {
   iteration: number | null
   maxIterations: number | null
   reinforcement: number | null
+  maxReinforcements: number | null
+  /** OMC holds a run waiting for the person; its stop hook does not reinforce it. */
+  isAwaitingConfirmation: boolean
   /** The latest activity time in milliseconds, or null when the file records none. */
   activityMs: number | null
 }
 
+// A timestamp is an ISO string. A number is ignored, as OMC's isStaleState
+// ignores it (it keeps only non-empty strings).
 function time(value: unknown): number | null {
   if (typeof value !== 'string' || value === '') {
     return null
@@ -266,12 +374,15 @@ export function parseState(text: string): ModeState | null {
     .filter((ms): ms is number => ms !== null)
 
   return {
-    isActive: s.active === true,
+    // state_write stores some values as strings, so "true" is active too.
+    isActive: s.active === true || s.active === 'true',
     sessionId: typeof s.session_id === 'string' ? s.session_id : null,
     phase,
     iteration: numberOf(s.iteration),
     maxIterations: numberOf(s.max_iterations),
     reinforcement: numberOf(s.reinforcement_count),
+    maxReinforcements: numberOf(s.max_reinforcements),
+    isAwaitingConfirmation: s.awaiting_confirmation === true,
     activityMs: times.length === 0 ? null : Math.max(...times),
   }
 }
@@ -288,7 +399,9 @@ export function belongsTo(state: ModeState, sessionId: string, isLegacy: boolean
 /**
  * What is wrong with an active mode, or null when nothing is (or it is not
  * active). A stale run is reported as stale even when its counters are high:
- * a dead run is not looping.
+ * a dead run is not looping. Looping means a count at or past the ceiling
+ * OMC enforces while the run is still marked active; a run awaiting the
+ * person's confirmation is not reinforced, so it is never looping.
  */
 export function judge(mode: string, state: ModeState, nowMs: number, limits: Thresholds): Finding | null {
   if (!state.isActive) {
@@ -302,16 +415,21 @@ export function judge(mode: string, state: ModeState, nowMs: number, limits: Thr
   if (ageMs > limits.staleMs) {
     return { ...base, kind: 'stale', ageMs }
   }
-  const isReinforcing = state.reinforcement !== null && state.reinforcement >= limits.reinforcementLimit
-  const isAtLimit =
-    state.iteration !== null && state.maxIterations !== null && state.maxIterations > 0 && state.iteration >= state.maxIterations
-  if (isReinforcing || isAtLimit) {
+  if (state.isAwaitingConfirmation) {
+    return null
+  }
+  const ceiling = reinforcementCeiling(mode, state, limits.reinforcementLimit)
+  const cap = iterationCap(mode, state)
+  const isReinforcing = ceiling !== null && state.reinforcement !== null && state.reinforcement >= ceiling
+  const isAtCap = cap !== null && state.iteration !== null && state.iteration >= cap
+  if (isReinforcing || isAtCap) {
     return {
       ...base,
       kind: 'looping',
-      reinforcement: state.reinforcement,
-      iteration: state.iteration,
-      maxIterations: state.maxIterations,
+      reinforcement: isReinforcing ? state.reinforcement : null,
+      reinforcementLimit: isReinforcing ? ceiling : null,
+      iteration: isAtCap ? state.iteration : null,
+      maxIterations: isAtCap ? cap : null,
     }
   }
 
@@ -339,7 +457,8 @@ export function bandText(finding: Finding): string {
   }
   const parts: string[] = []
   if (finding.reinforcement !== null) {
-    parts.push(`reinforcement ${finding.reinforcement}`)
+    const limit = finding.reinforcementLimit === null ? '' : `/${finding.reinforcementLimit}`
+    parts.push(`reinforcement ${finding.reinforcement}${limit}`)
   }
   if (finding.iteration !== null && finding.maxIterations !== null) {
     parts.push(`iteration ${finding.iteration}/${finding.maxIterations}`)

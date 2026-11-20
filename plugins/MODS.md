@@ -405,7 +405,7 @@ session is dead or looping:
 
 ```
 autopilot active but stale for 3h; cancel or resume (phase: execution)
-ralph looping: reinforcement 7, iteration 9/10
+team looping: reinforcement 20/20 (phase: team-exec)
 ```
 
 One line per mode in trouble, in the warning colour. With no OMC state, with
@@ -414,19 +414,33 @@ HUD shows the active mode, but not whether the run behind it is still alive.
 
 - **Which modes.** ralph, autopilot, team and ultragoal: the modes whose stop hook
   keeps a run going.
-- **Stale.** The mode is `active: true`, and its latest activity time is more than
+- **Stale.** The mode is active (`true`, or the string `"true"` that `state_write`
+  can store), and its latest activity time is more than
   2 hours old (`staleHours`). The activity time is the latest of
   `last_checked_at`, `updated_at` and `started_at`, which is OMC's own
   `isStaleState` rule in `scripts/persistent-mode.mjs`, and also of
   `_meta.updatedAt`, which OMC's `state_write` tool stamps on files (such as
-  team's) that carry none of the others. Exactly the threshold is not yet stale,
-  as in OMC. An active state with no readable time at all is shown as stale "with
-  no activity time recorded". A stale run is reported as stale even when its
-  counters are high: a dead run is not looping.
-- **Looping.** The mode is active and fresh, and its `reinforcement_count` has
-  reached 5 (`reinforcementLimit`), or its `iteration` has reached
-  `max_iterations`. Counts stored as strings, as `state_write` stores some, are
-  read as numbers.
+  team's) that carry none of the others. Timestamps must be ISO strings: a
+  numeric one is ignored, as `isStaleState` ignores it. Exactly the threshold is
+  not yet stale, as in OMC. An active state with no readable time at all is shown
+  as stale "with no activity time recorded". A stale run is reported as stale
+  even when its counters are high: a dead run is not looping.
+- **Looping.** The mode is active and fresh, and has reached the ceiling OMC's
+  stop hook enforces (`scripts/persistent-mode.mjs`), so the hook has stopped
+  reinforcing a run that is still marked active:
+  - autopilot and team: `reinforcement_count` at 20 (OMC reinforces while the new
+    count is at most 20);
+  - ultragoal: `reinforcement_count` at `max_reinforcements || 50`;
+  - ralph: `iteration` at `max_iterations || 100`. ralph has no reinforcement
+    ceiling. OMC raises `max_iterations` by 10 each time it is reached, so this
+    rule rarely fires; it catches a ralph stuck at its cap.
+
+  OMC never resets `reinforcement_count` during a run, so a long healthy run
+  climbs past any small fixed number; a team run at 6 is not looping. The
+  `reinforcementLimit` setting, when set, replaces every ceiling. A run with
+  `awaiting_confirmation: true` is held for the person and not reinforced, so it
+  is never looping, though it can still be stale. Counts stored as strings, as
+  `state_write` stores some, are read as numbers.
 - **The phase.** `current_phase ?? phase ?? stage`, the order OMC reads it in.
   Left out of the line when none is set.
 - **Read only.** The mod reads the state files with `$.fs.read`, and runs `git`
@@ -449,13 +463,18 @@ session scope under `.omc/state/sessions/{sessionId}/`", OMC `docs/HOOKS.md`, Mo
 State Management), which its hooks get as `session_id`. A mod gets the same id
 from `$.session.id()`, which the engine types document as "the session's id (the
 transcript file's name)"; `session.end` names it as "`$.session.id()` until
-now". A session id that OMC would refuse in a path (anything but letters, digits,
-`-` and `_`) is not used.
+now". A session id that OMC's stop hook would refuse in a path (it must start
+with a letter or digit, then letters, digits, `-` and `_`) is not used.
 
-For each mode it reads `<root>/state/sessions/<id>/<mode>-state.json`. A file
-there that names another session in `session_id` is ignored. If none is usable, it
-reads the legacy `<root>/state/<mode>-state.json`, but only when that file's
-`session_id` is this session's, as OMC's `readStateFileWithSession` does.
+For each mode it follows OMC's `readStateFileWithSession`
+(`scripts/persistent-mode.mjs`), stopping at the first usable file:
+
+1. `<root>/state/sessions/<id>/<mode>-state.json`, unless it names another
+   session in `session_id`;
+2. the same file in each other directory under `<root>/state/sessions/` (at most
+   50 directories), when its `session_id` is this session's;
+3. the legacy `<root>/state/<mode>-state.json`, or when that is missing the global
+   `$HOME/.omc/state/<mode>-state.json`, when its `session_id` is this session's.
 
 ### The state root
 
@@ -473,7 +492,15 @@ the session's working directory:
    share one id.
 2. A **`.omc-workspace`** marker in the working directory or a parent, nearest
    first, stopping before the home directory: `<marker directory>/.omc`.
-   `OMC_DISABLE_MULTIREPO=1` turns the marker off, as in OMC.
+   `OMC_DISABLE_MULTIREPO=1` turns the marker off, as in OMC. Without
+   `OMC_STATE_DIR`, a marker in a sensitive location is skipped, inside a
+   repository or not, as OMC's `isSensitiveStateLocation` does: the home
+   directory itself; a path with a component that starts with a dot (other than
+   `.omc`) or names a personal or credential folder (`Documents`, `Desktop`,
+   `Downloads`, `Library`, `Pictures`, `.ssh`, `.config` and the rest of OMC's
+   list, any case); the filesystem root, `/tmp`, `/private/tmp`; anything under
+   `$TMPDIR`, `/var`, `/usr`, `/etc`, `/opt` or `/private/var`. The match is
+   lexical: symlinks are not resolved, where OMC resolves them.
 3. The **git top level**'s `.omc`, climbed to the outermost superproject when
    inside a submodule.
 4. **Outside a repository**, `$HOME/.omc`. OMC 5.8.6 no longer uses a `.omc` in
@@ -481,18 +508,18 @@ the session's working directory:
    root", OMC `docs/REFERENCE.md`). Since the mod reads only this session's
    files, that shared root shows nothing from other sessions.
 
-The root is worked out once per working directory and kept until the directory
-changes or the session restarts.
+The marker search starts from the working directory in every case. With
+`OMC_STATE_DIR` set, OMC's `getOmcRoot()` starts it from the git top level
+instead, so a marker between the working directory and the top level is found
+here and not by OMC; that layout is unusual.
+
+The root is worked out when the working directory changes, at session start, and
+again every 10 reads. A root found while `git` could not answer (a timeout, git
+missing: anything but "not a git repository") is used for that read only.
 
 ### What it does not do
 
-- It does not apply OMC's check that refuses a workspace marker in a sensitive
-  location (`~/.ssh`, `~/.config` and similar). A marker there is unlikely, and
-  the files read would still be keyed by this session's id.
-- It does not scan other session directories for a file whose `session_id`
-  names this session, which OMC's reader also tries. OMC writes session state
-  under the session's own directory, so that fallback covers only files moved by
-  hand.
+- It does not resolve symlinks in the sensitive-location check.
 - It does not watch other modes (ultrapilot, pipeline, swarm, omc-teams), which
   OMC 5.0 retired.
 
@@ -502,11 +529,11 @@ Settings, under `/config` or `pluginConfigs.omc-watchdog.options` in
 | Setting | Default | What it does |
 |---|---|---|
 | `staleHours` | 2 | Hours without activity after which an active mode is stale; 0 or less uses 2 |
-| `reinforcementLimit` | 5 | The `reinforcement_count` at which an active mode is looping; 0 or less uses 5 |
+| `reinforcementLimit` | 0 | Overrides the `reinforcement_count` at which an active mode is looping, for every mode; 0 uses OMC's ceilings |
 
 Its tests run with `claude plugin test plugins/omc-watchdog`. Their state files
-are copies of real ones OMC 5.8.6 wrote (autopilot and ralph by its hooks, team by
-its `state_write` tool), with prompts, paths and ids replaced. Hooks of the test's
+have the shape of real ones OMC 5.8.6 wrote (autopilot and ralph by its hooks,
+team by its `state_write` tool), with every value replaced by a synthetic one. Hooks of the test's
 own stand for the session's id and directory, the environment, the files and
 `git`, and the project ids are checked against `shasum -a 256`.
 `bash plugins/omc-watchdog/tests/mutation-check.sh` breaks one behaviour at a time
@@ -518,20 +545,23 @@ The tests cannot run a live session, so three things are unverified: that
 `$.session.id()` in a live session equals the id OMC's hooks write under, that
 `$.fs.read` reads the state root without a prompt (it can lie outside the
 project, under `$HOME/.omc` or `OMC_STATE_DIR`), and that the band draws. Check
-once, by hand, in a scratch repository:
+once, by hand, in a scratch repository, starting the session in a subdirectory
+so the check also shows which `.omc` OMC uses:
 
-1. `d=$(mktemp -d) && git -C "$d" init -q && cd "$d"`, then
-   `claude --plugin-dir <cconami checkout>/plugins/omc-watchdog`.
+1. `d=$(mktemp -d) && git -C "$d" init -q && mkdir -p "$d/sub/deep" && cd "$d/sub/deep"`,
+   then `claude --plugin-dir <cconami checkout>/plugins/omc-watchdog`.
 2. Start a run: `/oh-my-claudecode:ralph count to three slowly`. Once it has
    started, stop it with Esc. Expect no band: the run is fresh.
 3. In another terminal, find the state file:
-   `ls "$d"/.omc/state/sessions/*/ralph-state.json`. The directory name should be
-   the session id shown by `/status`. If it is not, the mod reads the wrong
-   directory: report it.
+   `find "$d" -path '*/.omc/state/sessions/*/ralph-state.json'`. It should be
+   under `$d/.omc` (the git top level), not `$d/sub/deep/.omc`; if it is under the
+   subdirectory, the mod reads the wrong root: report it. Its directory name
+   should be the session id shown by `/status`; if it is not, the mod reads the
+   wrong directory: report it.
 4. Make it look looping, keeping a backup: in that terminal, run
-   `f=$(ls "$d"/.omc/state/sessions/*/ralph-state.json) && cp "$f" "$f.bak"`, then
-   `python3 -c 'import json,sys,datetime as d; p=sys.argv[1]; s=json.load(open(p)); s.pop("_meta",None); s.update(active=True, reinforcement_count=7, iteration=9, max_iterations=10, last_checked_at=d.datetime.now(d.timezone.utc).isoformat()); json.dump(s,open(p,"w"))' "$f"`.
-   Within a minute the band reads `ralph looping: reinforcement 7, iteration 9/10`.
+   `f=$(find "$d" -path '*/.omc/state/sessions/*/ralph-state.json') && cp "$f" "$f.bak"`, then
+   `python3 -c 'import json,sys,datetime as d; p=sys.argv[1]; s=json.load(open(p)); s.pop("_meta",None); s.update(active=True, awaiting_confirmation=False, iteration=10, max_iterations=10, last_checked_at=d.datetime.now(d.timezone.utc).isoformat()); json.dump(s,open(p,"w"))' "$f"`.
+   Within a minute the band reads `ralph looping: iteration 10/10`.
 5. Make it look dead:
    `python3 -c 'import json,sys,datetime as d; p=sys.argv[1]; s=json.load(open(p)); t=(d.datetime.now(d.timezone.utc)-d.timedelta(hours=3)).isoformat(); s.update(last_checked_at=t, started_at=t, updated_at=t); json.dump(s,open(p,"w"))' "$f"`.
    Within a minute the band reads `ralph active but stale for 3h; cancel or resume`.
