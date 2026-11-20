@@ -342,6 +342,10 @@ hook has returned. If a hook fails, its `.catch` replays the chain's result.
   sibling never clears a refusal: `git branch` does not clear `git branch -D x`,
   `git push origin feature` does not clear `git push --force origin main`, and a
   `Write` to another path does not clear a refused `Write`. Otherwise press Dismiss.
+- **A refusal can be missed.** The work on a refusal runs on a zero-delay
+  `clock.after` timer. If another mod's `clock.after` hook refuses that timer, or a
+  reload of the mod drops it before it fires, that refusal is not shown. The call
+  itself is unaffected.
 - **What it cannot see.** A refusal by a managed-settings hook ends the chain above
   every mod. A refusal by another mod's `classic.PreToolUse` hook that runs before
   this one is not seen either. A refusal at the permission prompt, by a permission
@@ -353,7 +357,7 @@ Settings, under `/config` or `pluginConfigs.guardrail-notice.options` in
 
 | Option | Default | Meaning |
 |---|---|---|
-| `patterns` | empty | Extra patterns that name the hook: `Label=regular expression`, or a bare expression (named `hook`). Everything before the first `=` is the label, so an expression containing `=` needs a label. Checked before the built-in ones. An invalid expression, or one with a nested quantifier such as `(a+)+`, is skipped and reported once in the transcript |
+| `patterns` | empty | Extra patterns that name the hook: `Label=text`, or bare text (named `hook`). The text is a plain case-insensitive substring (`a.b` matches only `a.b`). Start it with `re:` for a regular expression (`Policy=re:^Blocked \w+ policy`). Everything before the first `=` is the label, so text containing `=` needs a label. Checked before the built-in ones. An invalid `re:` expression, or one with a nested quantifier such as `(a+)+`, is skipped and reported once in the transcript. That check is partial: `(a|aa)+`, `((a+))+` and `(.*a){20}` are accepted, and a pathological `re:` pattern of your own can run for a long time on a long message and stall the next tool call's hooks until it ends. Use `re:` sparingly |
 | `toast` | on | Raise a toast for a refusal of a kind not already waiting |
 
 Its tests run with `claude plugin test plugins/guardrail-notice`. In them, a hook of
@@ -361,6 +365,17 @@ the test's own stands for the settings hooks and refuses with the real messages 
 OMC's guardrail and the `operating-model` guard.
 `bash plugins/guardrail-notice/tests/mutation-check.sh` breaks one behaviour at a
 time and fails if the tests miss any; CI runs it.
+
+Changes:
+
+- **0.2.0.** The `patterns` setting changed meaning: an entry is now a plain
+  case-insensitive substring, and a regular expression needs the `re:` prefix
+  (`Label=re:...`). An existing entry that relied on regular-expression syntax must
+  gain `re:`; a plain entry containing `^ $ \ ( [ | * +` is reported once in the
+  transcript at session start with that suggestion. The card entry kept for each
+  refused call is capped at the newest 50 (older cards stop showing, except those of
+  refusals still waiting), and a refusal recorded while an identical call
+  succeeds no longer leaves a stale entry above the prompt.
 
 ### Owner check before relying on it
 

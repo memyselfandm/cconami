@@ -13,7 +13,7 @@ Choose the user scope to have it in every session.
 
 | Setting | Default | What it does |
 |---|---|---|
-| `patterns` | empty | Extra patterns that name the hook behind a refusal: `Label=regular expression`, or a bare expression (named `hook`). An expression containing `=` needs a label; one with a nested quantifier is rejected. Checked before the built-in patterns |
+| `patterns` | empty | Extra patterns that name the hook behind a refusal: `Label=text`, or bare text (named `hook`). The text is a plain case-insensitive substring; start it with `re:` for a regular expression (a nested quantifier is rejected, but other pathological expressions are not, so use `re:` sparingly). Text containing `=` needs a label. Checked before the built-in patterns |
 | `toast` | on | Also raise a toast when a hook refuses a tool call of a kind not already waiting |
 
 A refusal clears only when exactly the refused call later succeeds, or when you

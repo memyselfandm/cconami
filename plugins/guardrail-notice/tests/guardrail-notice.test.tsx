@@ -15,11 +15,13 @@ import {
   isShown,
   labelOf,
   MAX_ACTIVE,
+  MAX_CALLS,
   namedOperation,
   normalizeCommand,
   parsePatterns,
   safeFormOf,
   summary,
+  trackCall,
   truncate,
 } from '../hooks/logic'
 import { onCall, onDecision, replayCall, replayDecision } from '../hooks/observe'
@@ -62,25 +64,55 @@ test('patterns are matched against the first 2000 characters only', () => {
   expect(classify(late, BUILT_IN)).toBe(GENERIC)
 })
 
-test('extra patterns: Label=expression or a bare expression; invalid and nested quantifiers skipped', () => {
+test('extra patterns: Label=body or a bare body; a body is a substring unless it starts with re:', () => {
   const { sources, skipped } = parsePatterns([
     ' Worktree guard=isolated in the worktree ',
     'policy',
     '',
-    'bad=(',
-    'slow=(a+)+$',
-    '(x*){2,}',
+    'Dot=a.b',
+    'bad=re:(',
+    'slow=re:(a+)+$',
+    're:(x*){2,}',
+    'none=re:',
+    'Re=re:^Blocked \\w+ policy',
     42,
   ])
-  expect(sources.map(s => s.label)).toEqual(['Worktree guard', GENERIC])
-  expect(skipped.map(s => s.entry)).toEqual(['bad=(', 'slow=(a+)+$', '(x*){2,}'])
+  expect(sources.map(s => s.label)).toEqual(['Worktree guard', GENERIC, 'Dot', 'Re'])
+  expect(skipped.map(s => s.entry)).toEqual(['bad=re:(', 'slow=re:(a+)+$', 're:(x*){2,}', 'none=re:'])
   expect(skipped.map(s => s.why)).toEqual([
     'not a valid regular expression',
     'nested quantifier (can take exponential time)',
     'nested quantifier (can take exponential time)',
+    'empty expression',
   ])
   expect(classify('This session is isolated in the worktree /x', [...sources, ...BUILT_IN])).toBe('Worktree guard')
-  expect(parsePatterns('not a list')).toEqual({ sources: [], skipped: [] })
+  expect(classify('THIS SESSION IS ISOLATED IN THE WORKTREE', [...sources, ...BUILT_IN])).toBe('Worktree guard')
+  expect(parsePatterns('not a list')).toEqual({ sources: [], skipped: [], hinted: [] })
+})
+
+test('a substring pattern matches literally; an re: pattern is a regular expression', () => {
+  const { sources } = parsePatterns(['Dot=a.b', 'Paren=f(x)', 'Re=re:^Blocked \\w+ policy$'])
+  const [dot, paren, re] = sources.map(s => [s])
+  expect(classify('see a.b here', dot as never)).toBe('Dot')
+  expect(classify('see aXb here', dot as never)).toBe(GENERIC)
+  expect(classify('call f(x) now', paren as never)).toBe('Paren')
+  expect(classify('call fx now', paren as never)).toBe(GENERIC)
+  expect(classify('Blocked my policy', re as never)).toBe('Re')
+  expect(classify('Blocked my  policy', re as never)).toBe(GENERIC)
+})
+
+test('trackCall keeps the newest MAX_CALLS ids and reports the evicted ones', () => {
+  let ids: string[] = []
+  const evicted: string[] = []
+  for (let i = 0; i < MAX_CALLS + 3; i += 1) {
+    const tracked = trackCall(ids, `c${i}`)
+    ids = tracked.ids
+    evicted.push(...tracked.evicted)
+  }
+  expect(ids).toHaveLength(MAX_CALLS)
+  expect(ids[0]).toBe(`c${MAX_CALLS + 2}`)
+  expect(evicted).toEqual(['c0', 'c1', 'c2'])
+  expect(trackCall(['a', 'b'], 'b')).toEqual({ ids: ['b', 'a'], evicted: [] })
 })
 
 test('an extra pattern is checked before the built-in ones', () => {
@@ -286,7 +318,7 @@ test('the tool.call observer returns the same object and reports only a success'
   }
 })
 
-test('when the hook throws after next, the .catch answers the deny next settled to', async () => {
+test('when the hook throws after next, the .catch handler calls next and returns what it resolves to', async () => {
   const failing = fakeEngine(() => {
     throw new Error('timer refused')
   })
@@ -587,14 +619,111 @@ test('an extra pattern from settings names the source', { options: { patterns: [
   expect(toasts).toEqual(['Blocked: tee (Policy). Needs you.'])
 })
 
-test('a skipped pattern is reported once, in the transcript', { options: { patterns: ['slow=(a+)+$', 'ok=fine'] } }, async ($, on) => {
+test('a skipped pattern is reported once, in the transcript', { options: { patterns: ['slow=re:(a+)+$', 'ok=fine'] } }, async ($, on) => {
   const { logs } = session(on, () => undefined)
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
   expect(logs).toEqual([
     {
-      text: 'guardrail-notice: pattern skipped (nested quantifier (can take exponential time)): slow=(a+)+$',
+      text: 'guardrail-notice: pattern skipped (nested quantifier (can take exponential time)): slow=re:(a+)+$',
       to: 'transcript',
     },
   ])
+})
+
+test('only the newest MAX_CALLS refused calls keep a card; older ones are dropped', async ($, on) => {
+  const map = new Map<string, string>()
+  for (let i = 0; i < MAX_CALLS + 2; i += 1) {
+    map.set(`rm -rf d${i}`, OTHER)
+  }
+  const { clock } = session(on, refusing(map))
+  for (let i = 0; i < MAX_CALLS + 2; i += 1) {
+    await bash($, `r${i}`, `rm -rf d${i}`)
+    await clock.settle()
+  }
+  const card = async (i: number) => {
+    const mounted = await $.ui.mount({
+      plugin: 'guardrail-notice',
+      surface: 'terminal',
+      component: 'ToolUse',
+      requestId: `r${i}`,
+      props: rowProps(`r${i}`, `rm -rf d${i}`),
+    })
+    const found = await mounted.find({ type: 'Text', text: /^Blocked/ })
+    await mounted.unmount()
+
+    return found !== undefined
+  }
+  expect(await card(0)).toBe(false)
+  expect(await card(1)).toBe(false)
+  expect(await card(2)).toBe(true)
+  expect(await card(MAX_CALLS + 1)).toBe(true)
+})
+
+test('an identical call that succeeds while a refusal is recorded leaves no stale entry', async ($, on) => {
+  let n = 0
+  const { clock } = session(on, command => (command === 'git push' && n++ === 0 ? { deny: OMC } : undefined))
+  // While the refusal's entry is being written, the same command succeeds and
+  // its clear runs: it finds nothing waiting yet, so record must clear again.
+  let isInjected = false
+  on('state.set', { plugin: 'guardrail-notice', key: 'call' }, async (_, e, next) => {
+    const result = await next(e)
+    if (!isInjected) {
+      isInjected = true
+      await bash($, 'r2', 'git push')
+      await clock.settle()
+    }
+
+    return result
+  })
+  await bash($, 'r1', 'git push')
+  await clock.settle()
+  expect(isInjected).toBe(true)
+  expect(await bandLines($)).toEqual([])
+})
+
+test('a waiting refusal keeps its card when later refusals of another call overflow the cap', async ($, on) => {
+  const map = new Map<string, string>([['git push', OMC]])
+  for (let i = 0; i <= MAX_CALLS; i += 1) {
+    map.set('rm -rf d', OTHER)
+  }
+  const { clock } = session(on, refusing(map))
+  await bash($, 'first', 'git push')
+  await clock.settle()
+  for (let i = 0; i <= MAX_CALLS; i += 1) {
+    await bash($, `retry${i}`, 'rm -rf d')
+    await clock.settle()
+  }
+  const mounted = await $.ui.mount({
+    plugin: 'guardrail-notice',
+    surface: 'terminal',
+    component: 'ToolUse',
+    requestId: 'first',
+    props: rowProps('first', 'git push'),
+  })
+  expect(await mounted.find({ type: 'Text', text: /^Blocked/ })).toBeDefined()
+  await mounted.unmount()
+})
+
+test('trackCall never evicts an id it was told to keep', () => {
+  const ids = Array.from({ length: MAX_CALLS }, (_, i) => `c${i}`).reverse()
+  const tracked = trackCall(ids, 'new', ['c0'])
+  expect(tracked.ids).toHaveLength(MAX_CALLS)
+  expect(tracked.ids).toContain('c0')
+  expect(tracked.evicted).toEqual(['c1'])
+})
+
+test('a plain pattern with regular-expression syntax is hinted', () => {
+  const { hinted } = parsePatterns(['Re=^start', 'plain text', 'Dot=a.b', 'f(x)', 'Ok=re:^x'])
+  expect(hinted).toEqual(['Re=^start', 'f(x)'])
+})
+
+test('a hinted pattern is reported once, in the transcript, suggesting re:', { options: { patterns: ['A=^x', 'ok=fine'] } }, async ($, on) => {
+  const { logs } = session(on, () => undefined)
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  await $.session.start({ cwd: '/', surface: 'terminal', isInteractive: true })
+  expect(logs).toHaveLength(1)
+  expect(logs[0]?.to).toBe('transcript')
+  expect(logs[0]?.text).toContain('prefix with re:')
+  expect(logs[0]?.text).toContain('A=^x')
 })

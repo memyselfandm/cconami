@@ -1,6 +1,6 @@
 {
   "name": "guardrail-notice",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Shows a card in the chat and an entry above the prompt when a PreToolUse hook refuses a tool call, so work blocked on you is not missed. It only observes: it never blocks, changes or delays a call.",
   "license": "MIT",
   "author": { "name": "memyselfandm" },
@@ -10,7 +10,7 @@
       "type": "string",
       "multiple": true,
       "title": "Extra refusal patterns",
-      "description": "Name the hook behind a refusal. Each entry is Label=regular expression, or a bare expression (named 'hook'), matched against the first 2000 characters of the refusal's text and checked before the built-in patterns. Everything before the first = is the label, so an expression containing = must be written Label=expression. An expression with a nested quantifier, such as (a+)+, is rejected; a rejected or invalid entry is reported once in the transcript. Every hook refusal is shown either way.",
+      "description": "Name the hook behind a refusal. Each entry is Label=text, or bare text (named 'hook'). The text is matched as a plain case-insensitive substring of the first 2000 characters of the refusal's message, and is checked before the built-in patterns. Start the text with re: to use a regular expression instead, such as Policy=re:^Blocked \\w+ policy. A re: expression with a nested quantifier, such as (a+)+, is rejected, but the check is partial: other shapes, such as (a|aa)+, are accepted and can take exponential time on a long message, which stalls the next tool call's hooks until it ends, so write re: patterns with care. Everything before the first = is the label, so text containing = must be written Label=text. A rejected or invalid entry is reported once in the transcript. Every hook refusal is shown either way.",
       "default": []
     },
     "toast": {
