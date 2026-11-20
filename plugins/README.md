@@ -34,6 +34,19 @@ This directory contains Claude Code skills following the Agent Skills specificat
 | [scraping-documentation](authoring/skills/scraping-documentation/) | Scrapes docs sites to organized markdown |
 | [building-subagents](authoring/skills/building-subagents/) | Creates production-ready Claude Code subagents |
 
+### Operating Model
+
+How sessions work with each other and the owner. The `operating-model` plugin also
+installs a command guard hook; see [operating-model/hooks/README.md](operating-model/hooks/README.md).
+
+| Skill | Description |
+|-------|-------------|
+| [checkpointing-sessions](operating-model/skills/checkpointing-sessions/) | Saves a session's state to Linear before context is lost, and resumes from it |
+| [assigning-owner-actions](operating-model/skills/assigning-owner-actions/) | Files each ask for the owner as its own labelled Linear issue and picks up the answer |
+| [reviewing-pull-requests](operating-model/skills/reviewing-pull-requests/) | Reviews each pull request head in an isolated subagent and returns one verdict line |
+| [orchestrating-workstreams](operating-model/skills/orchestrating-workstreams/) | Leads one Linear project to done on a persistent loop (Claude Code only) |
+| [coordinating-sessions](operating-model/skills/coordinating-sessions/) | The multi-session protocol: Linear first, one peer-message shape, reserved items, subagent briefs |
+
 ### Product & Design
 
 | Skill | Description |

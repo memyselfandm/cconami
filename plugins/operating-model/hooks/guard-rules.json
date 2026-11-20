@@ -1,0 +1,144 @@
+{
+  "version": 1,
+  "$comment": "Generic rules shipped with the operating-model plugin. A project adds its own, or disables one of these by id, in <project>/.claude/guard-rules.json. Format: README.md beside this file. guard-bash-command.py embeds an identical copy (EMBEDDED_RULES), used if this file is missing or invalid; change both together.",
+  "rules": [
+    {
+      "id": "gh-pr-merge-auto",
+      "message": "`gh pr merge --auto` is refused: in a repository whose default branch has no required status checks, --auto merges at once, before CI finishes. Safe form: watch the checks (`gh pr checks <pr> --watch`), then merge explicitly (`gh pr merge <pr> --squash`). A project that does require checks can turn this rule off in .claude/guard-rules.json.",
+      "when": [
+        {
+          "command": [
+            "gh"
+          ],
+          "words": [
+            "pr",
+            "merge"
+          ],
+          "flag": [
+            "--auto"
+          ]
+        },
+        {
+          "command": [
+            "gh"
+          ],
+          "words": [
+            "api"
+          ],
+          "arg_contains": [
+            "enablePullRequestAutoMerge"
+          ]
+        }
+      ],
+      "raw": [
+        "\\bgh\\b(?:(?!\\bgh\\b)[^;&|\\n])*?\\bpr\\s+merge\\b(?:(?!\\bpr\\s+merge\\b)[^;&|\\n])*?--auto\\b",
+        "enablePullRequestAutoMerge"
+      ]
+    },
+    {
+      "id": "token-lookup",
+      "locked": true,
+      "message": "This command prints a Vault or OpenBao token itself: `token lookup`, `print token`, and a `read` or `write` of `auth/token/lookup`, `lookup-self` or `lookup-accessor` without a `-field=` (other than `id`) placed before the path. Safe form: read one field, with the flag before the path, for example `bao read -field=ttl auth/token/lookup-self` (other fields: policies, display_name, expire_time).",
+      "when": [
+        {
+          "command": [
+            "bao",
+            "vault"
+          ],
+          "words": [
+            "token",
+            "lookup"
+          ]
+        },
+        {
+          "command": [
+            "bao",
+            "vault"
+          ],
+          "words": [
+            "print",
+            "token"
+          ]
+        },
+        {
+          "command": [
+            "bao",
+            "vault"
+          ],
+          "words": [
+            "read"
+          ],
+          "arg_endswith": [
+            "auth/token/lookup-self"
+          ],
+          "unless_option": {
+            "name": "field",
+            "except": [
+              "id"
+            ],
+            "before_positional": true,
+            "value_options": [
+              "address",
+              "agent-address",
+              "ca-cert",
+              "ca-path",
+              "client-cert",
+              "client-key",
+              "format",
+              "header",
+              "mfa",
+              "namespace",
+              "ns",
+              "policy-override",
+              "tls-server-name",
+              "wrap-ttl"
+            ]
+          }
+        },
+        {
+          "command": [
+            "bao",
+            "vault"
+          ],
+          "words": [
+            "write"
+          ],
+          "arg_endswith": [
+            "auth/token/lookup",
+            "auth/token/lookup-self",
+            "auth/token/lookup-accessor"
+          ],
+          "unless_option": {
+            "name": "field",
+            "except": [
+              "id"
+            ],
+            "before_positional": true,
+            "value_options": [
+              "address",
+              "agent-address",
+              "ca-cert",
+              "ca-path",
+              "client-cert",
+              "client-key",
+              "format",
+              "header",
+              "mfa",
+              "namespace",
+              "ns",
+              "policy-override",
+              "tls-server-name",
+              "wrap-ttl"
+            ]
+          }
+        }
+      ],
+      "raw": [
+        "\\b(?:bao|vault)\\b(?:(?!\\b(?:bao|vault)\\b)[^;&|\\n])*?\\btoken\\s+lookup\\b",
+        "\\b(?:bao|vault)\\b(?:(?!\\b(?:bao|vault)\\b)[^;&|\\n])*?\\bprint\\s+token\\b",
+        "\\b(?:bao|vault)\\b(?:(?!\\b(?:bao|vault)\\b)[^;&|\\n])*?\\bread\\b(?:(?!\\bread\\b|--?field[= ](?!id\\b)|auth/token/lookup-self)[^;&|\\n])*auth/token/lookup-self",
+        "\\b(?:bao|vault)\\b(?:(?!\\b(?:bao|vault)\\b)[^;&|\\n])*?\\bwrite\\b(?:(?!\\bwrite\\b|--?field[= ](?!id\\b)|auth/token/lookup)[^;&|\\n])*auth/token/lookup(?:-self|-accessor)?\\b"
+      ]
+    }
+  ]
+}

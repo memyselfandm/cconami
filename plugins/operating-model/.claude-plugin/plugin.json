@@ -1,0 +1,7 @@
+{
+  "name": "operating-model",
+  "description": "How agent sessions work with each other and the owner: checkpoint to Linear, file owner asks, review pull requests in isolation, lead a workstream, coordinate peers, and a command guard with a project-extensible rule table.",
+  "version": "0.1.0",
+  "license": "MIT",
+  "author": { "name": "memyselfandm" }
+}

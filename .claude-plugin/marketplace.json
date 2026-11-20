@@ -18,6 +18,11 @@
       "description": "Authoring skills and subagents: build skills and subagents, scrape documentation, configure Ralph."
     },
     {
+      "name": "operating-model",
+      "source": "./plugins/operating-model",
+      "description": "How agent sessions work with each other and the owner: checkpoints, owner asks, isolated PR review, workstream leads, peer coordination, and a command guard hook."
+    },
+    {
       "name": "owner-inbox",
       "source": "./plugins/owner-inbox",
       "description": "The Linear issues waiting on you, in a band above the prompt and a panel toggled with /inbox, in every session."
