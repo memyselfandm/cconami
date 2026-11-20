@@ -63,34 +63,54 @@ every tool it serves is missing. This mod shows a band above the prompt while a
 watched server is not connected:
 
 ```
-MCP server not connected: plugin:oh-my-claudecode:t   [Check now]
+MCP server not connected   [Check now]
+plugin:oh-my-claudecode:t: not connected
 /mcp to retry. If it fails again, run the server command by hand to see the error.
 ```
 
 The band is absent while every watched server is connected.
 
-- **Which servers.** By default, every plugin MCP server. The mod learns their names
-  as Claude Code starts them at the beginning of a session, and remembers them for
-  later sessions. Servers from settings and claude.ai connectors are watched only if
-  you name them.
+**The mod never brings a server in, changes one, or delays one.** It checks only a
+server whose start it saw Claude Code request in this session, and only if no other
+mod held that start back. Anything else goes unchecked: a name from `watch` that this
+session did not see start is listed as "not seen this session", in dim text, and is
+never asked about.
+
+- **Which servers.** Every plugin MCP server that Claude Code starts at the beginning
+  of the session, found automatically, plus any server named in `watch`. `watch` adds
+  to what is found; it never replaces it. Settings servers and claude.ai connectors are
+  checked only when named in `watch`, and only once this session has seen them start.
 - **When.** 15 seconds after the session starts, so servers have time to connect,
-  then every 60 seconds. **Check now** checks at once, for example after `/mcp`.
-- **What counts as down.** A server that failed to connect or waits on sign-in. A
-  server you turned off, or one a policy blocks, is not down. A name in the watch
-  list that matches no server is shown as `unlisted`.
-- **How it checks.** `$.mcp.connect(server)` on each watched server. For a server
-  that `/mcp` lists, that call reports the server's state and does not reconnect it.
+  then every 60 seconds. **Check now** checks at once, for example after `/mcp`. A
+  check that is still running is not started again.
+- **What counts as down.** A server that failed to connect, on two checks in a row,
+  so one that is still starting is not shown. A server waiting on sign-in, or a name
+  that matches no server, counts only when named in `watch`; the sign-in case is
+  shown as "waiting for sign-in". A server you turned off, or one a policy blocks, is
+  never down.
+- **How it checks.** `$.mcp.connect(server)` on each checked server. For a server
+  that `/mcp` lists and no hook holds, that call reports the server's state and does
+  not dial it. It would bring in a server another mod is holding, which is why held
+  servers are never checked.
+- **How it decides "held".** From the structure of the startup request, not from its
+  answer: held when a hook beneath answered `deny`, or when the request never reached
+  Claude Code's own handler (`next.trace` does not end at the engine's entry).
+- **Deferred (`cached`) servers.** The types say a `cached` server "is dialed on first
+  use" by `$.mcp.call`, and do not say how `$.mcp.connect` treats one. The safety rule
+  covers it: the mod learns names only from the startup requests Claude Code makes for
+  servers it is starting, so a server that has not started yet is never checked.
 
 Two options, set in `/config` or in `settings.json` under
-`pluginConfigs.mcp-health.options`. Both take server names as `/mcp` lists them:
+`pluginConfigs.mcp-health.options`. Both take server names as `/mcp` lists them, and
+surrounding spaces are ignored:
 
 | Option | Default | What it does |
 |---|---|---|
-| `watch` | empty | The servers to watch. Empty watches every plugin server |
-| `ignore` | empty | Servers that never raise the band |
+| `watch` | empty | Servers to watch, added to the plugin servers found automatically |
+| `ignore` | empty | Servers that are never checked or shown |
 
-A plugin installed in the middle of a session is not watched until the next session
-starts, unless you name its server in `watch`.
+A server that started before the mod loaded (installed or enabled in the middle of a
+session) is not seen, so it is not checked until the next session.
 
 ## Working on a mod
 

@@ -9,7 +9,7 @@
       "type": "string",
       "multiple": true,
       "title": "Servers to watch",
-      "description": "MCP server names as /mcp lists them, such as plugin:oh-my-claudecode:t or claude.ai Linear. Empty watches every plugin server.",
+      "description": "MCP server names as /mcp lists them, such as plugin:oh-my-claudecode:t or claude.ai Linear. Added to the plugin servers found automatically; a name is checked only once this session has seen it start.",
       "default": []
     },
     "ignore": {
