@@ -52,6 +52,11 @@
       "name": "guardrail-notice",
       "source": "./plugins/guardrail-notice",
       "description": "A card in the chat and an entry above the prompt when a hook refuses a tool call, so work blocked on you is not missed."
+    },
+    {
+      "name": "omc-watchdog",
+      "source": "./plugins/omc-watchdog",
+      "description": "A band above the prompt when an oh-my-claudecode run in this session is dead (active but stale) or looping, with its mode and phase. Hidden when all is well."
     }
   ]
 }
