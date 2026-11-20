@@ -204,7 +204,7 @@ Based on breakdown, suggest sprint allocation.
 ### Next Steps
 1. Review created features
 2. Adjust dependencies if needed
-3. Run /managing-sprints plan <epic-id>
+3. Plan the work order (sprint wording is reworked in CCC-127)
 ```
 
 ## Validation Checks
