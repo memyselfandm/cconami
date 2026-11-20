@@ -1,24 +1,27 @@
 ---
 name: analyzing-dependencies
-description: Analyzes and visualizes dependencies across work items, identifying blockers, critical paths, and circular dependencies. Use when planning sprints, debugging blocked items, or understanding work item relationships before execution.
+description: Maps the blocking links across a project's, an initiative's or a ticket's tickets - what is blocked and by what, the longest chain, circular links, blockers in other projects, and which tickets can start now. Use when ordering a project's work, finding why a ticket is stuck, or choosing what to run in parallel.
+argument-hint: "<ticket-key | --project NAME | --initiative NAME> [--depth N] [--format text|mermaid|json] [--blockers-only]"
+version: 2.0.0
+metadata:
+  hermes:
+    category: productivity
+    tags: [project-management, dependencies]
+    related_skills: [pm-context, breaking-down-work, executing-work-items]
 ---
 
-# Analyzing Dependencies
+# Analyzing dependencies
 
-Map and visualize dependencies across work items to identify blockers and critical paths.
-
-## Usage
-
-```
-/analyzing-dependencies [item-id | --epic EPIC | --sprint SPRINT] [options]
-```
+Map the blocking links between tickets and say what can start now. Order in this
+model comes only from blocking links (see `linear-workflow`), so this map is the plan.
+All reads go through [pm-context](../pm-context/SKILL.md); this skill writes nothing.
 
 ## Arguments
 
 **Scope** (one required):
-- `item-id`: Analyze dependencies for specific item and its children
-- `--epic EPIC`: Analyze all items in an epic
-- `--sprint SPRINT`: Analyze all items in a sprint
+- `ticket-key`: the ticket, its sub-issues, and everything linked to them
+- `--project NAME`: every open ticket in the project
+- `--initiative NAME`: every open ticket in every project of the initiative
 
 **Options:**
 - `--depth N`: How many levels of dependencies to trace (default: all)
@@ -27,32 +30,30 @@ Map and visualize dependencies across work items to identify blockers and critic
 
 ## Examples
 
-```bash
-# Analyze epic dependencies
-/analyzing-dependencies --epic CCC-123
-
-# Check what's blocking a specific item
-/analyzing-dependencies CCC-456
-
-# Sprint dependency map
-/analyzing-dependencies --sprint CCC-123.S01
-
-# Get mermaid diagram
-/analyzing-dependencies --epic CCC-123 --format mermaid
+```
+analyzing-dependencies --project "Sync engine"
+analyzing-dependencies ABC-456                 # why is this stuck?
+analyzing-dependencies --initiative "Version 2" --format mermaid
 ```
 
 ## Workflow
 
-### Step 1: Gather Items
+### Step 1: Gather tickets
 
 ```python
-if item_id:
-    root = pm_context.get_item(item_id)
-    items = [root] + pm_context.get_children(item_id)
-elif epic_id:
-    items = get_epic_tree(epic_id)
-elif sprint_id:
-    items = pm_context.list_items({project: sprint_id})
+if key:
+    root = pm_context.get_item(key)
+    items = [root] + pm_context.get_children(key)
+elif project:
+    items = pm_context.list_items({project: project})
+elif initiative:
+    items = pm_context.list_items({initiative: initiative})
+
+# Fetch blockers outside the scope too, so they can be reported as external
+for item in list(items):
+    for k in item.blocked_by + item.blocks:
+        if k not in keys(items):
+            items.append(pm_context.get_item(k))  # mark as external
 ```
 
 ### Step 2: Build Dependency Graph
@@ -64,7 +65,7 @@ for item in items:
         "item": item,
         "blocks": [],      # Items this blocks
         "blocked_by": [],  # Items blocking this
-        "parent": item.parent_id,
+        "parent": item.parent,
         "children": []
     }
 
@@ -79,15 +80,15 @@ for item in items:
 
 ### Step 3: Analyze Graph
 
-**Find Circular Dependencies:**
+**Find circular links:**
 ```python
-def find_cycles(graph):
+def find_loops(graph):
     visited = set()
     path = []
 
     def dfs(node):
         if node in path:
-            return path[path.index(node):]  # Cycle found
+            return path[path.index(node):]  # loop found
         if node in visited:
             return None
 
@@ -95,22 +96,22 @@ def find_cycles(graph):
         path.append(node)
 
         for blocked in graph[node]["blocks"]:
-            cycle = dfs(blocked)
-            if cycle:
-                return cycle
+            loop = dfs(blocked)
+            if loop:
+                return loop
 
         path.pop()
         return None
 
-    cycles = []
+    loops = []
     for node in graph:
-        cycle = dfs(node)
-        if cycle:
-            cycles.append(cycle)
-    return cycles
+        loop = dfs(node)
+        if loop:
+            loops.append(loop)
+    return loops
 ```
 
-**Find Critical Path:**
+**Find the longest chain:**
 ```python
 def find_critical_path(graph):
     # Topological sort + longest path
@@ -131,7 +132,7 @@ def find_critical_path(graph):
     return reconstruct_path(graph, max_node, dist)
 ```
 
-**Find Blockers:**
+**Find active blockers:**
 ```python
 def find_blockers(graph):
     blockers = []
@@ -157,16 +158,16 @@ def find_blockers(graph):
 ### Summary
 - Total Items: {count}
 - Dependencies: {edge_count}
-- Circular: {cycle_count}
+- Circular: {loop_count}
 - Currently Blocked: {blocked_count}
 
-### Critical Path
+### Longest chain
 {item1} → {item2} → {item3} → {item4}
 Length: {path_length} items
 
 ### Circular Dependencies
-⚠️ Cycle detected: {item1} → {item2} → {item3} → {item1}
-   This must be resolved before execution.
+⚠️ Circular links: {item1} → {item2} → {item3} → {item1}
+   Remove or reverse one link before work starts.
 
 ### Active Blockers
 {for blocker in blockers:}
@@ -174,8 +175,14 @@ Length: {path_length} items
    - [{blocked1.key}] {blocked1.title}
    - [{blocked2.key}] {blocked2.title}
 
-### Ready to Execute
-{items with no unmet dependencies}
+### Blockers in other projects
+{blocker key, its project, its status, and what it blocks here}
+
+### Ready to start
+{open tickets whose blockers are all done}
+
+### Overlaps
+{pairs of ready tickets likely to touch the same files: run them in order, not in parallel}
 
 ### Dependency Tree
 {visual tree representation}
@@ -184,45 +191,51 @@ Length: {path_length} items
 **Mermaid Format:**
 ```mermaid
 graph TD
-    A[CCC-123: Epic] --> B[CCC-124: Feature 1]
-    A --> C[CCC-125: Feature 2]
-    B --> D[CCC-126: Task 1]
-    B --> E[CCC-127: Task 2]
-    C --> F[CCC-128: Task 3]
-    D -.->|blocks| C
+    A[ABC-101: Store changes as a log] -->|blocks| B[ABC-102: Replay the log]
+    B -->|blocks| C[ABC-103: Conflict rule]
+    B -->|blocks| E[ABC-105: Owner action: enable the flag]
+    C -->|blocks| E
+    D[ABC-104: Sync state in status bar]
+    X[XYZ-40: other project]:::external -->|blocks| D
+    classDef external stroke-dasharray: 4 4
 ```
 
 ## Output Examples
 
 ```
-📊 Dependency Analysis: Epic CCC-123
+📊 Dependency analysis: project "Sync engine"
 
 Summary:
   Items: 15
   Dependencies: 8
-  Cycles: 0 ✅
+  Circular: 0 ✅
   Blocked: 3
 
-Critical Path (5 items):
-  CCC-124 → CCC-126 → CCC-130 → CCC-131 → CCC-132
+Longest chain (5 tickets):
+  ABC-124 → ABC-126 → ABC-130 → ABC-131 → ABC-132
 
 Active Blockers:
-  🔴 [CCC-126] Database Schema (In Progress)
-     Blocks: CCC-130, CCC-131
+  🔴 [ABC-126] Database Schema (In Progress)
+     Blocks: ABC-130, ABC-131
 
-  🔴 [CCC-127] API Setup (Todo)
-     Blocks: CCC-129
+  🔴 [ABC-127] API Setup (Todo)
+     Blocks: ABC-129
 
-Ready to Execute:
-  ✅ CCC-124 - No dependencies
-  ✅ CCC-125 - No dependencies
-  ✅ CCC-128 - No dependencies
+Ready to start:
+  ✅ ABC-124 - No dependencies
+  ✅ ABC-125 - No dependencies
+  ✅ ABC-128 - No dependencies
 ```
 
 ## Error Cases
 
 | Issue | Action |
 |-------|--------|
-| Circular dependency | Report cycle, suggest resolution |
-| External blocker | Note external dependency |
-| Missing item | Warn about broken reference |
+| Circular links | Report the loop; suggest which link to drop |
+| Blocker in another project | Report it with its project and status |
+| Linked ticket not found | Warn about the broken link |
+
+## Platform notes
+
+- [platforms/claude-code.md](platforms/claude-code.md)
+- [platforms/hermes.md](platforms/hermes.md)

@@ -1,184 +1,84 @@
-# Linear Workflow Reference
+# Linear workflow reference
 
-## Complete Command Workflow: Idea to Execution
+The life of a piece of work under the project, ticket and initiative model. Each
+stage names the skill that does it. No stage involves a time box.
 
-### Stage 1: Ideation to Backlog
-Getting raw ideas into Linear as actionable items.
+## 1. Capture
 
-```markdown
-# Capture quick ideas as issues
-/refine-issue --team "Chronicle" --type task
+An idea becomes a ticket in the project it belongs to, or a project brief if it is a
+workstream of its own.
 
-# Create comprehensive epics from concepts
-/refine-epic --team "Chronicle"
+- One idea, one to three units of value: `refining-work-items <idea> --type ticket`.
+- A new workstream: `refining-work-items <idea> --type project` writes the brief into
+  the project description.
+- A large effort spanning several workstreams: create an initiative, write its goal
+  in the initiative description, and attach the projects to it as they appear.
 
-# Quick epic creation for simpler initiatives
-/refine-epic-lite --team "Chronicle"
+## 2. Shape
 
-# Define features within epics
-/refine-feature --epic EPIC-123
+A project brief, or a ticket that turned out too big, is split into tickets.
+
+- `breaking-down-work <project or ticket>` proposes tickets, each with a "Done when",
+  and the blocking links between them. It creates them after you agree.
+- `analyzing-dependencies <project>` shows the order the links imply, the longest
+  chain, and what can start now.
+
+## 3. Do
+
+- A session picks up a ticket: it assigns itself, moves the ticket to in progress and
+  comments that it has started.
+- `executing-work-items <keys...>` implements one or more tickets. It works on a branch
+  named from the team key, opens a pull request per ticket, and hands off to review.
+- Long work leaves checkpoints as project updates, so another session can continue it.
+
+## 4. Keep the record true
+
+- `reconciling-linear-projects <project>` compares every ticket with its pull requests
+  and the running system, fixes what the evidence settles, and moves leftovers to a
+  named open ticket before anything closes. Run it at the end of a workstream, before
+  a checkpoint, or whenever a project's status is in doubt.
+- `reporting-workstream-status` reads all projects and initiatives in progress and
+  posts what is stuck, stale or colliding. It runs on a schedule and writes nothing to
+  Linear.
+
+## 5. Close
+
+- A ticket closes when every "Done when" line is met, with the evidence in a comment.
+- A project closes when its lead decides the workstream is done, after a final
+  reconciliation. Its leftovers live on in open tickets in other projects.
+- An initiative closes when its projects are closed. Its last update says what was
+  delivered and where the follow-ups went.
+
+## Example
+
+Team `ABC`, a product team.
+
+```
+Initiative: Version 2
+├── Project: Sync engine            (workstream, lead: a session)
+│   ├── ABC-101  Store changes as an append-only log        Done
+│   ├── ABC-102  Replay the log on start                     In Progress, blocked by ABC-101 (done)
+│   └── ABC-103  Conflict rule for concurrent edits          Todo, blocked by ABC-102
+└── Project: Settings page           (workstream)
+    └── ABC-110  Move settings to the new layout             In Review, PR #88
+Project: Maintenance                 (bucket, no initiative)
+    └── ABC-120  Bump the test runner                        Todo
 ```
 
-### Stage 2: Epic Preparation
-Creating and preparing epics for planning.
+- ABC-102's branch is `<user>/abc-102-replay-log-on-start`.
+- ABC-103 waits on a blocking link, not on a date.
+- When the sync engine is finished, a reconciliation moves any unmet "Done when" lines
+  to an open ticket (in Maintenance, or a Version 2 follow-up project) before the
+  Sync engine project closes.
 
-```markdown
-# Break down epic into features and tasks (includes all epic-prep functionality)
-/epic-breakdown Chronicle EPIC-123
-# Includes structure preparation, validation, and feature creation
-# Optimizes for parallel execution
-```
+## Patterns
 
-### Stage 3: Planning - Workstreams OR Releases
+**Parallel workstreams.** Two projects with no blocking links between them can be
+worked at the same time by different sessions. The status report flags them when their
+pull requests touch the same files.
 
-#### Option A: Workstreams (Parallel Execution)
-For continuous improvement projects (cconami, homelab, internal tools, etc).
+**A bucket project.** Small, unrelated tickets (maintenance, chores) go in one open
+project per team. It never closes; reconcile it now and then.
 
-```markdown
-# NOTE: /workstream-plan command needed (not yet implemented)
-# Would organize epics into parallel workstreams by:
-# - Technical area (frontend, backend, infra)
-# - Feature domain (auth, payments, analytics)
-# - Team ownership
-```
-
-#### Option B: Releases (Serial Execution)
-For products with versioned deployments (Chronicle, pacc cli, customer-facing products).
-
-```markdown
-# Plan multi-release roadmap (6-month horizon)
-/release-plan Chronicle 6
-
-# Analyze dependencies across releases/epics
-/dependency-map --release v1.0
-
-# Reorganize work between releases
-/project-shuffle --from "v1.0 Release" --to "v1.1 Release"
-
-# Execute entire release
-/release-execute --version v1.0
-```
-
-### Stage 4: Sprint Planning
-Creating focused sprint projects from epics.
-
-```markdown
-# Plan multiple sprints from single epic
-/sprint-plan --team "Chronicle" --epic EPIC-123
-
-# Preview sprint breakdown without creating
-/sprint-plan --team "Chronicle" --epic EPIC-123 --dry-run
-
-# Limit number of sprints created
-/sprint-plan --team "Chronicle" --epic EPIC-123 --max-sprints 3
-```
-
-### Stage 5: Execution
-Launching AI agents to implement the work.
-
-```markdown
-# Execute individual sprint with parallel agents
-/sprint-execute --project "CHR-123.S01"
-
-# Execute entire release (multiple sprints)
-/release-execute --version v1.0
-```
-
-### Stage 6: Monitoring & Status
-Tracking progress and agent activity.
-
-```markdown
-# Check specific sprint progress
-/sprint-status --project "CHR-123.S01" --detailed
-
-# Monitor all team sprints
-/sprint-status --team "Chronicle"
-
-# View only active executions
-/sprint-status --active
-```
-
-## Detailed Workflow Examples
-
-### Example 1: Product Release Workflow (Chronicle/Pacc)
-
-```markdown
-# 1. Capture initial idea
-/refine-epic --team "Chronicle"
-# Create epic: "CHR-100: AI-Powered Search"
-
-# 2. Prepare epic for planning
-/epic-prep --team "Chronicle" --epic CHR-100 --execute
-/epic-breakdown --team "Chronicle" --epic CHR-100
-
-# 3. Plan release timeline (AFTER epics exist)
-/release-plan --team "Chronicle" --horizon 3
-
-# 4. Create sprint projects
-/sprint-plan --team "Chronicle" --epic CHR-100
-
-# 5. Execute release sprints
-/release-execute --version v2.0
-
-# 6. Monitor progress
-/sprint-status --project "CHR-100.S01"
-```
-
-### Example 2: Continuous Improvement Workflow (cconami/homelab)
-
-```markdown
-# 1. Create multiple improvement epics
-/refine-epic --team "MemyselfandM"
-
-# 2. Prepare epics
-/epic-breakdown --team "MemyselfandM" --epic MMT-50
-/epic-breakdown --team "MemyselfandM" --epic MMT-51
-
-# 3. Create sprint projects for each workstream
-/sprint-plan --team "MemyselfandM" --epic MMT-50
-/sprint-plan --team "MemyselfandM" --epic MMT-51
-
-# 4. Execute in parallel (no blocking)
-/sprint-execute --project "MMT-50.S01" &
-/sprint-execute --project "MMT-51.S01" &
-```
-
-### Example 3: Bug Fix Sprint
-
-```markdown
-# 1. Collect bug reports
-/refine-issue BUG-201 BUG-202 BUG-203
-
-# 2. Create hotfix sprint
-/sprint-plan --team "Chronicle" --issues BUG-201,BUG-202,BUG-203
-
-# 3. Execute fixes
-/sprint-execute --project "CHR-HOTFIX.S01"
-```
-
-## Command Integration Patterns
-
-### Sequential Flow
-```
-/refine-epic -> /epic-prep -> /epic-breakdown -> /sprint-plan -> /sprint-execute
-```
-
-### Parallel Planning
-```bash
-# Run simultaneously for different epics
-/epic-breakdown --epic EPIC-101 &
-/epic-breakdown --epic EPIC-102 &
-/epic-breakdown --epic EPIC-103 &
-```
-
-### Dependency-Driven Execution
-```bash
-/dependency-map --epic EPIC-101
-# Identifies EPIC-99 must complete first
-
-/sprint-execute --project "CHR-99.S03"
-# Wait for completion
-
-/sprint-execute --project "CHR-101.S01"
-# Now safe to execute
-```
+**Staged delivery.** When a project ships in stages, use project milestones to mark
+each stage. A milestone is a scope boundary, not a time box.

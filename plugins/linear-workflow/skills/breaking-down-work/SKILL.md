@@ -1,267 +1,151 @@
 ---
 name: breaking-down-work
-description: Breaks down epics into features and tasks optimized for AI agent execution. Includes structure preparation, parallel codebase analysis, feature sizing, task generation, and dependency mapping. Use when an epic is ready for sprint planning or when a large work item needs decomposition into actionable pieces.
+description: Splits a project brief, an initiative's scope or an oversized ticket into tickets within a project - each one to three units of value with its own "Done when" - and sets the blocking links between them. Includes a coverage check of what already exists, optional parallel codebase analysis, and a proposal you approve before anything is created. Use when a new project needs its tickets, or a ticket is too big for one to three pull requests.
+argument-hint: "<project | initiative | ticket-key> [--project <name>] [--dry-run] [--no-analysis] [--max-tickets N]"
+version: 2.0.0
+metadata:
+  hermes:
+    category: productivity
+    tags: [project-management, tickets, decomposition]
+    related_skills: [pm-context, refining-work-items, analyzing-dependencies]
 ---
 
-# Breaking Down Work
+# Breaking down work
 
-Transform epics into complete feature/task hierarchies ready for sprint execution.
-
-## Usage
-
-```
-/breaking-down-work <item-id> [options]
-```
+Turn a body of work into tickets inside a project, ordered by blocking links. All reads
+and writes go through [pm-context](../pm-context/SKILL.md). A ticket here means what
+`linear-workflow` says: one to three units of value, with a checkable "Done when".
 
 ## Arguments
 
-**Item ID** (required):
-- Epic or large work item to break down (e.g., `CCC-123`, `PROJ-100`)
-
-**Options:**
-- `--skip-prep`: Skip structure preparation phase
-- `--dry-run`: Preview breakdown without creating items
-- `--max-features N`: Limit features created (default: no limit)
-- `--analyze-codebase`: Enable parallel codebase analysis (default: on)
-- `--no-analysis`: Skip codebase analysis for faster execution
-
-## Examples
-
-```bash
-# Full breakdown with preparation
-/breaking-down-work CCC-123
-
-# Skip preparation (epic already structured)
-/breaking-down-work CCC-123 --skip-prep
-
-# Preview without creating items
-/breaking-down-work CCC-123 --dry-run
-
-# Quick breakdown without codebase analysis
-/breaking-down-work CCC-123 --no-analysis
-```
-
-## Workflow
-
-### Phase 0: Structure Preparation
-
-**Skip if `--skip-prep` specified**
-
-1. **Gather Context**
-   - Fetch epic via pm-context `get_item(id)`
-   - Get team/project context
-   - Analyze current epic structure
-   - Find existing child items
-
-2. **Completeness Analysis**
-   - Parse epic objectives from description
-   - Identify technical components mentioned
-   - Extract success criteria
-   - Map existing feature coverage
-
-3. **Gap Identification**
-   - Find objectives without matching features
-   - Identify orphan items that belong to this epic
-   - Check for metadata inconsistencies
-
-4. **Apply Fixes**
-   - Create missing features for coverage gaps
-   - Link high-confidence orphans to epic
-   - Fix metadata inconsistencies (priority, labels)
-
-### Phase 1: Readiness Assessment
-
-Validate epic is ready for breakdown:
-
-**Readiness Checklist:**
-- [ ] Has problem statement
-- [ ] Has user stories or requirements
-- [ ] Has acceptance criteria
-- [ ] Has success metrics
-- [ ] Has technical requirements
-- [ ] Priority is set
-- [ ] Scope is clear (no vague terms)
-
-**If Not Ready:**
-Report missing elements with specific guidance and exit.
-
-### Phase 2: Feature Pre-Planning
-
-1. **Identify Work Areas**
-   - Extract from epic description
-   - Derive from user stories
-   - Identify technical components
-
-2. **Launch Parallel Analysis** (unless `--no-analysis`)
-
-   For each work area, launch analysis agent:
-   ```
-   Read prompts/code-analysis.md for agent prompt template
-   ```
-
-   **CRITICAL: Launch ALL agents in a single response for parallelization**
-
-3. **Collect Results**
-   - Technical context per area
-   - Implementation requirements
-   - Suggested features
-   - Complexity estimates
-   - Identified risks
-
-### Phase 3: Feature Planning
-
-1. **Apply Sizing Guidelines**
-
-   | Size | Duration | Criteria | Tasks |
-   |------|----------|----------|-------|
-   | Small | 1-2 days | 3-5 AC, single component | 1-3 |
-   | Medium | 2-3 days | 5-8 AC, some integration | 3-5 |
-   | Large | 3-5 days | 8-12 AC, subsystem | 5-8 |
-
-   **If larger than Large → split into multiple features**
-
-2. **Generate Feature List**
-   - Right-size each suggested feature
-   - Assign to phase (Foundation/Features/Integration)
-   - Identify parallelization opportunities
-   - Create feature specifications using [templates/feature.md](templates/feature.md)
-
-3. **Generate Tasks per Feature**
-   - Max 5 tasks per feature
-   - Each task < 1 day
-   - Include testing task
-   - Use [templates/task.md](templates/task.md)
-
-### Phase 4: Create Items
-
-1. **Create Features**
-   ```
-   For each feature:
-     pm-context.create_item({
-       type: "feature",
-       title: feature.title,
-       description: formatted_feature,
-       parent: epic_id
-     })
-   ```
-
-2. **Create Tasks**
-   ```
-   For each task:
-     pm-context.create_item({
-       type: "task",
-       title: task.title,
-       description: formatted_task,
-       parent: feature_id
-     })
-   ```
-
-### Phase 5: Dependency Analysis
-
-1. **Identify Dependencies**
-   - Foundation phase blocks Features phase
-   - Integration phase depends on Features
-   - Technical dependencies between features
-
-2. **Set Blocking Relationships**
-   - Update items with blockers (where PM tool supports)
-   - Add dependency notes to descriptions
-
-3. **Validate No Cycles**
-   - Check for circular dependencies
-   - Report and fix if found
-
-### Phase 6: Generate Report
-
-Output comprehensive breakdown summary:
-
-```markdown
-## Epic Breakdown Complete: {title}
-
-### Preparation Summary
-- Structure Fixes: {count}
-- Features Created: {count}
-- Orphans Matched: {count}
-
-### Breakdown Summary
-- Total Features: {count}
-- Total Tasks: {count}
-- Total Items: {count}
-
-### Distribution by Phase
-- Foundation: {count} ({percent}%)
-- Features: {count} ({percent}%)
-- Integration: {count} ({percent}%)
-
-### Parallelization Analysis
-- Max Parallel: {count} features
-- Independent Streams: {count}
-- Critical Path: {count} features
-
-### Sprint Recommendations
-Based on breakdown, suggest sprint allocation.
-
-### Next Steps
-1. Review created features
-2. Adjust dependencies if needed
-3. Plan the work order (sprint wording is reworked in CCC-127)
-```
-
-## Validation Checks
-
-Before completing:
-- [ ] No feature larger than 8 tasks
-- [ ] No task without parent feature
-- [ ] All features have acceptance criteria
-- [ ] Dependencies form valid DAG (no cycles)
-- [ ] Features phase > 60% parallelizable
-
-## Error Handling
-
-| Error | Recovery |
-|-------|----------|
-| Epic not ready | Report missing elements, exit |
-| Analysis agent fails | Retry up to 2 times |
-| Feature too large | Auto-split |
-| Circular dependency | Detect and report |
-| PM tool rate limit | Batch with delays |
-
-## Output Example
+- **Source**, one of:
+  - a **project**: break its brief (the description) into tickets in that project;
+  - an **initiative**: propose which projects it needs, then break each down in turn
+    (one project per run; say which come next);
+  - a **ticket key**: split an oversized ticket into tickets in the same project.
+- `--project <name>`: put the tickets in a different project from the source's.
+- `--dry-run`: propose only; create nothing.
+- `--no-analysis`: skip the codebase analysis.
+- `--max-tickets N`: stop the proposal at N tickets and list what is left out.
 
 ```
-🔧 Starting structure preparation...
-📊 Found 4 existing features, 2 orphan tasks
-
-✅ Preparation Complete
-- Created 1 feature for missing coverage
-- Matched 1 orphan to epic
-
-🔍 Analyzing Epic: User Authentication System
-✅ Epic ready for breakdown
-
-📊 Launching 5 Parallel Analysis Agents
-- Agent-1: Database schema
-- Agent-2: JWT implementation
-- Agent-3: OAuth providers
-- Agent-4: Frontend components
-- Agent-5: API endpoints
-
-⏳ Collecting results...
-✅ All analyses complete
-
-📝 Planning Features and Tasks
-- 12 features across 3 phases
-- 43 tasks total
-- Max parallelization: 8 features
-
-🔨 Creating Items
-- Creating 12 features... ✅
-- Creating 43 tasks... ✅
-- Setting dependencies... ✅
-
-📊 Epic Breakdown Complete!
-- 75% can run in parallel
-- 3 suggested sprints
-
-Ready for sprint planning!
+breaking-down-work "Sync engine"
+breaking-down-work ABC-140 --dry-run
+breaking-down-work "Version 2" --no-analysis
 ```
+
+## Steps
+
+### 1. Gather context
+
+- The source: `get_project`, `get_initiative` or `get_item`, with its description,
+  comments and latest updates.
+- What already exists: `list_items({project})`, including closed tickets, so nothing
+  is proposed twice. For a ticket, also its sub-issues and blocking links.
+- Coverage check, detailed in [preparation.md](preparation.md): match each goal or
+  "Done when" line of the source to an existing ticket, and list the goals with none.
+
+### 2. Check the source is ready
+
+The source needs a stated problem, a description of "finished" (a project's "Finished
+when", a ticket's "Done when") and enough scope to split. If it does not have them,
+report what is missing, suggest `refining-work-items`, and stop.
+
+### 3. Analyse the codebase (unless `--no-analysis`)
+
+Identify the technical areas the work touches. Analyse each area in parallel with the
+prompt in [prompts/code-analysis.md](prompts/code-analysis.md). Collect, per area, the
+current state, the patterns to follow, the risks, the likely files and the suggested
+tickets. See Platform notes for how to run the analyses in parallel.
+
+### 4. Propose tickets
+
+Merge the suggestions into one list. For each ticket:
+
+- an imperative title that says what changes;
+- a description built from [../refining-work-items/ticket-template.md](../refining-work-items/ticket-template.md),
+  with "Why", "Scope" and three to six "Done when" lines that name their evidence;
+- its blocking links to other proposed or existing tickets;
+- the files or areas it is likely to touch.
+
+Sizing rules:
+
+- **One to three pull requests per ticket.** Bigger means split; split by behaviour, so
+  each piece is useful alone, not by layer.
+- **Few blockers.** Keep the tickets that others wait on small and few, so most tickets
+  can start at once.
+- **No ticket for "write tests" or "update docs" alone.** Tests and docs belong in the
+  "Done when" of the ticket whose change needs them.
+- **Owner actions are their own tickets**, labelled `owner-action`, blocking the work
+  that needs them.
+- **Sub-issues only for steps that need their own owner or status.**
+
+Check the links form no loop (see `analyzing-dependencies`), and flag pairs of tickets
+likely to touch the same files: they should be ordered or merged.
+
+Present the proposal as a table and **wait for agreement** before creating anything:
+
+```
+Proposed tickets for "Sync engine" (5; 2 goals already covered by ABC-101, ABC-104)
+
+| # | Title                                   | Blocked by | Likely files        |
+|---|-----------------------------------------|------------|---------------------|
+| 1 | Store changes as an append-only log     | -          | src/store/*         |
+| 2 | Replay the log on start                 | 1          | src/boot.ts         |
+| 3 | Conflict rule for concurrent edits      | 2          | src/merge/*         |
+| 4 | Show sync state in the status bar       | -          | src/ui/status.tsx   |
+| 5 | Owner: enable the sync flag in prod     | 2, 3       | -  (owner action)   |
+
+Parallel now: 1, 4. Longest chain: 1 -> 2 -> 3 -> 5.
+```
+
+With `--dry-run`, stop here.
+
+### 5. Create
+
+For each agreed ticket, in blocker-first order:
+
+```
+create_item({title, project, description, labels, blocked_by})
+```
+
+Then add any links to existing tickets with `add_blocking_link`. When splitting a
+ticket, comment on the original naming the new tickets, and either close it once every
+one of its "Done when" lines is carried by a new ticket, or keep it as the parent. Never
+close it with a line left uncarried.
+
+Read back one created ticket to check the description and links landed.
+
+### 6. Report
+
+```
+Created 5 tickets in "Sync engine": ABC-120 .. ABC-124
+- Blocking links: 4
+- Parallel now: ABC-120, ABC-123
+- Longest chain: ABC-120 -> ABC-121 -> ABC-122 -> ABC-124
+- Goals still uncovered: none
+- Overlapping files flagged: ABC-121 and ABC-122 (src/merge/state.ts), ordered
+Next: analyzing-dependencies "Sync engine", or executing-work-items ABC-120 ABC-123
+```
+
+## Checks before finishing
+
+- [ ] Every goal of the source is covered by a ticket, or listed as uncovered
+- [ ] Every ticket has three to six "Done when" lines
+- [ ] No ticket needs more than three pull requests
+- [ ] The blocking links form no loop
+- [ ] Every ticket is in a project
+
+## Errors
+
+| Problem | What to do |
+|---------|------------|
+| Source not ready | Report what is missing; suggest `refining-work-items` |
+| An analysis fails | Retry once; otherwise propose without that area and say so |
+| A loop in the links | Show it; drop or reverse one link before creating |
+| Rate limit while creating | Slow down; report which tickets were created |
+
+## Platform notes
+
+- [platforms/claude-code.md](platforms/claude-code.md)
+- [platforms/hermes.md](platforms/hermes.md)

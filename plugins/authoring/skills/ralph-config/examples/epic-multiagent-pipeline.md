@@ -414,7 +414,7 @@ hats:
 
       1. Read the spec from approved path
       2. Comment on tracker: "⚙️ Starting implementation"
-      3. Follow TDD cycle for EACH test requirement:
+      3. Follow the TDD loop for EACH test requirement:
          a. **RED**: Write the test, run it, confirm it FAILS
          b. **GREEN**: Write minimal code to pass
          c. **REFACTOR**: Clean up, ensure tests still pass

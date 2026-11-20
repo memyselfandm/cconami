@@ -1,75 +1,98 @@
 ---
 name: linear-workflow
-description: Linear project management workflow using linctl CLI - structure, issue types, sprint planning, and execution patterns
+description: How work is organized in Linear - initiatives for large efforts, projects for workstreams, tickets of one to three units of value, blocking links for order, and Linear as the place orchestration state lives. Background context for any skill or session that reads or writes Linear. Work is not planned in time boxes.
 user-invocable: false
+version: 2.0.0
+metadata:
+  hermes:
+    category: productivity
+    tags: [linear, project-management, workflow]
+    related_skills: [pm-context, reconciling-linear-projects, reporting-workstream-status]
 ---
 
-# Linear Project Management Workflow
+# Linear workflow
 
-## linctl CLI Usage
-Use `linctl` CLI tool to interact with Linear. Always use `--json` flag on read operations (get, list, search).
+How work is organized in Linear, and the rules every skill and session follows when
+it reads or writes it. The other skills in this plugin assume this model.
 
-**Important Rules:**
-- Ticket format: `ABC-<number>` — always reference by number
-- If creating a ticket and project is unclear, prompt the user
-- Subtasks inherit parent ticket's project by default
-- When task status changes in description (task to done), update the description
-- Progress reports beyond checkbox changes go as ticket comments
-- If `linctl` is not working, inform the user immediately
+## The model
 
-## Linear Structure
 ```
-Linear Teams (Product/Big Project) -> Linear Projects (Initiative/Release/Workstream/Sprint) -> Linear Issues (Epic/Feature/Task)
+Team (a product or a body of work, owns the ticket prefix, e.g. ABC)
+└── Initiative   a large effort: a platform rebuild, a major new version
+    └── Project  a workstream, or a bucket of related work
+        └── Ticket   one to three units of value, with a "Done when"
+            └── Sub-issue   only when a ticket genuinely needs separate steps
 ```
 
-### Teams = Products/Big Projects
-- Most products = separate Linear teams
-- Side projects = grouped under "MemyselfandM" team
+- **Initiatives** group the projects of one large effort. An initiative has a status
+  and short updates that roll up its projects. Most work does not need one.
+- **Projects** are workstreams or buckets of work, not time boxes. A project has a
+  description, a lead (a person or a lead session) and a stream of project updates.
+  It stays open while its workstream is live and closes when the work is done, not
+  when a date passes.
+- **Tickets** are issues. Each one is roughly one to three units of value: something
+  a reviewer can check and a user or operator would notice. A ticket that needs more
+  than about three pull requests, or more than one person's judgement to finish, is
+  two tickets.
+- **Sub-issues** are optional. Use them for steps that must be tracked separately
+  (an owner action, a follow-up in another repository), not to plan a schedule.
 
-### Projects (Two Types)
-1. **Initiatives/Releases/Workstreams** - contain related epics
-2. **Sprints** - execution plan for one epic's features
-   - Named: `[EPIC-ID].S01`, `[EPIC-ID].S02`, etc.
+**There are no sprints and no cycles.** Do not create time-boxed projects, do not
+assign tickets to iterations, and do not propose either. Order comes from blocking links and
+priority, not from time boxes. Project milestones are fine when a project ships in
+stages; they mark a stage, not a period.
 
-### Issues (Four Types)
-- **Epic** (label: `epic`) - major feature area, spans multiple sprints
-- **Feature** (label: `feature`) - discrete capability within epic
-  - **Feature's Subtasks** (label: `task` or unlabeled) - child issues to complete a feature
-- **Task** (label: `task`, `bug`, or unlabeled) - implementation work
+## Linear holds orchestration state
 
-## Structure Example
-```
-Team: Chronicle
-+-- Project: Q4 Auth System (Release)
-|   +-- Epic: IDF-24 (User Authentication)
-|   +-- Epic: IDF-25 (Session Management)
-+-- Project: IDF-24.S01 (Sprint)
-|   +-- Feature: JWT Implementation
-|   |   +-- Sub-task: Generate and store token
-|   |   +-- Sub-task: Integrate JWT into auth
-|   +-- Feature: Login UI
-|       +-- Sub-task: Login form
-|       +-- Sub-task: Social sign-in
-+-- Project: IDF-24.S02 (Sprint)
-    +-- Feature: OAuth Integration
-    +-- Feature: Password Reset
-```
+A session can be lost at any time. Anything another session would need to continue
+the work goes in Linear, not in a chat thread or a session's memory:
 
-## Key Rules
-- Link all issues with parent-child relationships
-- No Linear cycles (use sprint projects instead)
-- All development by AI agents via Claude Code
-- Maximize parallel work within sprints
-- Completion tracking: Tasks done -> Features done -> Epic done -> Release done
+- the plan for a project: its description, or a project update;
+- who is doing what: the ticket assignee, and a comment when a session picks it up;
+- rulings and decisions: a comment on the ticket, project or initiative they affect;
+- checkpoints: a project update (see the `checkpointing-sessions` skill);
+- leftovers: a named open ticket, never a line in a closed one.
 
-## Workstreams vs Releases
+## Rules for tickets
 
-| Aspect | Workstreams | Releases |
-|--------|-------------|----------|
-| **Examples** | cconami, homelab, internal tools | Chronicle, Pacc, SaaS products |
-| **Deployment** | Continuous, feature-by-feature | Bundled, versioned releases |
-| **Planning** | Group by domain/area | Group by user-facing milestones |
-| **Execution** | Parallel workstreams | Sequential releases |
-| **Dependencies** | Within workstream only | Across entire release |
+- **Refer to tickets by key**, `ABC-123`. The prefix is the team key.
+- **Every ticket has a "Done when" section**: checkable lines, each naming the
+  evidence (a merged pull request, a passing check, a live behaviour). See the
+  `refining-work-items` skill.
+- **Create a ticket in a project.** If the project is unclear, ask, or put it in the
+  team's catch-all project if the team has one. Sub-issues inherit the parent's project.
+- **Order with blocking links**, not with ticket titles or descriptions.
+- **Branch names come from the team key**: `<user>/<team-key>-<number>-<slug>`, all
+  lower case (`mike/abc-123-add-retry`). Linear suggests this name for each ticket.
+  A pull request that finishes a ticket starts its title with the key.
+- **Progress goes in comments.** Keep the description as the current spec: when a
+  checklist item in it is done, tick it there; anything more is a comment.
+- **Before closing, cancelling or folding a ticket, move its leftovers** to a named
+  open ticket and link the two. The `reconciling-linear-projects` skill owns this rule.
+- **A project's or initiative's status belongs to its lead.** Other sessions report
+  what they see; they do not change it.
+- If Linear cannot be reached, tell the user at once. Do not keep a private list
+  and sync it later.
 
-For the full 6-stage workflow, slash command reference, and detailed examples, see [workflow-reference.md](./workflow-reference.md).
+## Which skill does what
+
+| Need | Skill |
+|------|-------|
+| Read or write Linear through one interface | `pm-context` |
+| Turn an idea into a ticket or a project brief | `refining-work-items` |
+| Split a project or an oversized ticket into tickets | `breaking-down-work` |
+| See what blocks what, and what can run in parallel | `analyzing-dependencies` |
+| Implement one or more tickets | `executing-work-items` |
+| Make a project's tickets match the pull requests and the running system | `reconciling-linear-projects` |
+| Report what is stuck, stale or colliding across projects | `reporting-workstream-status` |
+
+The life of a piece of work, from idea to closed project, is in
+[workflow-reference.md](workflow-reference.md).
+
+## Platform notes
+
+How to reach Linear and how to post on each agent platform:
+
+- [platforms/claude-code.md](platforms/claude-code.md)
+- [platforms/hermes.md](platforms/hermes.md)

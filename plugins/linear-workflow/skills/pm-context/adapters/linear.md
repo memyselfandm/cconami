@@ -1,312 +1,103 @@
-# Linear Adapter
+# Linear adapter
 
-Implements the PM Operations Interface for Linear using the `linctl` CLI.
-
-## Prerequisites
-
-- `linctl` CLI installed and authenticated
-- Verify with: `linctl me --json`
+Maps the [interface](../interface.md) onto Linear's objects. This file says *what* to
+read or write in Linear. *How* to call Linear (a connector, a CLI, an MCP server) is a
+platform matter: see `../platforms/<platform>.md`.
 
 ## Configuration
 
-In CLAUDE.md:
 ```markdown
 ## Project Management
 pm_tool: linear
-pm_team: TeamName
+pm_team: ABC            # Team key; also the ticket prefix and the branch prefix
+pm_catchall: Maintenance  # Optional: project for tickets with no clear home
 ```
 
-Or in `.claude/settings.json`:
-```json
-{
-  "pm": {
-    "tool": "linear",
-    "team": "TeamName"
-  }
-}
-```
+## Objects
 
----
+| Interface | Linear |
+|-----------|--------|
+| ticket | Issue |
+| sub-issue | Issue with `parent` set |
+| project | Project (belongs to one or more teams) |
+| initiative | Initiative |
+| blocking link | Issue relation of type `blocks` |
+| link | Issue attachment (pull requests attach here automatically when the GitHub integration is on) |
+| update | Project update or initiative update |
 
-## Work Item Operations
+Linear's cycles are not used. Never assign an issue to one, even when a team has the
+feature switched on.
 
-### get_item(id)
-```bash
-linctl issue get <id> --json
-```
+## Field mapping for WorkItem
 
-**Field Mapping:**
 ```yaml
-id: .id
-key: .identifier
-title: .title
-description: .description
-type: # Derive from labels
-  - epic label → epic
-  - feature label → feature
-  - bug label → bug
-  - default → task
-status: .state.name
-status_type: .state.type  # Maps: backlog→backlog, unstarted→todo, started→in_progress, completed→done, canceled→cancelled
-priority: # Map .priority: 0→none, 1→urgent, 2→high, 3→normal, 4→low
-assignee: .assignee.email
-parent: .parent.identifier
-children: # Requires separate query
-labels: .labels[].name
-project: .project.name
-url: .url
-created_at: .createdAt
-updated_at: .updatedAt
+id: id
+key: identifier            # ABC-123
+title: title
+description: description
+type:                      # From labels
+  bug label   -> bug
+  chore label -> chore
+  otherwise   -> ticket
+status: state.name
+status_type: state.type    # backlog->backlog, unstarted->todo, started->in_progress
+                           # (or in_review when the state name says review),
+                           # completed->done, canceled->cancelled
+priority: priority         # 0 none, 1 urgent, 2 high, 3 normal, 4 low
+assignee: assignee.name
+parent: parent.identifier
+children: children[].identifier
+project: project.name
+labels: labels[].name
+blocks: relations where type = blocks, from this issue
+blocked_by: inverse relations where type = blocks, to this issue
+links: attachments[] (url, title; kind pull_request when the url is a pull request)
+branch: branchName         # Linear's suggested git branch, built from the team key
+url: url
+created_at / updated_at / completed_at: createdAt / updatedAt / completedAt
 ```
 
-### create_item(params)
-```bash
-linctl issue create \
-  --team "<team>" \
-  --title "<title>" \
-  --description "<description>" \
-  --parent "<parent_id>" \
-  --project "<project_id>" \
-  --priority <0-4> \
-  --assignee "<email>" \
-  --json
-```
+Comments are not part of an issue read. Fetch them with `list_comments`.
 
-**Type Handling:**
-- After creation, add appropriate label: `epic`, `feature`, `task`, `bug`
-- Linear doesn't have native issue types; labels define type
+## Operations
 
-### update_item(id, params)
-```bash
-linctl issue update <id> \
-  --title "<title>" \
-  --description "<description>" \
-  --parent "<parent_id>" \
-  --project "<project_id>" \
-  --priority <0-4> \
-  --assignee "<email>" \
-  --state "<status_name>" \
-  --json
-```
+| Operation | What to do in Linear |
+|-----------|----------------------|
+| get_item | Read the issue, including relations and attachments |
+| create_item | Create an issue in `pm_team` with `project` set; then add relations for `blocks` / `blocked_by` |
+| update_item | Update the issue; only the given fields |
+| list_items | List issues filtered by team, project, parent, state type, assignee, labels; page until `limit`. For `initiative`, list the initiative's projects and query each |
+| search_items | Issue search, scoped to the team |
+| set_parent | Set or clear the issue's parent |
+| get_children | List issues whose parent is the key |
+| add_blocking_link / remove_blocking_link | Create or delete a `blocks` relation |
+| add_link | Create an attachment with the URL |
+| get_project / list_projects / create_project | Project read, list (by state, by initiative), create |
+| assign_to_project | Set the issue's project, then each sub-issue's |
+| get_initiative / list_initiatives | Initiative read and list, with its projects |
+| add_comment / list_comments | Issue comments |
+| add_update / list_updates | Project updates or initiative updates, with health |
+| list_statuses / transition_item | The team's workflow states; set the issue's state |
+| list_labels / add_label / remove_label | Team and workspace labels. Adding a label must keep the issue's other labels |
 
-### list_items(filters)
-```bash
-# Base query
-linctl issue list --team "<team>" --json
+Project status values map as: backlog/planned -> planned, started -> in_progress,
+paused -> paused, completed -> completed, canceled -> cancelled.
 
-# With filters
-linctl issue list \
-  --team "<team>" \
-  --project "<project>" \
-  --parent "<parent_id>" \
-  --state "<status>" \
-  --assignee "<email>" \
-  --json
-```
+## Conventions
 
-**Note:** Some filters may require post-processing in memory.
+| Label | Meaning |
+|-------|---------|
+| `bug` | A defect |
+| `chore` | Maintenance with no user-visible change |
+| `owner-action` | Only the owner can do it |
 
-### search_items(query)
-```bash
-linctl issue search "<query>" --team "<team>" --json
-```
+There are no type labels for size. A ticket is a ticket; if it is too big, split it.
 
----
+## Errors
 
-## Hierarchy Operations
-
-### set_parent(child_id, parent_id)
-```bash
-# Set parent
-linctl issue update <child_id> --parent "<parent_id>"
-
-# Remove parent
-linctl issue update <child_id> --parent "none"
-```
-
-### get_children(parent_id)
-```bash
-linctl issue list --parent "<parent_id>" --json
-```
-
-### get_ancestors(id)
-```python
-# Requires iterative fetching
-ancestors = []
-current = get_item(id)
-while current.parent:
-    parent = get_item(current.parent)
-    ancestors.append(parent)
-    current = parent
-return ancestors
-```
-
----
-
-## Project/Sprint Operations
-
-### get_project(id)
-```bash
-linctl project get "<id>" --json
-```
-
-**Field Mapping:**
-```yaml
-id: .id
-name: .name
-description: .description
-status: .state  # planned | active | completed | cancelled
-start_date: .startDate
-end_date: .targetDate
-items: # Requires: linctl issue list --project "<id>"
-url: .url
-```
-
-### create_project(params)
-```bash
-linctl project create \
-  --team "<team>" \
-  --name "<name>" \
-  --description "<description>" \
-  --start-date "<YYYY-MM-DD>" \
-  --target-date "<YYYY-MM-DD>" \
-  --json
-```
-
-### assign_to_project(item_id, project_id)
-```bash
-# Assign to project
-linctl issue update <item_id> --project "<project_id>"
-
-# Unassign
-linctl issue update <item_id> --project "unassigned"
-```
-
-### list_projects(filters)
-```bash
-linctl project list --team "<team>" --json
-```
-
----
-
-## Comment Operations
-
-### add_comment(item_id, body)
-```bash
-linctl comment create <item_id> --body "<body>"
-```
-
-### list_comments(item_id)
-```bash
-linctl comment list <item_id> --json
-```
-
----
-
-## Status Operations
-
-### list_statuses()
-```bash
-linctl state list --team "<team>" --json
-```
-
-**Field Mapping:**
-```yaml
-name: .name
-type: .type  # backlog | unstarted | started | completed | canceled
-color: .color
-```
-
-**Type Mapping to Generic:**
-| Linear | Generic |
-|--------|---------|
-| backlog | backlog |
-| unstarted | todo |
-| started | in_progress |
-| completed | done |
-| canceled | cancelled |
-
-### transition_item(id, status)
-```bash
-linctl issue update <id> --state "<status_name>"
-```
-
----
-
-## Label Operations
-
-### list_labels()
-```bash
-linctl label list --team "<team>" --json
-```
-
-### add_label(item_id, label)
-```bash
-# Get current labels, add new one
-current_labels=$(linctl issue get <item_id> --json | jq -r '.labels[].name')
-# Linear MCP or API call required for label addition
-# linctl doesn't have direct label add command yet
-```
-
-### remove_label(item_id, label)
-```bash
-# Similar to add - requires API-level operation
-```
-
----
-
-## Type Label Conventions
-
-Linear uses labels to indicate work item types:
-
-| Type | Label Name | Color (suggested) |
-|------|------------|-------------------|
-| epic | `epic` | Purple |
-| feature | `feature` | Blue |
-| task | `task` | Gray |
-| bug | `bug` | Red |
-| chore | `chore` | Yellow |
-
-When creating items, apply the appropriate label after creation.
-
----
-
-## Error Handling
-
-| Error | Meaning | Recovery |
-|-------|---------|----------|
-| Exit code 1 | General error | Check stderr for details |
-| "not found" | Item doesn't exist | Verify ID/key |
-| "unauthorized" | Auth issue | Run `linctl auth` |
-| "rate limited" | API throttled | Wait and retry |
-
----
-
-## Examples
-
-### Create an Epic with Features
-```bash
-# Create epic
-epic=$(linctl issue create --team Chronicle --title "User Auth" --json)
-epic_id=$(echo $epic | jq -r '.identifier')
-
-# Add epic label
-# (requires label API - for now, include in title or description)
-
-# Create feature under epic
-linctl issue create \
-  --team Chronicle \
-  --title "JWT Implementation" \
-  --parent "$epic_id" \
-  --json
-```
-
-### Move Items to Sprint
-```bash
-# Get sprint project ID
-project_id=$(linctl project list --team Chronicle --json | jq -r '.[] | select(.name=="Sprint 2025-01") | .id')
-
-# Assign items
-linctl issue update CCC-123 --project "$project_id"
-linctl issue update CCC-124 --project "$project_id"
-```
+| Symptom | Meaning | What to do |
+|---------|---------|------------|
+| Not found | Wrong key, or no access to that team | Check the key; say which team you tried |
+| Unauthorised | Credential missing or expired | Tell the user; do not retry |
+| Rate limited | Too many calls | Wait, then batch reads |
+| A write returns success but nothing changed | Usually a field the tool silently ignores | Read the issue back after every write that matters |

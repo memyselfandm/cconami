@@ -1,182 +1,179 @@
-# PM Operations Interface
+# PM operations interface
 
-All PM tool adapters implement these operations. Skills use these generic operations rather than tool-specific commands.
+Every adapter implements these operations. Skills call them and nothing else.
 
-## Work Item Operations
+The model: an **initiative** groups **projects**; a project holds **tickets**; a ticket
+may have **sub-issues**; **blocking links** order tickets. Projects and initiatives carry
+dated **updates**. There is no time-box object and no operation that creates one.
 
-### get_item(id) → WorkItem
-Fetch a work item by ID or key.
+An adapter that cannot support an operation says so in its own file. A skill that hits
+an unsupported operation reports the step as skipped.
 
-**Parameters:**
-- `id`: Work item identifier (e.g., "CCC-123", "PROJ-456", "#42")
+---
 
-**Returns:**
+## Tickets
+
+### get_item(key) → WorkItem
+
+Fetch one ticket by key (`ABC-123`) or URL.
+
 ```yaml
 WorkItem:
-  id: string           # Unique identifier
-  key: string          # Human-readable key (CCC-123)
-  title: string        # Summary/title
-  description: string  # Full description (markdown)
-  type: enum           # epic | feature | task | bug | chore
-  status: string       # Current status name
-  status_type: enum    # backlog | todo | in_progress | in_review | done | cancelled
-  priority: enum       # urgent | high | normal | low | none
-  assignee: string?    # Assignee name or email
-  parent: string?      # Parent work item key
-  children: string[]   # Child work item keys
-  labels: string[]     # Applied labels/tags
-  project: string?     # Project/sprint name
-  url: string          # Web URL to view item
+  id: string            # Tool's internal id
+  key: string           # ABC-123
+  title: string
+  description: string   # Markdown; holds the "Done when" section
+  type: enum            # ticket | bug | chore   (from labels; default ticket)
+  status: string        # The team's status name
+  status_type: enum     # backlog | todo | in_progress | in_review | done | cancelled
+  priority: enum        # urgent | high | normal | low | none
+  assignee: string?
+  parent: string?       # Parent ticket key
+  children: string[]    # Sub-issue keys
+  project: string?      # Project name
+  labels: string[]
+  blocks: string[]      # Keys this ticket blocks
+  blocked_by: string[]  # Keys that block this ticket
+  links: Link[]         # Attached pull requests and other URLs
+  branch: string?       # Suggested branch name, <user>/<team-key>-<n>-<slug>
+  url: string
   created_at: datetime
   updated_at: datetime
+  completed_at: datetime?
+
+Link:
+  url: string
+  title: string?
+  kind: enum            # pull_request | document | other
 ```
 
 ### create_item(params) → WorkItem
-Create a new work item.
 
-**Parameters:**
 ```yaml
 CreateItemParams:
-  type: enum           # epic | feature | task | bug | chore
-  title: string        # Required
-  description: string? # Markdown description
-  parent: string?      # Parent work item key
-  project: string?     # Project/sprint to assign
-  priority: enum?      # urgent | high | normal | low
-  assignee: string?    # Assignee email or "me"
-  labels: string[]?    # Labels to apply
+  title: string         # Required
+  project: string       # Required; ask the user if it is unclear
+  description: string?  # Include a "Done when" section
+  type: enum?           # ticket | bug | chore
+  parent: string?       # Makes it a sub-issue; inherits the parent's project
+  priority: enum?
+  assignee: string?     # A name, an email or "me"
+  labels: string[]?
+  blocked_by: string[]?
+  blocks: string[]?
 ```
 
-**Returns:** Created WorkItem
+### update_item(key, params) → WorkItem
 
-### update_item(id, params) → WorkItem
-Update an existing work item.
-
-**Parameters:**
-- `id`: Work item identifier
-- `params`: Fields to update (same as CreateItemParams, all optional)
-
-**Returns:** Updated WorkItem
+Change any field of `CreateItemParams`, plus `status`. Only the fields given change.
 
 ### list_items(filters) → WorkItem[]
-Query work items with filters.
 
-**Parameters:**
 ```yaml
 ListFilters:
-  project: string?     # Filter by project/sprint
-  parent: string?      # Filter by parent item
-  type: enum?          # Filter by type
-  status: string?      # Filter by status name
-  status_type: enum?   # Filter by status category
-  assignee: string?    # Filter by assignee ("me" for current user)
-  labels: string[]?    # Filter by labels (AND)
-  limit: int?          # Max results (default: 50)
+  project: string?
+  initiative: string?   # Tickets in any project of this initiative
+  parent: string?
+  status_type: enum?    # Or a list of them
+  assignee: string?     # "me" for the current user
+  labels: string[]?     # All must match
+  updated_before: datetime?  # For staleness checks
+  include_closed: bool? # Default false (done and cancelled left out)
+  limit: int?           # Default 50; the adapter pages until it has this many
 ```
 
-**Returns:** Array of WorkItem
-
 ### search_items(query) → WorkItem[]
-Full-text search across work items.
 
-**Parameters:**
-- `query`: Search string
-
-**Returns:** Array of matching WorkItem
+Full-text search over titles and descriptions.
 
 ---
 
-## Hierarchy Operations
+## Hierarchy and order
 
-### set_parent(child_id, parent_id) → void
-Set parent-child relationship.
+### set_parent(child, parent | null)
 
-**Parameters:**
-- `child_id`: Child work item key
-- `parent_id`: Parent work item key (or null to remove)
+### get_children(key) → WorkItem[]
 
-### get_children(parent_id) → WorkItem[]
-Get all direct children of a work item.
+### add_blocking_link(blocker, blocked)
 
-**Parameters:**
-- `parent_id`: Parent work item key
+"`blocker` blocks `blocked`". Adding a link that already exists is not an error.
 
-**Returns:** Array of child WorkItem
+### remove_blocking_link(blocker, blocked)
 
-### get_ancestors(id) → WorkItem[]
-Get parent chain up to root.
+### add_link(key, url, title?)
 
-**Parameters:**
-- `id`: Work item key
-
-**Returns:** Array of WorkItem (immediate parent first)
+Attach a URL (usually a pull request) to a ticket.
 
 ---
 
-## Project/Sprint Operations
+## Projects
 
-### get_project(id) → Project
-Fetch project or sprint details.
+### get_project(name_or_id) → Project
 
-**Parameters:**
-- `id`: Project identifier or name
-
-**Returns:**
 ```yaml
 Project:
   id: string
   name: string
-  description: string?
-  status: enum         # planned | active | completed | cancelled
-  start_date: date?
-  end_date: date?
-  items: string[]      # Work item keys in this project
+  description: string?  # The project brief
+  status: enum          # planned | in_progress | paused | completed | cancelled
+  lead: string?
+  initiative: string?
+  milestones: string[]  # Stage names, if the project ships in stages
   url: string
+  updated_at: datetime
 ```
-
-### create_project(params) → Project
-Create a new project or sprint.
-
-**Parameters:**
-```yaml
-CreateProjectParams:
-  name: string         # Required
-  description: string?
-  start_date: date?
-  end_date: date?
-```
-
-**Returns:** Created Project
-
-### assign_to_project(item_id, project_id) → void
-Add a work item to a project/sprint.
-
-**Parameters:**
-- `item_id`: Work item key
-- `project_id`: Project identifier (or null to unassign)
 
 ### list_projects(filters) → Project[]
-List projects with optional filters.
 
-**Parameters:**
 ```yaml
 ProjectFilters:
-  status: enum?        # planned | active | completed
+  status: enum?         # Or a list
+  initiative: string?
   limit: int?
 ```
 
+### create_project(params) → Project
+
+```yaml
+CreateProjectParams:
+  name: string          # Required
+  description: string?
+  lead: string?
+  initiative: string?
+```
+
+### assign_to_project(key, project | null)
+
+Moves a ticket and, unless told otherwise, its sub-issues.
+
 ---
 
-## Comment Operations
+## Initiatives
 
-### add_comment(item_id, body) → Comment
-Add a comment to a work item.
+### get_initiative(name_or_id) → Initiative
 
-**Parameters:**
-- `item_id`: Work item key
-- `body`: Comment text (markdown)
+```yaml
+Initiative:
+  id: string
+  name: string
+  description: string?
+  status: enum          # planned | in_progress | completed
+  projects: string[]    # Project names
+  url: string
+```
 
-**Returns:**
+### list_initiatives(filters) → Initiative[]
+
+Filter by `status`.
+
+---
+
+## Comments and updates
+
+### add_comment(key, body) → Comment
+
+### list_comments(key) → Comment[]
+
 ```yaml
 Comment:
   id: string
@@ -185,74 +182,61 @@ Comment:
   created_at: datetime
 ```
 
-### list_comments(item_id) → Comment[]
-Get all comments on a work item.
+Newest first.
 
-**Parameters:**
-- `item_id`: Work item key
+### add_update(target, body, health?) → Update
 
-**Returns:** Array of Comment (newest first)
+Post a dated update on a project or an initiative. `target` is `{project: name}` or
+`{initiative: name}`. `health` is `on_track | at_risk | off_track`. Updates are
+append-only: post a new one rather than editing an old one.
+
+### list_updates(target, limit?) → Update[]
+
+```yaml
+Update:
+  id: string
+  body: string
+  author: string
+  health: enum?
+  created_at: datetime
+```
+
+Newest first.
 
 ---
 
-## Status Operations
+## Statuses and labels
 
 ### list_statuses() → Status[]
-Get available statuses for the team/project.
 
-**Returns:**
 ```yaml
 Status:
-  name: string         # Display name
-  type: enum           # backlog | todo | in_progress | in_review | done | cancelled
-  color: string?       # Hex color
-```
-
-### transition_item(id, status) → WorkItem
-Move work item to a new status.
-
-**Parameters:**
-- `id`: Work item key
-- `status`: Target status name
-
-**Returns:** Updated WorkItem
-
----
-
-## Label Operations
-
-### list_labels() → Label[]
-Get available labels for the team/project.
-
-**Returns:**
-```yaml
-Label:
   name: string
-  color: string?
-  description: string?
+  type: enum            # backlog | todo | in_progress | in_review | done | cancelled
 ```
 
-### add_label(item_id, label) → void
-Add a label to a work item.
+### transition_item(key, status) → WorkItem
 
-### remove_label(item_id, label) → void
-Remove a label from a work item.
+`status` is a status name or a `status_type`; the adapter picks the team's first status
+of that type.
+
+### list_labels() → string[]
+
+### add_label(key, label) / remove_label(key, label)
 
 ---
 
-## Terminology Mapping Reference
+## Terms by tool
 
-| Generic | Linear | Markdown |
-|---------|--------|----------|
-| work item | issue | entry |
-| epic | issue + epic label | `# Heading` |
-| feature | issue + feature label | `## Heading` |
-| task | issue + task label | `- [ ] item` |
-| bug | issue + bug label | `- [ ] [BUG]` |
-| sprint | project | `## Sprint N` section |
-| backlog | no project | unsectioned items |
-| status_type:todo | Backlog/Todo | `- [ ]` |
-| status_type:in_progress | In Progress | `- [~]` |
-| status_type:done | Done | `- [x]` |
+| Interface | Linear | Markdown adapter |
+|-----------|--------|------------------|
+| ticket | issue | `### [ABC-12]` entry in a project file |
+| sub-issue | issue with a parent | entry with `**Parent:**` |
+| project | project | one file in `backlog/projects/` |
+| initiative | initiative | one file in `backlog/initiatives/` |
+| blocking link | `blocks` relation | `**Blocked by:**` field |
+| update | project or initiative update | `## Updates` section of the file |
+| status_type | the status's type | `**Status:**` value |
 
-The Jira and GitHub adapters are archived in `docs/archive/pm-context-adapters/`; their rewrites are tracked in CCC-138 and CCC-139.
+The Jira and GitHub adapters are archived in `docs/archive/pm-context-adapters/` and
+are not shipped.

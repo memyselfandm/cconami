@@ -44,7 +44,7 @@ Must handle token rotation and revocation.
 
 ## Generated ralph.yml
 
-Adversarial pattern: Builder implements, Red Team attacks, cycle until secure.
+Adversarial pattern: Builder implements, Red Team attacks, repeat until secure.
 
 ```yaml
 event_loop:
