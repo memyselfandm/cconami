@@ -36,7 +36,7 @@ repository moves on, run `claude plugin update <mod>` and then `/reload-plugins`
 
 ## owner-inbox
 
-The inbox is the set of open Linear issues that carry the label `owner-action`,
+The inbox is the set of open Linear issues that carry the ask label (`owner-action` unless you change it),
 whoever they are assigned to. Agents file one issue per thing they need from you.
 
 - **Band.** The count and the first four issue IDs, above the prompt. Absent when
@@ -49,8 +49,16 @@ whoever they are assigned to. Agents file one issue per thing they need from you
 
 It reads Linear through the session's Linear connector (`claude.ai Linear`), every two
 minutes, so every session shows the same list. A session without that connector shows
-an error line in the panel. The label and the connector's name are constants at the
-top of `hooks/register.tsx`.
+an error line in the panel. The connector's name is a constant at the top of
+`hooks/register.tsx`.
+
+Setting:
+
+| Setting | Default | What it does |
+|---|---|---|
+| `label` | `owner-action` | The Linear label that marks an issue as waiting on you. Set it when your project uses another label; the band, the panel and the "ACTION FOR YOU" card all follow it. A blank value counts as the default. |
+
+A mod's settings are asked for when you install it, and a change reloads the mod.
 
 ## peer-messages
 

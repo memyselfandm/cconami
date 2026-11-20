@@ -1,7 +1,15 @@
 {
   "name": "owner-inbox",
-  "version": "0.1.0",
-  "description": "Shows the Linear issues waiting on the owner (label owner-action) in a band above the prompt and a panel toggled with /inbox, in every session, and marks new asks in the chat.",
+  "version": "0.2.0",
+  "description": "Shows the Linear issues waiting on the owner (by default the label owner-action) in a band above the prompt and a panel toggled with /inbox, in every session, and marks new asks in the chat.",
   "license": "MIT",
-  "types": "./types/index.d.ts"
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "label": {
+      "type": "string",
+      "title": "Ask label",
+      "description": "The Linear label that marks an issue as waiting on you. Set it when your project uses another label for the same purpose.",
+      "default": "owner-action"
+    }
+  }
 }
