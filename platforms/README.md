@@ -38,10 +38,14 @@ It writes `<out-root>/<category>/<name>/SKILL.md`:
 - The body is copied byte for byte, line endings included, with one
   exception: a line whose only content is a link to another platform's notes
   file (`platforms/<other>.md`, not `hermes.md`) is dropped, since that file is
-  not copied and the link would dangle. Both styles in use match:
+  not copied and the link would dangle. A match is a line holding only an
+  optional bullet or number, an optional `Label:`, and the link, which may
+  carry an `#anchor` or a `"title"`, for example
   `- [platforms/claude-code.md](platforms/claude-code.md)` and
   `- Claude Code: [platforms/claude-code.md](platforms/claude-code.md)`.
-  Lines inside fenced code blocks are never touched. A test renders every
+  Blockquote lines are kept, the platform name is compared without regard to
+  case (so `hermes.md` is kept in any case), and lines inside CommonMark
+  fenced code blocks, or indented 4 or more spaces, are never touched. A test renders every
   skill in the repo and checks that each relative link resolves in the output.
   `platforms/hermes.md` and other supporting files are copied; other
   platforms' files are not. Copies get mode 0644, or 0755 when the
