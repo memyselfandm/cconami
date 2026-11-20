@@ -14,7 +14,7 @@ Two checks per SKILL.md:
     Those names belong in platforms/<platform>.md beside it, which is not read.
 
 Skills are found by render.py's discovery, under the given roots (relative to
---base) or, by default, apps/dot-claude/skills and plugins/*/skills.
+--base) or, by default, plugins/*/skills.
 
 A forbidden name listed in lint-skills.allowlist is a warning instead of an
 error. An allowlist entry that no longer matches anything is an error.

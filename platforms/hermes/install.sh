@@ -10,8 +10,8 @@
 # live Hermes install by accident. Point it at a scratch directory, or at a
 # profile's skills/ directory when you mean to.
 #
-# With no skills roots, render.py searches apps/dot-claude/skills and
-# plugins/*/skills in this repo (see render.py for what discovery skips).
+# With no skills roots, render.py searches plugins/*/skills in this repo
+# (see render.py for what discovery skips).
 #
 # Pass 1 is a dry run: it validates every skill and supporting file, checks
 # for name collisions and prints what would be written or replaced. Pass 2

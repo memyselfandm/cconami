@@ -30,6 +30,10 @@ jobs:
           for plugin in plugins/*/; do
             claude plugin validate "$plugin"
           done
+      - name: Check the README catalog against the marketplace
+        run: python3 scripts/check-catalog.py
+      - name: Test the catalog check
+        run: bash scripts/test-check-catalog.sh
       - name: Run each mod's tests
         run: |
           failed=0

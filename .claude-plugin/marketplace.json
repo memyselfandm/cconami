@@ -1,6 +1,7 @@
 {
   "name": "cconami",
   "owner": { "name": "memyselfandm" },
+  "description": "Skills, subagents, hooks and mods for agent-driven work: Linear workflow, product shaping, skill and subagent authoring, a multi-session operating model, and Claude Code interface mods.",
   "plugins": [
     {
       "name": "linear-workflow",

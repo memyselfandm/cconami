@@ -1,92 +1,80 @@
-# Claude Code Cheat Codes
+# cconami
 
-This is my personal system of Claude Code enhancements that enable me to get the most out of the tool. 
-It provides a structured approach to extending Claude Code's capabilities through hooks, custom commands, subagents, and settings configurations.
+A Claude Code plugin marketplace of skills, subagents, hooks and mods for
+agent-driven work: running projects in Linear, shaping product work, authoring
+skills and subagents, and coordinating several agent sessions in one repository.
+Skills are written once and also render for [Hermes](platforms/README.md).
 
+## Install
 
+Install a plugin by name. The marketplace is added on first use:
 
-## Some Cool Things You'll Find Here (i.e. My Favorites)
-### Linear workflow
-Skills for running agent work in Linear, where projects are workstreams, tickets are one to three units of value and initiatives cover large efforts (no time boxes). See [plugins/README.md](./plugins/README.md):
-- **`refining-work-items`** - turn an idea into a ticket with a checkable "Done when", or a project brief
-- **`breaking-down-work`** - split a project or an oversized ticket into tickets with blocking links
-- **`executing-work-items`** - implement named tickets with parallel agents, one branch and pull request at a time
-- **`reconciling-linear-projects`** - make a project's tickets match the pull requests and the running system
-- **`reporting-workstream-status`** - report what is stuck, stale or colliding across projects
-
-Each skill is agent-neutral, with per-agent notes in `platforms/` (Claude Code and Hermes).
-
-### Meta-Agents
-- **[Subagent Architect](./apps/dot-claude/agents/subagent-architect/)** - Builds Claude Code subagents using best practice patterns from Anthropic and others
-- **[Slash Command Architect](./apps/dot-claude/agents/slash-command-architect/)** - Creates and reviews Claude Code slash commands using best practice patterns
-- **[Context Engineering Subagent](./apps/dot-claude/agents/context-engineering-subagent/)** - Uses research-backed patterns for researching and compiling context (based on arxiv 2508.08322v1)
-- **[Notion Workspace Architect](./apps/dot-claude/agents/notion-workspace-architect/)** - Designs and implements Notion workspace structures
-
-
-## Claude Code Extensions
-
-| Type | Count | Folder | Description |
-|------|-------|--------|-------------|
-| [Commands](./apps/dot-claude/commands/COMMANDS_README.md) | 18 | `apps/dot-claude/commands/` | Custom slash commands organized by domain |
-| [Subagents](./apps/dot-claude/agents/SUBAGENTS_README.md) | 4 | `apps/dot-claude/agents/` | Specialized AI agents for specific tasks |
-| [Hooks](./apps/dot-claude/hooks/) | Templates | `apps/dot-claude/hooks/` | Event-driven automation scripts |
-| [Settings](./apps/dot-claude/settings/) | 2 configs | `apps/dot-claude/settings/` | Configuration templates and examples |
-
-## Other Project Components
-
-- **AI Documentation** (`ai_docs/`) - Context and knowledge for AI agents
-- **Agentic Layer Wrapper** (`apps/agent-app-wrapper/`) - Project initialization tools
-- **Project Instructions** (`CLAUDE.md`) - Project-specific Claude configuration
-- **Package Config** (`pacc.json`) - Pacc package manager configuration
-
-## Key Features
-
-- **Linear Issue Refinement Suite**: Transform ideas into AI-ready Linear issues with dual-mode commands
-- **Custom Slash Commands**: 18 commands organized by domain (engineering, product, UI/UX)
-- **Specialized Subagents**: 4 meta-agents for creating commands, agents, and context
-- **Hooks System**: Event-driven automation for Claude Code lifecycle
-- **Settings Templates**: Configuration examples for different use cases
-- **Agentic Layer Wrapper**: Framework for AI-friendly project structure
-
-## Commands
-
-See [COMMANDS_README.md](./apps/dot-claude/commands/COMMANDS_README.md) for available custom slash commands and their documentation.
-
-## Subagents
-
-See [SUBAGENTS_README.md](./apps/dot-claude/agents/SUBAGENTS_README.md) for specialized AI subagents and their capabilities.
-
-## Quick Start: Idea to Execution
-
-```bash
-# Write a project brief for a new workstream
-/refining-work-items "Sync engine" --type project-lite
-
-# Break it into tickets with blocking links
-/breaking-down-work "Sync engine"
-
-# Implement the tickets that can start now
-/executing-work-items ABC-120 ABC-123
-
-# Keep the record true at the end of the workstream
-/reconciling-linear-projects "Sync engine"
+```sh
+claude plugin install <plugin> --marketplace memyselfandm/cconami
 ```
 
-## Getting Started
+Or at the prompt of a session:
 
-1. Copy templates from `apps/dot-claude/` to your project or home folder's `.claude/` directory
-2. Configure settings in `.claude/settings.json` based on templates in `apps/dot-claude/settings/`
-3. Add custom commands to `.claude/commands` and agents to `.claude/agents` 
+```
+/plugin install <plugin> --marketplace memyselfandm/cconami
+```
 
-**Coming Soon!:** [`pacc` cli](https://github.com/memyselfandm/pacc-cli) support! I made a package manager for Claude Code, called Pacc. You can *kinda* use this repo with `pacc` now, but soon full `pacc` support is coming.
+The default scope is `user` (every session); pass `--scope project` to record it
+in the current project instead. To add the marketplace without installing
+anything, run `claude plugin marketplace add memyselfandm/cconami`; plugins are
+then also addressable as `<plugin>@cconami`. To pick up changes, run
+`claude plugin update <plugin>`.
 
-## What is Claude Code
-[claude-code](https://www.anthropic.com/claude-code) is, to most people, an AI coding agent that lives in the terminal - and a damn good one IMO.
-However, because of my obsession with agentic AI and because of the superb work of the Anthropic and Claude Code teams, I've come to see it for what it truly is: an extensible agentic AI platform. 
+## Plugins
 
-"Through Claude (code with a Max Plan), all things are possible."
-- The Bib... wait...
+| Plugin | Description | Contents |
+|---|---|---|
+| [`linear-workflow`](plugins/linear-workflow/) | Refine, break down, analyze and execute Linear tickets; reconcile projects and report workstream status | 8 skills, including the `pm-context` tracker layer |
+| [`product`](plugins/product/) | Workshop PRDs and brainstorm designs | 2 skills |
+| [`authoring`](plugins/authoring/) | Build skills and subagents, scrape documentation, configure Ralph | 4 skills, 6 agents |
+| [`operating-model`](plugins/operating-model/) | How agent sessions work with each other and the owner: checkpoints, owner asks, isolated PR review, workstream leads, peer coordination | 5 skills, 1 hook (command guard) |
+| [`owner-inbox`](plugins/owner-inbox/) | The Linear issues waiting on you, in a band above the prompt and a panel toggled with `/inbox` | mod |
+| [`peer-messages`](plugins/peer-messages/) | Messages from other sessions, agents and channels drawn as a card in the chat | mod |
+| [`ci-status`](plugins/ci-status/) | The GitHub CI state of the current branch and of the PRs this session opened, above the prompt | mod |
+| [`mcp-health`](plugins/mcp-health/) | A band above the prompt when a plugin's MCP server is not connected | mod |
+
+Each plugin's README lists its skills, agents or settings. Mods are small plugins
+that change what a Claude Code session shows; see [plugins/MODS.md](plugins/MODS.md).
+
+## Skills across platforms
+
+Every skill has one agent-neutral `SKILL.md`. Anything specific to one agent
+(tool names, CLIs, invocation syntax) goes in `platforms/<platform>.md` beside
+it, for example `skills/refining-work-items/platforms/claude-code.md` and
+`platforms/hermes.md`. The `SKILL.md` body never names a platform-specific
+tool; `scripts/lint-skills.py` enforces that in CI.
+
+- **`targets`** in the frontmatter lists the agents a skill supports, such as
+  `[claude-code, hermes]`. Absent means all. Do not use `platforms` for this:
+  Hermes reads `platforms` as an operating-system filter.
+- **Claude Code** loads the plugin's skills directly.
+- **Hermes** gets a rendered copy. `platforms/hermes/install.sh` renders every
+  skill under `plugins/*/skills` into a Hermes skills directory, keeping the
+  Hermes notes and dropping other platforms' files:
+
+  ```sh
+  bash platforms/hermes/install.sh --dry-run /tmp/hermes-skills
+  bash platforms/hermes/install.sh <profile>/skills
+  ```
+
+Details: [platforms/README.md](platforms/README.md) and the "Cross-Platform
+Skills" section of
+[format-spec.md](plugins/authoring/skills/building-skills/references/format-spec.md).
+
+## Repository
+
+- [docs/layout.md](docs/layout.md): what lives where, and the plugin boundaries.
+- [docs/recommended-external.md](docs/recommended-external.md): external skill
+  collections worth installing directly.
+- [docs/inventory.md](docs/inventory.md): how the earlier layout was retired.
+- [CLAUDE.md](CLAUDE.md): working on this repository.
 
 ## Credits
-- [IndieDevDan](https://www.youtube.com/@indydevdan): I was inspired to create this system by the Cracked AI Engineering Legend IndieDevDan. A few things here I took directly from him (e.g., the agentic wrapper idea) and some things are just inspired by his ideas, so I definitely want to give credit where credit is due. Check him out.
-- [Context Engineering for Multi-Agent LLM Code Assistants](https://arxiv.org/html/2508.08322v1): My context engineering subagent was based on this paper. It's a solid bit of work. (2025, Muhammad Haseeb)
+
+- [IndieDevDan](https://www.youtube.com/@indydevdan), whose ideas inspired this collection.
+- [Context Engineering for Multi-Agent LLM Code Assistants](https://arxiv.org/html/2508.08322v1) (Muhammad Haseeb, 2025), the basis of the `context-engineering-subagent` agent.

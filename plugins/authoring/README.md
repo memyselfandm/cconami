@@ -1,6 +1,19 @@
-# Claude Code Subagents
+# authoring
 
-Specialized AI agents that extend Claude Code's capabilities for specific domains and tasks.
+Skills and subagents for building agent tooling.
+
+```
+/plugin install authoring --marketplace memyselfandm/cconami
+```
+
+## Skills
+
+| Skill | What it does |
+|---|---|
+| `building-skills` | Researches, drafts and validates new skills, for Claude Code or the AgentSkills.io format |
+| `building-subagents` | Creates Claude Code subagent definitions |
+| `scraping-documentation` | Scrapes a documentation site into organized markdown |
+| `ralph-config` | Generates `ralph.yml` and `PROMPT.md` for Ralph Orchestrator workflows from a plan, ticket or idea |
 
 ## Available Subagents
 
@@ -100,8 +113,7 @@ Task.invoke({
 To create a new subagent:
 
 1. Use the `subagent-architect` to design the agent
-2. Create a new directory in `apps/dot-claude/agents/`
-3. Add a markdown file with YAML frontmatter:
+2. Add a markdown file to `plugins/authoring/agents/` (or to a project's `.claude/agents/`) with YAML frontmatter:
 
 ```yaml
 ---

@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "description": "Shows the GitHub CI state of the current branch's HEAD, and of the PRs this session opened, in a band above the prompt. Hidden whenever GitHub cannot be read.",
   "license": "MIT",
+  "author": { "name": "memyselfandm" },
   "types": "./types/index.d.ts",
   "userConfig": {
     "pollSeconds": {

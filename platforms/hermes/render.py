@@ -10,8 +10,8 @@
 
 Writes <out-root>/<category>/<name>/SKILL.md plus the skill's supporting files.
 With --all it renders every skill found under the roots (default:
-apps/dot-claude/skills and plugins/*/skills in this repo). Every skill and
-every supporting file is validated before anything is written.
+plugins/*/skills in this repo). Every skill and every supporting file is
+validated before anything is written.
 
 Frontmatter (scripts/lint-skills.py applies the same rules by importing this):
   * Kept: name, description, version, author, license.
@@ -69,7 +69,7 @@ from pathlib import Path
 import yaml
 
 REPO = Path(__file__).resolve().parents[2]
-DEFAULT_ROOTS = ("apps/dot-claude/skills", "plugins/*/skills")
+DEFAULT_ROOTS = ("plugins/*/skills",)
 TOP_LEVEL_KEYS = ("name", "description", "version", "author", "license")
 HERMES_PASSTHROUGH = ("tags", "related_skills")
 OS_NAMES = ("linux", "macos", "windows")
