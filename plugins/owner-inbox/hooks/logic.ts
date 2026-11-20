@@ -13,6 +13,25 @@ export function settings(options: Readonly<Record<string, unknown>>): Settings {
   return { label: label === '' ? DEFAULT_LABEL : label }
 }
 
+/**
+ * The title of an issue a tool call files as an ask (it carries `label`, in any
+ * case, in `labels` or `addLabels`), or null.
+ */
+export function filedAsk(label: string, tool: string, input: unknown): string | null {
+  if (!/__(save|create)_issue$/.test(tool)) {
+    return null
+  }
+  const fields = (input ?? {}) as Record<string, unknown>
+  const labels = [fields.labels, fields.addLabels]
+    .flatMap(value => (Array.isArray(value) ? value : []))
+    .map(value => String(value).toLowerCase())
+  if (!labels.includes(label.toLowerCase())) {
+    return null
+  }
+
+  return typeof fields.title === 'string' ? fields.title : 'A new ask'
+}
+
 /** The arguments of the Linear connector's `list_issues` call for one label. */
 export function listIssuesArgs(label: string): Record<string, unknown> {
   return {
