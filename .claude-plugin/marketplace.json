@@ -28,6 +28,11 @@
       "description": "Messages from other Claude sessions, agents and channels, drawn as a card in the chat."
     },
     {
+      "name": "ci-status",
+      "source": "./plugins/ci-status",
+      "description": "The GitHub CI state of the current branch, and of the PRs this session opened, in a band above the prompt. Hidden when GitHub cannot be read."
+    },
+    {
       "name": "mcp-health",
       "source": "./plugins/mcp-health",
       "description": "A band above the prompt when a plugin's MCP server is not connected, naming the server and the next step."
