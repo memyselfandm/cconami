@@ -9,10 +9,10 @@ Ask which work to rank. Accept any of:
 
 - a project (its open tickets);
 - a list of ticket keys;
-- the backlog filtered by label or status;
+- the backlog filtered by label or `status_type`;
 - features the person describes by hand, with no tracker at all.
 
-For tracker scopes, read the candidates with `list_items` (filter by project, status and label) and
+For tracker scopes, read the candidates with `list_items` (filter by project, `status_type` and labels) and
 `get_item` for any whose description is thin. Read `get_children` where a ticket groups smaller ones.
 Rank tickets at one level only. Mixing a parent with its own children double counts.
 
@@ -21,8 +21,11 @@ If there are fewer than three candidates, say so and stop: there is nothing to r
 ## 2. Gather what the scores need
 
 For each candidate note: the problem it solves, who is affected, rough size of the effort, and
-dependencies (`add_blocking_link` relations show on the ticket). Ask the person for anything the
+dependencies (read `blocks` and `blocked_by` from `get_item`; `list_items` items carry them too). Ask the person for anything the
 tickets do not say. Record unknowns as unknown. Do not invent numbers.
+
+Ask whose view the ranking serves (product, engineering, business, customer). If more than one,
+score Impact per stakeholder and show where they diverge, instead of averaging them away.
 
 ## 3. Score with each framework
 
@@ -32,9 +35,9 @@ Score = (Reach x Impact x Confidence) / Effort.
 
 | Factor | Scale |
 |--------|-------|
-| Reach | People or events affected per quarter. Use a real count where one exists |
+| Reach | People or events affected per quarter. Use a real count where one exists. If no counts exist, use orders of magnitude (10, 100, 1000) |
 | Impact | 3 massive, 2 high, 1 medium, 0.5 low, 0.25 minimal |
-| Confidence | 100% proven by data, 80% some evidence, 50% opinion, 20% speculation |
+| Confidence | 1.0 proven by data, 0.8 some evidence, 0.5 opinion, 0.2 speculation |
 | Effort | Person-months. 0.25 is about a week. Above 3, consider splitting the ticket |
 
 State the evidence behind each confidence value. Low-confidence items rank lower on purpose.
@@ -72,9 +75,9 @@ fill-in or time sink.
 
 Build one table: candidate, RICE score and rank, MoSCoW bucket, Kano class, blockers. Then:
 
-1. Rank by RICE.
+1. Rank by RICE. Break ties on equal scores by lower effort first.
 2. Promote any Must that RICE ranks low, and say why the frameworks disagree.
-3. Move up a blocker that unlocks higher-ranked work (`add_blocking_link` data).
+3. Move up a blocker that unlocks higher-ranked work (from `blocks` and `blocked_by`).
 4. Demote Reverse items and low-confidence items pending evidence.
 5. Flag disagreements the person should settle. Do not smooth them over.
 
@@ -84,6 +87,7 @@ Produce:
 
 - the ranked list with one line of reasoning per item;
 - what to do first, what to defer, what to drop;
+- one success metric and one main risk for each of the top five items;
 - the three assumptions that would change the order if wrong;
 - the evidence to gather next for low-confidence items.
 
@@ -98,6 +102,8 @@ Post the table and recommendation where the team will find it:
   person asks);
 - `add_comment` on a ticket when it concerns a single item;
 - `add_update` on an initiative when it spans several projects.
+
+Offer a file as well (Markdown in the repository docs) or instead.
 
 Do not change ticket priority, labels or project membership unless the person asks. If they ask,
 use `update_item`, `add_label` or `assign_to_project`, and report each change.

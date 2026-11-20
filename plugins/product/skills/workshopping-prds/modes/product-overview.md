@@ -88,7 +88,7 @@ Offer, do not assume:
 
 - Save the page as a Markdown file in the repository docs.
 - `create_project` with the one-pager as the description if the product is a new workstream, or
-  `update_project` to set it on an existing one. For a larger brief, point to the project brief
+  `update_project` for an existing one. Before `update_project`, read the current description with `get_project`, show it, and ask whether to replace, append, or save as a file only. For a larger brief, point to the project brief
   template in `refining-work-items`.
 - `add_update` on the project or initiative to note that the overview was written and what is open.
 
