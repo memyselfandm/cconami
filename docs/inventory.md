@@ -36,7 +36,7 @@ The ticket that carries out each decision is in the last column. The target layo
 | `apps/.../linear/project-shuffle/` | retire | `shuffling-projects`, later merged into `reconciling-linear-projects` | CCC-134 |
 | `.claude/commands/linear/tag-manager.md` | retire | Nothing. It managed checkpoint tags for the sprint flow | CCC-134 |
 | `apps/.../linear/{LINEAR_COMMANDS,README}.md`, `apps/dot-claude/commands/COMMANDS_README.md` | retire | `README.md` plugin catalog | CCC-134 |
-| `.claude/commands/feature-prioritization.md`, `.claude/commands/product-overview.md` | convert, then merge | New modes of `workshopping-prds`. Kept in `docs/archive/commands/` until then | CCC-134 |
+| `.claude/commands/feature-prioritization.md`, `.claude/commands/product-overview.md` | convert, then merge | New modes of `workshopping-prds`. Converted in CCC-150 to `plugins/product/skills/workshopping-prds/modes/`; `docs/archive/commands/` deleted | CCC-134, CCC-150 |
 | `apps/.../product/ops/prd-meeting/` (with docs) | retire | `workshopping-prds` | CCC-134 |
 | `apps/.../uiux/ui_design/design_brainstorm/` | retire | `brainstorming-designs` | CCC-134 |
 | `apps/.../eng/dev/subagent-build/` (with docs) | retire | `building-subagents` | CCC-134 |
