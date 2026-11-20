@@ -19,7 +19,17 @@ jobs:
       - uses: astral-sh/setup-uv@v6
         with:
           version: "0.12.5"
-      # `claude plugin validate` is added here by CCC-133, with the plugin layout.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code@2.1.329
+      - name: Validate the marketplace and each plugin
+        run: |
+          claude plugin validate .
+          for plugin in plugins/*/; do
+            claude plugin validate "$plugin"
+          done
       - name: Lint SKILL.md files
         run: uv run --script scripts/lint-skills.py
       - name: Test the lint

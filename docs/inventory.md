@@ -1,5 +1,7 @@
 # Repository inventory
 
+> The paths in this record predate CCC-133, which moved `apps/dot-claude/` into `plugins/`.
+
 CCC-132, part of the CCC-126 overhaul. Read from `main` on 2026-11-19. The inventory also covers open PR #7, whose files are not in `main` yet. Each shipped path has one decision:
 
 - **keep**: stays, and may be moved into the plugin layout.

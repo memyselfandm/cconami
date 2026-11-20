@@ -1,0 +1,7 @@
+{
+  "name": "authoring",
+  "description": "Authoring skills and subagents: build skills and subagents, scrape documentation, configure Ralph.",
+  "version": "0.1.0",
+  "license": "MIT",
+  "author": { "name": "memyselfandm" }
+}

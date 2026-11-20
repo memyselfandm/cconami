@@ -156,4 +156,4 @@ When adding or modifying subagents:
 ## Related Documentation
 
 - [Claude Code subagents documentation](https://code.claude.com/docs/en/sub-agents)
-- [CLAUDE.md Best Practices](../../../CLAUDE.md)
+- [CLAUDE.md Best Practices](../../CLAUDE.md)
