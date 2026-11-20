@@ -1,0 +1,27 @@
+{
+  "name": "ci-status",
+  "version": "0.1.0",
+  "description": "Shows the GitHub CI state of the current branch's HEAD, and of the PRs this session opened, in a band above the prompt. Hidden whenever GitHub cannot be read.",
+  "license": "MIT",
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "pollSeconds": {
+      "type": "number",
+      "title": "Poll interval while checks run (seconds)",
+      "description": "How often to read GitHub while any check is pending.",
+      "default": 30
+    },
+    "idlePollMinutes": {
+      "type": "number",
+      "title": "Poll interval while nothing runs (minutes)",
+      "description": "How often to read GitHub while no check is pending. 0 reads only at session start, after a push and after a PR is opened.",
+      "default": 0
+    },
+    "maxFailingNames": {
+      "type": "number",
+      "title": "Failing checks named",
+      "description": "How many failing check names the band lists.",
+      "default": 3
+    }
+  }
+}

@@ -26,6 +26,11 @@
       "name": "peer-messages",
       "source": "./plugins/peer-messages",
       "description": "Messages from other Claude sessions, agents and channels, drawn as a card in the chat."
+    },
+    {
+      "name": "ci-status",
+      "source": "./plugins/ci-status",
+      "description": "The GitHub CI state of the current branch, and of the PRs this session opened, in a band above the prompt. Hidden when GitHub cannot be read."
     }
   ]
 }

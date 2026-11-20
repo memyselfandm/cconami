@@ -30,6 +30,13 @@ jobs:
           for plugin in plugins/*/; do
             claude plugin validate "$plugin"
           done
+      - name: Test the mods that have tests
+        run: |
+          for plugin in plugins/*/; do
+            if [ -d "${plugin}tests" ]; then
+              claude plugin test "$plugin"
+            fi
+          done
       - name: Lint SKILL.md files
         run: uv run --script scripts/lint-skills.py
       - name: Test the lint
