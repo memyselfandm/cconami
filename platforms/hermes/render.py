@@ -28,8 +28,18 @@ Frontmatter (scripts/lint-skills.py applies the same rules by importing this):
   * YAML aliases are rejected. The frontmatter, as written and as rendered,
     is capped at 64 KiB.
 
-Files: the body is copied byte for byte. platforms/hermes.md is copied, other
-files under platforms/ are not. Every other file is copied with mode 0644, or
+Files: the body is copied byte for byte, with one exception: a line whose only
+content is a link to another platform's notes file (platforms/<other>.md, not
+hermes.md) is dropped, because that file is not copied and the link would
+dangle. Matched, with the line ending dropped too: a bullet or number, an optional
+"Label:", then the link, which may have an #anchor or a "title", e.g.
+`- [platforms/claude-code.md](platforms/claude-code.md)` and
+`- Claude Code: [platforms/claude-code.md](platforms/claude-code.md)`.
+Blockquote lines are kept, and the platform name is compared without regard
+to case, so hermes.md is kept in any case. Lines
+inside fenced code blocks (CommonMark fences) and indented code (4+ spaces)
+are never touched, and every other line keeps its exact bytes, CRLF and a missing final newline included. platforms/hermes.md is
+copied, other files under platforms/ are not. Every other file is copied with mode 0644, or
 0755 when the owner-exec bit is set. Hidden files, __pycache__ and
 node_modules are ignored. Symlinks are skipped with a warning. A hardlinked or
 special file (FIFO, device, socket) is an error, and so is a file that cannot
@@ -67,6 +77,18 @@ SLUG = re.compile(r"[a-z0-9][a-z0-9-]{0,63}")
 MAX_FRONTMATTER = 64 * 1024
 PLATFORM_FILE = Path("platforms") / "hermes.md"
 PRUNED_DIRS = ("__pycache__", "node_modules")
+# A line whose only content is a link to platforms/<x>.md: 0-3 spaces of indent
+# (4 or more is an indented code block), an optional bullet or number, an
+# optional "Label:" prefix, then the link, which may carry an #anchor or a
+# "title". Blockquote lines (">") never match.
+PLATFORM_LINK_LINE = re.compile(
+    r" {0,3}(?:(?:[-*+]|\d{1,9}[.)])[ \t]+)?(?:[^\[\]()>\n]*?:[ \t]*)?"
+    r"\[[^\]\n]*\]\([ \t]*(?:\./)?platforms/([^/()\s#]+)\.md(?:#[^)\s]*)?"
+    r"(?:[ \t]+(?:\"[^\"]*\"|'[^']*'))?[ \t]*\)[ \t]*"
+)
+# CommonMark code fences: 0-3 spaces of indent, then 3+ backticks or tildes.
+FENCE_OPEN = re.compile(r" {0,3}(`{3,}|~{3,})(.*)")
+FENCE_CLOSE = re.compile(r" {0,3}(`{3,}|~{3,})[ \t]*")
 
 
 class SkillError(Exception):
@@ -342,6 +364,52 @@ def plan_files(skill_dir):
     return planned
 
 
+def split_lines(text):
+    """Split into lines that keep their exact endings (\\n or \\r\\n, or none)."""
+    return re.findall(r"[^\n]*\n|[^\n]+", text)
+
+
+def mark_fences(lines):
+    """Yield (line, in_fence) following CommonMark fenced code blocks.
+
+    The opener, its content and its closer are all in_fence. A closer uses the
+    opener's character, is at least as long, and has only whitespace after it.
+    A backtick opener whose info string holds a backtick is inline code.
+    Unclosed fences run to the end of the text.
+    """
+    fence = None
+    for line in lines:
+        text = line.rstrip("\r\n")
+        if fence is None:
+            m = FENCE_OPEN.fullmatch(text)
+            if m and not (m.group(1)[0] == "`" and "`" in m.group(2)):
+                fence = (m.group(1)[0], len(m.group(1)))
+                yield line, True
+            else:
+                yield line, False
+        else:
+            m = FENCE_CLOSE.fullmatch(text)
+            if m and m.group(1)[0] == fence[0] and len(m.group(1)) >= fence[1]:
+                fence = None
+            yield line, True
+
+
+def drop_foreign_platform_links(body):
+    """Drop lines that only link another platform's notes file.
+
+    Every other line is returned byte for byte. Fenced code blocks and
+    indented code (4+ spaces) are never touched.
+    """
+    out = []
+    for line, fenced in mark_fences(split_lines(body)):
+        if not fenced:
+            m = PLATFORM_LINK_LINE.fullmatch(line.rstrip("\r\n"))
+            if m and m.group(1).lower() != "hermes":
+                continue
+        out.append(line)
+    return "".join(out)
+
+
 def prepare(skill_dir):
     """Validate one skill. Returns a plan dict, or None if it is skipped."""
     skill_md = Path(skill_dir) / "SKILL.md"
@@ -370,7 +438,7 @@ def prepare(skill_dir):
         "name": fm["name"],
         "frontmatter": dumped,
         "fence": fence,
-        "body": body,
+        "body": drop_foreign_platform_links(body),
         "files": plan_files(Path(skill_dir)),
     }
 
