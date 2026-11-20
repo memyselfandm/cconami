@@ -18,14 +18,27 @@ export const DEFAULT_STALE_HOURS = 2
  * The reinforcement ceilings OMC's stop hook enforces (scripts/persistent-mode.mjs):
  * autopilot and team keep going while the new count is at most 20, and
  * ultragoal while it is at most `max_reinforcements || 50`. OMC never resets
- * the count during a run, so only a count at its ceiling means the hook has
- * stopped reinforcing a run that is still marked active.
+ * the count during a run, so a count equal to the ceiling means the last
+ * allowed reinforcement has been given: the next stop is not reinforced,
+ * although the run is still marked active.
  */
 export const AUTOPILOT_CEILING = 20
 export const TEAM_CEILING = 20
 export const ULTRAGOAL_CEILING = 50
-/** ralph has no reinforcement ceiling; it caps `iteration` at `max_iterations || 100`. */
-export const RALPH_MAX_ITERATIONS = 100
+
+/**
+ * ralph's hard limit (getHardMaxIterations in scripts/persistent-mode.mjs):
+ * 500 iterations, or 200 when `OMC_SECURITY=strict`. ralph's `max_iterations`
+ * is not a limit: when `iteration` reaches it, OMC adds 10 and goes on. Only
+ * the hard limit ends the run, by setting `active` to false.
+ */
+export const RALPH_HARD_LIMIT = 500
+export const RALPH_HARD_LIMIT_STRICT = 200
+/** ralph is looping once `iteration` reaches this share of the hard limit. */
+export const RALPH_LOOPING_SHARE = 0.9
+
+/** OMC's window for a confirmation prompt: older than this, OMC reinforces again. */
+export const AWAITING_CONFIRMATION_TTL_MS = 2 * 60 * 1000
 
 const HOUR_MS = 60 * 60 * 1000
 
@@ -34,14 +47,26 @@ export function isSafeSessionId(id: string): boolean {
   return /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,255}$/.test(id)
 }
 
-/** The thresholds the judge uses; `reinforcementLimit` null means OMC's own ceilings. */
-export type Thresholds = { staleMs: number; reinforcementLimit: number | null }
+/**
+ * The thresholds the judge uses; `reinforcementLimit` null means OMC's own
+ * ceilings, and `ralphHardLimit` is OMC's hard limit for ralph's iterations.
+ */
+export type Thresholds = { staleMs: number; reinforcementLimit: number | null; ralphHardLimit: number }
 
 /** Reads the settings; a missing, non-numeric or non-positive value takes its default. */
 export function thresholds(options: { readonly [key: string]: unknown }): Thresholds {
   const hours = positive(options.staleHours) ?? DEFAULT_STALE_HOURS
 
-  return { staleMs: hours * HOUR_MS, reinforcementLimit: positive(options.reinforcementLimit) }
+  return { staleMs: hours * HOUR_MS, reinforcementLimit: positive(options.reinforcementLimit), ralphHardLimit: RALPH_HARD_LIMIT }
+}
+
+/**
+ * ralph's hard limit for an `OMC_SECURITY` value, as getHardMaxIterations()
+ * reads it. A `hardMaxIterations` set in OMC's config files is not read: in
+ * strict mode it can only lower the limit, and OMC then ends the run itself.
+ */
+export function ralphHardLimit(security: string | null): number {
+  return security === 'strict' ? RALPH_HARD_LIMIT_STRICT : RALPH_HARD_LIMIT
 }
 
 /** The reinforcement count at which a mode is looping: the setting when set, else OMC's ceiling. */
@@ -63,13 +88,9 @@ export function reinforcementCeiling(mode: string, state: ModeState, override: n
   return null
 }
 
-/** ralph's iteration cap: `max_iterations || 100`, as OMC reads it; other modes have none. */
-export function iterationCap(mode: string, state: ModeState): number | null {
-  if (mode !== 'ralph') {
-    return null
-  }
-
-  return state.maxIterations !== null && state.maxIterations > 0 ? state.maxIterations : RALPH_MAX_ITERATIONS
+/** The iteration at which ralph is looping: RALPH_LOOPING_SHARE of the hard limit; other modes have none. */
+export function iterationCap(mode: string, hardLimit: number): number | null {
+  return mode === 'ralph' ? Math.floor(hardLimit * RALPH_LOOPING_SHARE) : null
 }
 
 function positive(value: unknown): number | null {
@@ -327,11 +348,14 @@ export type ModeState = {
   sessionId: string | null
   phase: string | null
   iteration: number | null
-  maxIterations: number | null
   reinforcement: number | null
   maxReinforcements: number | null
-  /** OMC holds a run waiting for the person; its stop hook does not reinforce it. */
-  isAwaitingConfirmation: boolean
+  /**
+   * When OMC began holding the run for the person's confirmation
+   * (`awaiting_confirmation_set_at`, else `started_at`), in milliseconds; null
+   * when it is not awaiting confirmation or records no such time.
+   */
+  awaitingSinceMs: number | null
   /** The latest activity time in milliseconds, or null when the file records none. */
   activityMs: number | null
 }
@@ -369,6 +393,11 @@ export function parseState(text: string): ModeState | null {
   const meta = s._meta !== null && typeof s._meta === 'object' ? (s._meta as Record<string, unknown>) : {}
   const rawPhase = s.current_phase ?? s.phase ?? s.stage
   const phase = typeof rawPhase === 'string' && rawPhase.trim() !== '' ? rawPhase.trim() : null
+  const since = typeof s.awaiting_confirmation_set_at === 'string' && s.awaiting_confirmation_set_at.trim() !== ''
+    ? s.awaiting_confirmation_set_at
+    : typeof s.started_at === 'string' && s.started_at.trim() !== ''
+      ? s.started_at
+      : null
   const times = [s.last_checked_at, s.updated_at, s.started_at, meta.updatedAt]
     .map(time)
     .filter((ms): ms is number => ms !== null)
@@ -379,10 +408,9 @@ export function parseState(text: string): ModeState | null {
     sessionId: typeof s.session_id === 'string' ? s.session_id : null,
     phase,
     iteration: numberOf(s.iteration),
-    maxIterations: numberOf(s.max_iterations),
     reinforcement: numberOf(s.reinforcement_count),
     maxReinforcements: numberOf(s.max_reinforcements),
-    isAwaitingConfirmation: s.awaiting_confirmation === true,
+    awaitingSinceMs: s.awaiting_confirmation === true ? time(since) : null,
     activityMs: times.length === 0 ? null : Math.max(...times),
   }
 }
@@ -397,11 +425,27 @@ export function belongsTo(state: ModeState, sessionId: string, isLegacy: boolean
 }
 
 /**
+ * Whether OMC's stop hook holds the run for the person (isAwaitingConfirmation):
+ * only within AWAITING_CONFIRMATION_TTL_MS of the time it began waiting, not
+ * before it, and never with no such time.
+ */
+export function isAwaitingConfirmation(state: ModeState, nowMs: number): boolean {
+  if (state.awaitingSinceMs === null) {
+    return false
+  }
+  const waitedMs = nowMs - state.awaitingSinceMs
+
+  return waitedMs >= 0 && waitedMs < AWAITING_CONFIRMATION_TTL_MS
+}
+
+/**
  * What is wrong with an active mode, or null when nothing is (or it is not
  * active). A stale run is reported as stale even when its counters are high:
- * a dead run is not looping. Looping means a count at or past the ceiling
- * OMC enforces while the run is still marked active; a run awaiting the
- * person's confirmation is not reinforced, so it is never looping.
+ * a dead run is not looping. Looping means a reinforcement count at or past
+ * the ceiling OMC enforces, or a ralph iteration near OMC's hard limit, while
+ * the run is still marked active. A run OMC holds for the person's
+ * confirmation (for two minutes at most) is not reinforced, so it is not
+ * looping then.
  */
 export function judge(mode: string, state: ModeState, nowMs: number, limits: Thresholds): Finding | null {
   if (!state.isActive) {
@@ -415,11 +459,11 @@ export function judge(mode: string, state: ModeState, nowMs: number, limits: Thr
   if (ageMs > limits.staleMs) {
     return { ...base, kind: 'stale', ageMs }
   }
-  if (state.isAwaitingConfirmation) {
+  if (isAwaitingConfirmation(state, nowMs)) {
     return null
   }
   const ceiling = reinforcementCeiling(mode, state, limits.reinforcementLimit)
-  const cap = iterationCap(mode, state)
+  const cap = iterationCap(mode, limits.ralphHardLimit)
   const isReinforcing = ceiling !== null && state.reinforcement !== null && state.reinforcement >= ceiling
   const isAtCap = cap !== null && state.iteration !== null && state.iteration >= cap
   if (isReinforcing || isAtCap) {
@@ -429,7 +473,7 @@ export function judge(mode: string, state: ModeState, nowMs: number, limits: Thr
       reinforcement: isReinforcing ? state.reinforcement : null,
       reinforcementLimit: isReinforcing ? ceiling : null,
       iteration: isAtCap ? state.iteration : null,
-      maxIterations: isAtCap ? cap : null,
+      maxIterations: isAtCap ? limits.ralphHardLimit : null,
     }
   }
 
@@ -461,7 +505,7 @@ export function bandText(finding: Finding): string {
     parts.push(`reinforcement ${finding.reinforcement}${limit}`)
   }
   if (finding.iteration !== null && finding.maxIterations !== null) {
-    parts.push(`iteration ${finding.iteration}/${finding.maxIterations}`)
+    parts.push(`iteration ${finding.iteration}, hard limit ${finding.maxIterations}`)
   }
 
   return `${finding.mode} looping: ${parts.join(', ')}${phase}`

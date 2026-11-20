@@ -1,5 +1,5 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, Register } from 'claude-code'
+import type { EngineInterface, Register, Timer } from 'claude-code'
 
 import type { Finding } from '../types'
 import {
@@ -15,6 +15,7 @@ import {
   omcRoot,
   parseState,
   projectIdentifier,
+  ralphHardLimit,
   sessionsToScan,
   statePaths,
   thresholds,
@@ -38,23 +39,25 @@ let limits: Thresholds = thresholds({})
 let cached: { cwd: string; root: string | null; reads: number } | null = null
 let isReading = false
 let isAgain = false
+let ticker: Timer | null = null
 
 type Git = { out: string | null; isSure: boolean }
 
 /**
  * Runs a read-only git command. `out` is its trimmed output when it succeeded.
  * `isSure` is false when it failed for a reason other than "not a git
- * repository" (a timeout, git missing), so the answer must not be kept.
+ * repository" or no such remote (a timeout, git missing), so the answer must
+ * not be kept. git runs under `LC_ALL=C` so its messages are in English.
  */
 async function git($: EngineInterface, cwd: string, args: string[]): Promise<Git> {
   try {
-    const ran = await $.process.run(['git', ...args], { cwd, timeoutMs: GIT_TIMEOUT_MS })
+    const ran = await $.process.run(['git', ...args], { cwd, env: { LC_ALL: 'C' }, timeoutMs: GIT_TIMEOUT_MS })
     const out = ran.stdout.trim()
     if (ran.exitCode === 0) {
       return { out: out === '' ? null : out, isSure: true }
     }
 
-    return { out: null, isSure: /not a git repository/i.test(ran.stderr) }
+    return { out: null, isSure: /not a git repository|no such remote/i.test(ran.stderr) }
   } catch {
     return { out: null, isSure: false }
   }
@@ -71,17 +74,21 @@ async function findWorkspace($: EngineInterface, start: string, home: string | n
 }
 
 // OMC anchors `.omc/` at the outermost superproject when run in a submodule.
-async function climb($: EngineInterface, top: string | null): Promise<string | null> {
+// Not sure when any probe on the way was not.
+async function climb($: EngineInterface, top: string | null): Promise<{ root: string | null; isSure: boolean }> {
   let root = top
+  let isSure = true
   for (let i = 0; root !== null && i < MAX_SUPERPROJECTS; i += 1) {
-    const parent = (await git($, root, ['rev-parse', '--show-superproject-working-tree'])).out
+    const probe = await git($, root, ['rev-parse', '--show-superproject-working-tree'])
+    isSure &&= probe.isSure
+    const parent = probe.out
     if (parent === null || parent === root) {
       break
     }
     root = parent
   }
 
-  return root
+  return { root, isSure }
 }
 
 /**
@@ -100,27 +107,32 @@ async function resolveRoot($: EngineInterface, cwd: string): Promise<{ root: str
     // Identity is the literal top level: no superproject climb here.
     const root = top ?? cwd
     let projectId: string | null = null
+    let isSure = probe.isSure
     if (top !== null || workspace !== null) {
       const marker = workspace === null ? '' : await $.fs.read(join(workspace, MARKER)).catch(() => '')
+      const remote = workspace === null ? await git($, root, ['remote', 'get-url', 'origin']) : null
+      const common =
+        workspace === null ? await git($, root, ['rev-parse', '--path-format=absolute', '--git-common-dir']) : null
+      isSure = isSure && (remote?.isSure ?? true) && (common?.isSure ?? true)
       projectId = await projectIdentifier({
         root,
         workspace,
         workspaceId: typeof marker === 'string' ? markerId(marker) : null,
-        remoteUrl: workspace === null ? ((await git($, root, ['remote', 'get-url', 'origin'])).out ?? '') : '',
-        commonDir:
-          workspace === null
-            ? ((await git($, root, ['rev-parse', '--path-format=absolute', '--git-common-dir'])).out ?? '')
-            : '',
+        remoteUrl: remote?.out ?? '',
+        commonDir: common?.out ?? '',
       })
     }
 
-    return { root: omcRoot({ stateDir, cwd, home, gitTop: top, workspace, projectId }), isSure: probe.isSure }
+    return { root: omcRoot({ stateDir, cwd, home, gitTop: top, workspace, projectId }), isSure }
   }
   // OMC skips a workspace marker in a sensitive location, with or without git.
   const anchor = workspace !== null && !isSensitiveLocation(workspace, home, tmp) ? workspace : null
-  const gitTop = anchor === null ? await climb($, top) : top
+  const climbed = anchor === null ? await climb($, top) : { root: top, isSure: true }
 
-  return { root: omcRoot({ stateDir: null, cwd, home, gitTop, workspace: anchor, projectId: null }), isSure: probe.isSure }
+  return {
+    root: omcRoot({ stateDir: null, cwd, home, gitTop: climbed.root, workspace: anchor, projectId: null }),
+    isSure: probe.isSure && climbed.isSure,
+  }
 }
 
 async function readOwned($: EngineInterface, path: string, sessionId: string, isLegacy: boolean): Promise<ModeState | null> {
@@ -162,8 +174,9 @@ async function readAll($: EngineInterface): Promise<void> {
   const cwd = await $.session.cwd()
   if (cached === null || cached.cwd !== cwd || cached.reads >= RESOLVE_EVERY) {
     const resolved = await resolveRoot($, cwd)
-    // A root found while git could not be asked is used once, not kept.
-    cached = resolved.isSure ? { cwd, root: resolved.root, reads: 0 } : null
+    // A root found while git could not be asked is used once, not kept. This
+    // read is the first of RESOLVE_EVERY.
+    cached = resolved.isSure ? { cwd, root: resolved.root, reads: 1 } : null
     await judgeAll($, resolved.root, sessionId)
 
     return
@@ -177,9 +190,10 @@ async function judgeAll($: EngineInterface, root: string | null, sessionId: stri
   if (root !== null && isSafeSessionId(sessionId)) {
     const home = (await $.env.get('HOME')) || null
     const now = await $.clock.now()
+    const current = { ...limits, ralphHardLimit: ralphHardLimit((await $.env.get('OMC_SECURITY')) || null) }
     for (const mode of GUARDED_MODES) {
       const state = await readMode($, root, sessionId, mode, home)
-      const finding = state === null ? null : judge(mode, state, now, limits)
+      const finding = state === null ? null : judge(mode, state, now, current)
       if (finding !== null) {
         found.push(finding)
       }
@@ -233,7 +247,9 @@ export const register: Register = (on, options) => {
   on('session.start', async ($, e, next) => {
     cached = null
     later($)
-    $.clock.every(REFRESH_MS, () => {
+    // One timed read per mod, however many times the session starts.
+    ticker?.cancel()
+    ticker = $.clock.every(REFRESH_MS, () => {
       refresh($).catch(error => log($, error))
     })
 

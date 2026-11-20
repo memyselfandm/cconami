@@ -425,22 +425,28 @@ HUD shows the active mode, but not whether the run behind it is still alive.
   not yet stale, as in OMC. An active state with no readable time at all is shown
   as stale "with no activity time recorded". A stale run is reported as stale
   even when its counters are high: a dead run is not looping.
-- **Looping.** The mode is active and fresh, and has reached the ceiling OMC's
-  stop hook enforces (`scripts/persistent-mode.mjs`), so the hook has stopped
-  reinforcing a run that is still marked active:
+- **Looping.** The mode is active and fresh, and has reached a limit OMC's stop
+  hook enforces (`scripts/persistent-mode.mjs`):
   - autopilot and team: `reinforcement_count` at 20 (OMC reinforces while the new
-    count is at most 20);
+    count is at most 20, so at 20 the last reinforcement has been given);
   - ultragoal: `reinforcement_count` at `max_reinforcements || 50`;
-  - ralph: `iteration` at `max_iterations || 100`. ralph has no reinforcement
-    ceiling. OMC raises `max_iterations` by 10 each time it is reached, so this
-    rule rarely fires; it catches a ralph stuck at its cap.
+  - ralph: `iteration` within 10% of OMC's hard limit, that is at 450 of 500, or
+    at 180 of 200 when `OMC_SECURITY=strict` (`getHardMaxIterations`). ralph has
+    no reinforcement ceiling, and `max_iterations` is not a limit: when
+    `iteration` reaches it, OMC adds 10 and goes on, so 100/100, 100/110 and
+    110/110 are all healthy. Only the hard limit ends the run, by setting
+    `active` to false. A `hardMaxIterations` in OMC's config files is not read;
+    in strict mode it can only lower the limit, and OMC then ends the run itself.
 
   OMC never resets `reinforcement_count` during a run, so a long healthy run
   climbs past any small fixed number; a team run at 6 is not looping. The
-  `reinforcementLimit` setting, when set, replaces every ceiling. A run with
-  `awaiting_confirmation: true` is held for the person and not reinforced, so it
-  is never looping, though it can still be stale. Counts stored as strings, as
-  `state_write` stores some, are read as numbers.
+  `reinforcementLimit` setting, when set, replaces every reinforcement ceiling.
+  A run with `awaiting_confirmation: true` is held for the person and not
+  reinforced, but only for two minutes from `awaiting_confirmation_set_at`
+  (else `started_at`), as OMC's `isAwaitingConfirmation` holds it; within that
+  window it is not looping, though it can still be stale, and after it the
+  ceilings apply again. Counts stored as strings, as `state_write` stores some,
+  are read as numbers.
 - **The phase.** `current_phase ?? phase ?? stage`, the order OMC reads it in.
   Left out of the line when none is set.
 - **Read only.** The mod reads the state files with `$.fs.read`, and runs `git`
@@ -514,8 +520,10 @@ instead, so a marker between the working directory and the top level is found
 here and not by OMC; that layout is unusual.
 
 The root is worked out when the working directory changes, at session start, and
-again every 10 reads. A root found while `git` could not answer (a timeout, git
-missing: anything but "not a git repository") is used for that read only.
+again every 10 reads. `git` runs under `LC_ALL=C`. A root found while any of its
+`git` probes (top level, superproject, origin remote, common dir) could not
+answer (a timeout, git missing: anything but "not a git repository" or no such
+remote) is used for that read only.
 
 ### What it does not do
 
