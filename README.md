@@ -30,7 +30,7 @@ then also addressable as `<plugin>@cconami`. To pick up changes, run
 | Plugin | Description | Contents |
 |---|---|---|
 | [`linear-workflow`](plugins/linear-workflow/) | Refine, break down, analyze and execute Linear tickets; reconcile projects and report workstream status | 8 skills, including the `pm-context` tracker layer |
-| [`product`](plugins/product/) | Workshop PRDs and brainstorm designs | 2 skills |
+| [`product`](plugins/product/) | Workshop PRDs (with feature prioritisation and product overview modes) and brainstorm designs | 2 skills |
 | [`authoring`](plugins/authoring/) | Build skills and subagents, scrape documentation, configure Ralph | 4 skills, 6 agents |
 | [`operating-model`](plugins/operating-model/) | How agent sessions work with each other and the owner: checkpoints, owner asks, isolated PR review, workstream leads, peer coordination | 5 skills, 1 hook (command guard) |
 | [`owner-inbox`](plugins/owner-inbox/) | The Linear issues waiting on you, in a band above the prompt and a panel toggled with `/inbox` | mod |

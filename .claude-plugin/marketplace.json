@@ -11,7 +11,7 @@
     {
       "name": "product",
       "source": "./plugins/product",
-      "description": "Product skills: workshop PRDs and brainstorm designs."
+      "description": "Product skills: workshop PRDs, prioritise features, write product overviews, and brainstorm designs."
     },
     {
       "name": "authoring",

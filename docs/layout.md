@@ -48,7 +48,7 @@ both.
 | Plugin | Scope | Not in scope |
 |---|---|---|
 | `linear-workflow` | Working a tracker: refining, breaking down, executing, reconciling and reporting on tickets and projects. `pm-context` is the tracker layer the other skills call | Product discovery (`product`); how sessions coordinate (`operating-model`) |
-| `product` | Shaping work before it is ticketed: PRDs and design brainstorms | Writing tickets, which hands off to `linear-workflow` |
+| `product` | Shaping work before it is ticketed: PRDs, feature prioritisation, product overviews and design brainstorms | Writing tickets, which hands off to `linear-workflow` |
 | `authoring` | Building agent tooling: skills, subagents, Ralph configs, scraped docs; the six domain subagents | Anything that runs a workflow on a tracker |
 | `operating-model` | How several agent sessions and the owner work together: checkpoints, owner asks, isolated PR review, workstream leads, peer messages, and the Bash command guard hook | Tracker workflow skills; the interface (mods) |
 | `owner-inbox`, `peer-messages`, `ci-status`, `mcp-health` | Mods: Claude Code interface changes, one concern each | Skills or agents |
