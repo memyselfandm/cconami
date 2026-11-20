@@ -2,18 +2,33 @@ import { atom, read, update } from 'claude-code'
 import type { Register } from 'claude-code'
 
 import type { Spend } from '../types'
-import { add, bandText, chooseBudget, level, total, ZERO } from './budget'
+import {
+  add,
+  addTokens,
+  bandText,
+  chooseBudget,
+  level,
+  malformed,
+  RESET_REASONS,
+  total,
+  ZERO,
+} from './budget'
 
 const spent = atom({ plugin: 'token-budget', key: 'spent' } as const, ZERO)
-const budget = atom({ plugin: 'token-budget', key: 'budget' } as const, null as number | null)
 
 export const register: Register = (on, options) => {
-  // The budget is read when the session starts, and again on each reload: a
-  // change to the setting reloads the mod. `$.state` keeps the spend across a
-  // reload, so nothing here resets it.
+  // Once per load: a change to the setting reloads the mod, so a corrected
+  // value is checked again.
+  let hasWarned = false
+
+  // The spend lives in `$.state`, which a reload keeps; this hook never
+  // touches it. It only names a budget value that cannot be read.
   on('session.start', async ($, e, next) => {
-    const chosen = chooseBudget(options.budget, await $.env.get('OMC_RUN_BUDGET_TOKENS'))
-    await update($, budget, () => chosen)
+    const problem = malformed(options.budget, await $.env.get('OMC_RUN_BUDGET_TOKENS'))
+    if (problem !== null && !hasWarned) {
+      hasWarned = true
+      $.ui.toast(`token-budget: ignoring ${problem}; a budget is a token count of at least 1`)
+    }
 
     return next(e)
   })
@@ -32,18 +47,36 @@ export const register: Register = (on, options) => {
     return result
   })
 
-  // A /clear starts a new conversation with no `session.start` after it.
+  // A compaction's summarising request is not part of any turn's usage. Only
+  // observed: the result is returned as `next` resolved it.
+  on('session.compact', async ($, e, next) => {
+    const result = await next(e)
+    const usage = result.skip === undefined ? result.usage : undefined
+    if (usage !== undefined) {
+      await update($, spent, (prior: Spend) => addTokens(prior, usage))
+    }
+
+    return result
+  })
+
+  // A /clear or an in-process /resume begins another conversation, with no
+  // `session.start` after it. Other endings leave the count alone.
   on('session.end', async ($, e, next) => {
-    if (e.reason === 'clear') {
+    if (RESET_REASONS.includes(e.reason)) {
       await update($, spent, () => ZERO)
     }
 
     return next(e)
   })
 
+  // The budget is worked out at each draw from the setting and the variable,
+  // so nothing about it can go stale.
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
-    const limit = await read($, budget)
-    if (e.props.hasSurvey || limit === null) {
+    if (e.props.hasSurvey) {
+      return next(e)
+    }
+    const limit = chooseBudget(options.budget, await $.env.get('OMC_RUN_BUDGET_TOKENS'))
+    if (limit === null) {
       return next(e)
     }
     const tokens = total(await read($, spent))

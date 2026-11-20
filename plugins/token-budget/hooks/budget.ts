@@ -1,12 +1,12 @@
-// The pure half of token-budget: adding a turn's usage to the session's spend,
-// choosing the budget, and turning spend and budget into the band's words and
-// level. Nothing here reaches `$`, so the tests drive it directly.
+// The pure half of token-budget: adding usage to the session's spend, choosing
+// the budget, and turning spend and budget into the band's words and level.
+// Nothing here reaches `$`, so the tests drive it directly.
 
 import type { ModelUsage } from 'claude-code'
 
 import type { Spend } from '../types'
 
-/** Spend at the start of a session, and after a /clear. */
+/** Spend at the start of a session, and after a /clear or an in-process /resume. */
 export const ZERO: Spend = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, turns: 0 }
 
 /** The share of the budget at which the band turns to a warning. */
@@ -15,14 +15,22 @@ export const WARN_PERCENT = 90
 /** The band's level: below 90%, from 90%, and from 100% of the budget. */
 export type Level = 'ok' | 'warning' | 'alert'
 
-/** Adds one turn's usage, all four counts, to the spend so far. */
+/** The `session.end` reasons after which another conversation's count begins. */
+export const RESET_REASONS: readonly string[] = ['clear', 'resume']
+
+/** Adds one turn's usage, all four counts, to the spend so far, and counts the turn. */
 export function add(spend: Spend, usage: ModelUsage): Spend {
+  return { ...addTokens(spend, usage), turns: spend.turns + 1 }
+}
+
+/** Adds usage from a request outside a turn (a compaction); the turn count stays. */
+export function addTokens(spend: Spend, usage: ModelUsage): Spend {
   return {
     input: spend.input + usage.input_tokens,
     output: spend.output + usage.output_tokens,
     cacheRead: spend.cacheRead + usage.cache_read_input_tokens,
     cacheWrite: spend.cacheWrite + usage.cache_creation_input_tokens,
-    turns: spend.turns + 1,
+    turns: spend.turns,
   }
 }
 
@@ -34,18 +42,27 @@ export function total(spend: Spend): number {
   return spend.input + spend.output + spend.cacheRead + spend.cacheWrite
 }
 
+/** Whether a budget value is set at all: not absent, blank or the setting's 0. */
+function isSet(value: unknown): boolean {
+  if (value === undefined || value === null || value === 0) {
+    return false
+  }
+
+  return !(typeof value === 'string' && value.trim() === '')
+}
+
 /**
- * A budget value as a positive number of tokens, or null when it is unset, not
- * a number, zero or negative. Strings are read with `Number`, as OMC's guard
- * reads OMC_RUN_BUDGET_TOKENS, so `1000000` and `1e6` are both a million.
+ * A budget value as a number of tokens of at least 1, or null when it is unset
+ * or malformed. Strings are read with `Number`, as OMC's guard reads
+ * OMC_RUN_BUDGET_TOKENS, so `1000000` and `1e6` are both a million.
  */
 export function parseBudget(value: unknown): number | null {
-  if (typeof value === 'string' && value.trim() === '') {
+  if (!isSet(value)) {
     return null
   }
   const parsed = typeof value === 'number' || typeof value === 'string' ? Number(value) : NaN
 
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : null
+  return Number.isFinite(parsed) && parsed >= 1 ? parsed : null
 }
 
 /** The budget: the setting when it is set, else OMC_RUN_BUDGET_TOKENS, else none. */
@@ -53,17 +70,41 @@ export function chooseBudget(setting: unknown, env: string | undefined): number 
   return parseBudget(setting) ?? parseBudget(env)
 }
 
-/** A token count in the band's short form: 950, 412k, 1.0M, 12.5M. */
-export function compact(tokens: number): string {
-  if (tokens < 1_000) {
-    return String(Math.round(tokens))
+/**
+ * What to warn about when a budget value is set but cannot be read, or null.
+ * The variable is named only when the setting does not decide the budget.
+ */
+export function malformed(setting: unknown, env: string | undefined): string | null {
+  if (isSet(setting) && parseBudget(setting) === null) {
+    return `the budget setting ${JSON.stringify(setting)}`
   }
-  // 999,500 and up would round to "1000k": show it as 1.0M instead.
-  if (tokens < 999_500) {
-    return `${Math.round(tokens / 1_000)}k`
+  if (parseBudget(setting) === null && isSet(env) && parseBudget(env) === null) {
+    return `OMC_RUN_BUDGET_TOKENS=${JSON.stringify(env)}`
   }
 
-  return `${(tokens / 1_000_000).toFixed(1)}M`
+  return null
+}
+
+/**
+ * A token count in the band's short form, rounded down so the band never
+ * claims a tier early: 950, 412k, 999k, 1.0M, 12.4M, 1.2B.
+ */
+export function compact(tokens: number): string {
+  const tiers: readonly [number, string][] = [
+    [1_000_000_000, 'B'],
+    [1_000_000, 'M'],
+  ]
+  for (const [size, suffix] of tiers) {
+    if (tokens >= size) {
+      // Whole tenths first, so no float error lands below a tenth's boundary.
+      return `${(Math.floor(tokens / (size / 10)) / 10).toFixed(1)}${suffix}`
+    }
+  }
+  if (tokens >= 1_000) {
+    return `${Math.floor(tokens / 1_000)}k`
+  }
+
+  return String(Math.floor(tokens))
 }
 
 /**

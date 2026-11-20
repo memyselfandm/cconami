@@ -1,12 +1,14 @@
-import type { ModelUsage, On, TurnUsage } from 'claude-code'
+import type { ModelUsage, On, SessionMessage, TurnUsage } from 'claude-code'
 import { expect, mock, test } from 'claude-code/testing'
 
 import {
   add,
+  addTokens,
   bandText,
   chooseBudget,
   compact,
   level,
+  malformed,
   parseBudget,
   percent,
   total,
@@ -28,6 +30,8 @@ const BAND = {
   },
 } as const
 
+const LINE = { type: 'Text', text: /^Budget / } as const
+
 function usage(input: number, output: number, cacheRead: number, cacheWrite: number): TurnUsage {
   return {
     input_tokens: input,
@@ -48,13 +52,25 @@ test('add sums all four counts and counts the turn', () => {
   expect(total(two)).toBe(11 + 22 + 303 + 4004)
 })
 
-test('parseBudget reads a positive number the way OMC reads its variable', () => {
+test('addTokens sums all four counts and leaves the turn count alone', () => {
+  const one = add(ZERO, usage(1, 1, 1, 1))
+  expect(addTokens(one, usage(10, 20, 300, 4000))).toEqual({
+    input: 11,
+    output: 21,
+    cacheRead: 301,
+    cacheWrite: 4001,
+    turns: 1,
+  })
+})
+
+test('parseBudget reads a number of at least 1 the way OMC reads its variable', () => {
   expect(parseBudget('1000000')).toBe(1_000_000)
   expect(parseBudget('1e6')).toBe(1_000_000)
   expect(parseBudget(' 500000 ')).toBe(500_000)
   expect(parseBudget(250_000)).toBe(250_000)
-  for (const unset of [undefined, null, '', '   ', '0', 0, -5, '-1', 'lots', NaN, Infinity, {}]) {
-    expect(parseBudget(unset)).toBeNull()
+  expect(parseBudget(1)).toBe(1)
+  for (const bad of [undefined, null, '', '   ', '0', 0, 0.5, '0.5', -5, '-1', 'lots', NaN, Infinity, {}]) {
+    expect(parseBudget(bad)).toBeNull()
   }
 })
 
@@ -67,15 +83,27 @@ test('the setting wins over the variable; either alone is used; neither is none'
   expect(chooseBudget(0, 'nope')).toBeNull()
 })
 
-test('compact writes counts as the band shows them', () => {
+test('malformed names a set value that cannot be read, and nothing else', () => {
+  expect(malformed(0, undefined)).toBeNull()
+  expect(malformed(0, '')).toBeNull()
+  expect(malformed(500_000, 'lots')).toBeNull()
+  expect(malformed(0, '1e6')).toBeNull()
+  expect(malformed(0, 'lots')).toBe('OMC_RUN_BUDGET_TOKENS="lots"')
+  expect(malformed(-5, '1e6')).toBe('the budget setting -5')
+  expect(malformed(0.5, undefined)).toBe('the budget setting 0.5')
+})
+
+test('compact writes counts as the band shows them, rounded down', () => {
   expect(compact(0)).toBe('0')
   expect(compact(950)).toBe('950')
   expect(compact(1_000)).toBe('1k')
-  expect(compact(412_000)).toBe('412k')
-  expect(compact(999_499)).toBe('999k')
-  expect(compact(999_500)).toBe('1.0M')
+  expect(compact(412_999)).toBe('412k')
+  expect(compact(999_600)).toBe('999k')
   expect(compact(1_000_000)).toBe('1.0M')
-  expect(compact(12_480_000)).toBe('12.5M')
+  expect(compact(1_099_999)).toBe('1.0M')
+  expect(compact(12_480_000)).toBe('12.4M')
+  expect(compact(999_999_999)).toBe('999.9M')
+  expect(compact(1_250_000_000)).toBe('1.2B')
 })
 
 test('the band text matches the ticket example', () => {
@@ -103,6 +131,8 @@ type Logic = {
   level: (spent: number, budget: number) => string
   chooseBudget: (setting: unknown, env: string | undefined) => number | null
   add: (spend: Spend, usage: ModelUsage) => Spend
+  addTokens: (spend: Spend, usage: ModelUsage) => Spend
+  compact: (tokens: number) => string
 }
 
 function failures(logic: Logic): string[] {
@@ -115,13 +145,18 @@ function failures(logic: Logic): string[] {
   if (logic.chooseBudget(500_000, '2000000') !== 500_000) found.push('setting wins')
   if (logic.chooseBudget(0, '2000000') !== 2_000_000) found.push('env fallback')
   if (logic.chooseBudget(0, undefined) !== null) found.push('no budget')
+  if (logic.chooseBudget(0, '0.5') !== null) found.push('budget below 1')
   if (logic.total(logic.add(ZERO, usage(5, 6, 70, 800))) !== 881) found.push('add')
+  const compacted = logic.addTokens(spend, usage(5, 6, 70, 800))
+  if (logic.total(compacted) !== 433 + 881 || compacted.turns !== 1) found.push('addTokens')
+  if (logic.compact(999_600) !== '999k') found.push('compact rounds up')
+  if (logic.compact(1_250_000_000) !== '1.2B') found.push('compact tiers')
 
   return found
 }
 
 test('mutation check: the real logic passes and every mutant is caught', () => {
-  const real: Logic = { total, level, chooseBudget, add }
+  const real: Logic = { total, level, chooseBudget, add, addTokens, compact }
   expect(failures(real)).toEqual([])
 
   const mutants: Record<string, Logic> = {
@@ -134,9 +169,22 @@ test('mutation check: the real logic passes and every mutant is caught', () => {
       ...real,
       chooseBudget: (s, v) => (typeof s === 'number' ? s : parseBudget(v)),
     },
-    'add ignores output': {
+    'a fraction counts as a budget': {
       ...real,
-      add: (s, u) => ({ ...add(s, u), output: s.output }),
+      chooseBudget: (s, v) => {
+        const n = Number(v)
+        return parseBudget(s) ?? (n > 0 ? n : null)
+      },
+    },
+    'add ignores output': { ...real, add: (s, u) => ({ ...add(s, u), output: s.output }) },
+    'a compaction counts as a turn': { ...real, addTokens: add },
+    'compact rounds to nearest': {
+      ...real,
+      compact: n => (n >= 999_500 ? `${(n / 1e6).toFixed(1)}M` : n >= 1_000 ? `${Math.round(n / 1_000)}k` : String(n)),
+    },
+    'compact has no B tier': {
+      ...real,
+      compact: n => (n >= 1e6 ? `${(Math.floor(n / 1e5) / 10).toFixed(1)}M` : compact(n)),
     },
   }
   for (const [name, mutant] of Object.entries(mutants)) {
@@ -145,14 +193,25 @@ test('mutation check: the real logic passes and every mutant is caught', () => {
 })
 
 // The mod in a session. The test's own hooks stand for the engine: they answer
-// session.start, turn.complete and session.end, and `mock.env` answers
-// `$.env.get`.
+// session.start, turn.complete, session.compact, session.end and ui.toast, and
+// `mock.env` answers `$.env.get`. `$.state` is the kit's own.
 
-function engine(on: On, env: Record<string, string>) {
+const MESSAGES: SessionMessage[] = [{ role: 'user', text: 'hello', toolUses: [] }]
+
+function engine(on: On, env: Record<string, string>, compaction?: TurnUsage) {
+  const toasts: string[] = []
   mock.env(on, env)
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('turn.complete', () => ({ text: '' }))
+  on('session.compact', () => (compaction === undefined ? { skip: 'test' } : { messages: MESSAGES, usage: compaction }))
   on('session.end', (_, e) => ({ sessionId: e.sessionId }))
+  on('ui.toast', (_, e) => {
+    toasts.push(e.text)
+
+    return { value: undefined }
+  })
+
+  return { toasts }
 }
 
 const START = { cwd: '/', surface: 'terminal', isInteractive: true } as const
@@ -167,6 +226,10 @@ function turn(n: number, spent: TurnUsage, agentId?: string) {
     usage: spent,
     ...(agentId === undefined ? {} : { agentId }),
   } as const
+}
+
+function end(reason: 'clear' | 'resume' | 'prompt_input_exit' | 'other') {
+  return { reason, sessionId: 's1', resume: { id: 's1' } } as const
 }
 
 test('with no budget set, nothing is drawn', async ($, on) => {
@@ -186,9 +249,10 @@ test('the variable sets the budget; main and subagent turns both count', async (
 
   for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await $.ui.mount({ ...BAND, surface })
-    const text = await ui.find({ type: 'Text', text: /^Budget / })
+    const text = await ui.find(LINE)
     expect(text?.text).toBe('Budget 412k / 1.0M (41%)')
     expect(text?.props.color).toBeUndefined()
+    expect(text?.props.bold).toBe(false)
     await ui.unmount()
   }
 })
@@ -198,53 +262,127 @@ test('the setting wins over the variable', { options: { budget: 500_000 } }, asy
   await $.session.start(START)
   await $.turn.complete(turn(1, usage(0, 100_000, 0, 0)))
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
-  expect((await ui.find({ type: 'Text', text: /^Budget / }))?.text).toBe('Budget 100k / 500k (20%)')
+  expect((await ui.find(LINE))?.text).toBe('Budget 100k / 500k (20%)')
   await ui.unmount()
 })
 
-test('the band warns at 90% and alerts at 100%', { options: { budget: 1_000_000 } }, async ($, on) => {
+test('the band warns at 90% and alerts, bold, at 100%', { options: { budget: 1_000_000 } }, async ($, on) => {
   engine(on, {})
   await $.session.start(START)
 
   await $.turn.complete(turn(1, usage(0, 0, 900_000, 0)))
   let ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
-  let text = await ui.find({ type: 'Text', text: /^Budget / })
+  let text = await ui.find(LINE)
   expect(text?.text).toBe('Budget 900k / 1.0M (90%)')
   expect(text?.props.color).toBe('warning')
+  expect(text?.props.bold).toBe(false)
   await ui.unmount()
 
   await $.turn.complete(turn(2, usage(0, 100_000, 0, 0)))
   ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
-  text = await ui.find({ type: 'Text', text: /^Budget / })
+  text = await ui.find(LINE)
   expect(text?.text).toBe('Budget 1.0M / 1.0M (100%)')
   expect(text?.props.color).toBe('error')
+  expect(text?.props.bold).toBe(true)
   await ui.unmount()
 })
 
-test('a turn with no usage adds nothing, and /clear starts the count over', { options: { budget: 1_000_000 } }, async ($, on) => {
+test('a survey hides the band', { options: { budget: 1_000_000 } }, async ($, on) => {
+  engine(on, {})
+  await $.session.start(START)
+  await $.turn.complete(turn(1, usage(0, 100_000, 0, 0)))
+  const ui = await $.ui.mount({ ...BAND, props: { ...BAND.props, hasSurvey: true }, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text' })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('a turn with no usage adds nothing', { options: { budget: 1_000_000 } }, async ($, on) => {
   engine(on, {})
   await $.session.start(START)
   await $.turn.complete(turn(1, usage(0, 200_000, 0, 0)))
   const { usage: _dropped, ...aborted } = { ...turn(2, usage(0, 0, 0, 0)), isAborted: true, reason: 'aborted' as const }
   await $.turn.complete(aborted)
-
-  let ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
-  expect((await ui.find({ type: 'Text', text: /^Budget / }))?.text).toBe('Budget 200k / 1.0M (20%)')
-  await ui.unmount()
-
-  await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } })
-  ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
-  expect((await ui.find({ type: 'Text', text: /^Budget / }))?.text).toBe('Budget 0 / 1.0M (0%)')
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect((await ui.find(LINE))?.text).toBe('Budget 200k / 1.0M (20%)')
   await ui.unmount()
 })
 
-test('a restarted module keeps the spend', { options: { budget: 1_000_000 } }, async ($, on) => {
+for (const reason of ['clear', 'resume'] as const) {
+  test(`session.end for ${reason} starts the count over`, { options: { budget: 1_000_000 } }, async ($, on) => {
+    engine(on, {})
+    await $.session.start(START)
+    await $.turn.complete(turn(1, usage(0, 200_000, 0, 0)))
+    await $.session.end(end(reason))
+    const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+    expect((await ui.find(LINE))?.text).toBe('Budget 0 / 1.0M (0%)')
+    await ui.unmount()
+  })
+}
+
+test('session.end for prompt_input_exit or other keeps the count', { options: { budget: 1_000_000 } }, async ($, on) => {
   engine(on, {})
-  on('state.get', { plugin: 'token-budget', key: 'spent' }, () => ({
-    value: { value: { input: 0, output: 300_000, cacheRead: 0, cacheWrite: 0, turns: 3 }, version: 1 },
-  }))
+  await $.session.start(START)
+  await $.turn.complete(turn(1, usage(0, 200_000, 0, 0)))
+  await $.session.end(end('prompt_input_exit'))
+  await $.session.end(end('other'))
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect((await ui.find(LINE))?.text).toBe('Budget 200k / 1.0M (20%)')
+  await ui.unmount()
+})
+
+test('a reload (session.start again) keeps the spend', { options: { budget: 1_000_000 } }, async ($, on) => {
+  engine(on, {})
+  await $.session.start(START)
+  await $.turn.complete(turn(1, usage(0, 300_000, 0, 0)))
   await $.session.start(START)
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
-  expect((await ui.find({ type: 'Text', text: /^Budget / }))?.text).toBe('Budget 300k / 1.0M (30%)')
+  expect((await ui.find(LINE))?.text).toBe('Budget 300k / 1.0M (30%)')
   await ui.unmount()
+})
+
+test('a compaction adds its tokens but not a turn', { options: { budget: 1_000_000 } }, async ($, on) => {
+  engine(on, {}, usage(100_000, 20_000, 0, 30_000))
+  // Watches the writes on their way to the kit's own state, which answers them.
+  let written: Spend | undefined
+  on('state.set', { plugin: 'token-budget', key: 'spent' }, (_, e, next) => {
+    written = e.value as Spend
+    return next(e)
+  })
+  await $.session.start(START)
+  await $.turn.complete(turn(1, usage(0, 100_000, 0, 0)))
+  const result = await $.session.compact({ trigger: 'manual', messages: MESSAGES })
+  expect(result.skip).toBeUndefined()
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect((await ui.find(LINE))?.text).toBe('Budget 250k / 1.0M (25%)')
+  await ui.unmount()
+  expect(written?.turns).toBe(1)
+  expect(written === undefined ? 0 : total(written)).toBe(250_000)
+})
+
+test('a skipped compaction adds nothing', { options: { budget: 1_000_000 } }, async ($, on) => {
+  engine(on, {})
+  await $.session.start(START)
+  const result = await $.session.compact({ trigger: 'manual', messages: MESSAGES })
+  expect(result.skip).toBe('test')
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect((await ui.find(LINE))?.text).toBe('Budget 0 / 1.0M (0%)')
+  await ui.unmount()
+})
+
+test('a malformed variable is named in one toast, and nothing is drawn', async ($, on) => {
+  const { toasts } = engine(on, { OMC_RUN_BUDGET_TOKENS: 'lots' })
+  await $.session.start(START)
+  await $.session.start(START)
+  expect(toasts).toEqual([
+    'token-budget: ignoring OMC_RUN_BUDGET_TOKENS="lots"; a budget is a token count of at least 1',
+  ])
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text' })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('a readable budget raises no toast', async ($, on) => {
+  const { toasts } = engine(on, { OMC_RUN_BUDGET_TOKENS: '1e6' })
+  await $.session.start(START)
+  expect(toasts).toEqual([])
 })

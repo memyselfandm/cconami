@@ -1,6 +1,7 @@
 /**
  * The session's token spend so far, by the API's four counts, summed over
- * every model turn that reported usage: the main loop's and each subagent's.
+ * every model turn that reported usage (the main loop's and each subagent's)
+ * and every compaction request.
  */
 export type Spend = {
   /** Uncached input tokens (`input_tokens`). */
@@ -11,7 +12,7 @@ export type Spend = {
   cacheRead: number
   /** Input tokens written to the prompt cache (`cache_creation_input_tokens`). */
   cacheWrite: number
-  /** How many turns were counted. */
+  /** How many turns were counted; compactions are not turns. */
   turns: number
 }
 
@@ -19,8 +20,6 @@ declare module 'claude-code' {
   interface PluginState {
     'token-budget': {
       spent: Spend
-      /** The budget in tokens, or null when none is set. */
-      budget: number | null
     }
   }
 }

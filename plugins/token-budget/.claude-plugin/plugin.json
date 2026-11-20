@@ -1,7 +1,7 @@
 {
   "name": "token-budget",
   "version": "0.1.0",
-  "description": "Shows this session's token spend against a budget (OMC_RUN_BUDGET_TOKENS or a setting) in a band above the prompt, turning to a warning at 90% and an alert at 100%. Hidden when no budget is set.",
+  "description": "Shows the session's token spend (main conversation, subagents and compactions) against a budget from the budget setting or OMC_RUN_BUDGET_TOKENS, in a band above the prompt: a warning from 90%, an alert from 100%. Display only; hidden when no budget is set.",
   "license": "MIT",
   "author": { "name": "memyselfandm" },
   "types": "./types/index.d.ts",
@@ -9,7 +9,7 @@
     "budget": {
       "type": "number",
       "title": "Token budget",
-      "description": "Tokens this session may spend before the band turns to an alert. 0 or blank uses OMC_RUN_BUDGET_TOKENS; when both are set, this value wins.",
+      "description": "Tokens this session may spend before the band turns to an alert; at least 1. 0 uses OMC_RUN_BUDGET_TOKENS instead; when both are set, this value wins. Any other value is ignored with a one-time notice.",
       "default": 0
     }
   }
