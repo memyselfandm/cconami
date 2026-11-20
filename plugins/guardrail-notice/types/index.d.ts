@@ -21,6 +21,8 @@ declare module 'claude-code' {
     'guardrail-notice': {
       /** Refusals still waiting on the person, newest first, one per call key. */
       active: Refusal[]
+      /** The tool_use_ids that still have a `call` entry, newest first, at most 50; older entries are set to null. */
+      calls: string[]
       /** The refusal behind each refused call's row, keyed by its tool_use_id; null for any other row. */
       call: StateFamily<Refusal | null>
     }

@@ -8,10 +8,26 @@ import { atom, read, update } from 'claude-code'
 import type { CatchHandler, EngineInterface, Hook, ToolCallEnvelope } from 'claude-code'
 
 import type { Refusal } from '../types'
-import { addActive, BUILT_IN, callKey, clearKey, describe, isShown, summary } from './logic'
+import { addActive, BUILT_IN, MAX_CALLS, callKey, clearKey, describe, isShown, summary, trackCall } from './logic'
 import type { Source } from './logic'
 
 const active = atom({ plugin: 'guardrail-notice', key: 'active' } as const, [] as Refusal[])
+// The ids of the refused calls that still have a card entry, newest first.
+const calls = atom({ plugin: 'guardrail-notice', key: 'calls' } as const, [] as string[])
+
+// How many successes of each call key have been seen, newest keys last and
+// at most MAX_CALLS of them. A refusal's write is not one update (two atoms),
+// so record compares this against what it saw when the refusal was decided.
+const successes = new Map<string, number>()
+
+function markSuccess(key: string): void {
+  const count = successes.get(key) ?? 0
+  successes.delete(key)
+  successes.set(key, count + 1)
+  if (successes.size > MAX_CALLS) {
+    successes.delete(successes.keys().next().value as string)
+  }
+}
 
 /** The settings the recorded work reads; register sets them once per load. */
 const settings: { sources: readonly Source[]; isToasting: boolean } = { sources: BUILT_IN, isToasting: true }
@@ -33,6 +49,21 @@ function log($: EngineInterface, what: string, error: unknown): void {
 
 async function record($: EngineInterface, e: ToolCallEnvelope, reason: string): Promise<void> {
   const refusal = describe({ tool: e.tool, toolUseId: e.tool_use_id, input: e }, reason, settings.sources)
+  // Read before the first write: a success that lands after this point is
+  // one the re-check below must catch.
+  const seen = successes.get(refusal.key) ?? 0
+  // A call whose refusal still waits keeps its card, whatever the cap says.
+  const waiting = (await read($, active)).map(item => item.toolUseId)
+  let evicted: string[] = []
+  await update($, calls, ids => {
+    const tracked = trackCall(ids, refusal.toolUseId, waiting)
+    evicted = tracked.evicted
+
+    return tracked.ids
+  })
+  for (const id of evicted) {
+    await update($, atom({ plugin: 'guardrail-notice', key: 'call', id } as const, null), () => null)
+  }
   await update($, atom({ plugin: 'guardrail-notice', key: 'call', id: refusal.toolUseId } as const, null), () => refusal)
   let isNew = true
   await update($, active, list => {
@@ -40,7 +71,15 @@ async function record($: EngineInterface, e: ToolCallEnvelope, reason: string): 
 
     return addActive(list, refusal)
   })
-  if (settings.isToasting && isNew) {
+  // The entry and the list are two atoms, so they cannot change in one
+  // update. If an identical call succeeded while they were written, its
+  // clear may have run before the entry existed: clear it again.
+  let isCleared = false
+  if ((successes.get(refusal.key) ?? 0) !== seen) {
+    isCleared = true
+    await update($, active, list => clearKey(list, refusal.key))
+  }
+  if (settings.isToasting && isNew && !isCleared) {
     $.ui.toast(summary(refusal))
   }
 }
@@ -49,6 +88,7 @@ async function record($: EngineInterface, e: ToolCallEnvelope, reason: string): 
 // and input) clears the waiting refusal.
 async function clear($: EngineInterface, e: ToolCallEnvelope): Promise<void> {
   const key = callKey(e.tool, e)
+  markSuccess(key)
   if ((await read($, active)).some(item => item.key === key)) {
     await update($, active, list => clearKey(list, key))
   }
