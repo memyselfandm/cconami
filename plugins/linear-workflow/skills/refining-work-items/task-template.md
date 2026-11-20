@@ -10,7 +10,7 @@ when" section that names its evidence, because that is what a reconciliation che
 # {title}
 
 **Project**: {project} | **Parent**: {parent key, if a sub-issue}
-**Priority**: {P0|P1|P2|P3|P4}
+**Priority**: {urgent|high|normal|low|none}
 **Complexity**: {Small|Medium}
 
 ---
@@ -44,11 +44,9 @@ when" section that names its evidence, because that is what a reconciliation che
 
 ## Done when
 
-- [ ] {DoD criterion 1}
-- [ ] {DoD criterion 2}
-- [ ] {DoD criterion 3}
-- [ ] Tests pass
-- [ ] No regressions
+- [ ] {The change, and its evidence: "a pull request merges that <does X>"}
+- [ ] {A check that proves it: "`<test command>` passes, including the new test for X"}
+- [ ] {If a running system changes: "the change is live and <check> shows it"}
 
 ```
 
@@ -57,7 +55,7 @@ when" section that names its evidence, because that is what a reconciliation che
 ```markdown
 # Bug: {title}
 
-**Priority**: {P0|P1|P2|P3|P4}
+**Priority**: {urgent|high|normal|low|none}
 **Severity**: {Critical|Major|Minor|Trivial}
 
 ---
@@ -113,11 +111,10 @@ when" section that names its evidence, because that is what a reconciliation che
 
 ## Done when
 
-- [ ] Bug is fixed
-- [ ] Root cause documented
-- [ ] Regression test added
-- [ ] No new issues introduced
-- [ ] The fix is live where the bug was seen, and the reproduction steps no longer reproduce it
+- [ ] A pull request merges that fixes the cause, with the root cause stated in its description
+- [ ] A regression test that fails before the fix and passes after it is part of that pull request
+- [ ] The project's checks pass on the merged change (`<test command>`)
+- [ ] The fix is live where the bug was seen, and the reproduction steps above no longer reproduce it
 
 ```
 
@@ -126,7 +123,7 @@ when" section that names its evidence, because that is what a reconciliation che
 ```markdown
 # Chore: {title}
 
-**Priority**: {P0|P1|P2|P3|P4}
+**Priority**: {urgent|high|normal|low|none}
 **Category**: {Maintenance|Refactoring|DevOps|Documentation|Tooling}
 
 ---
@@ -153,9 +150,9 @@ when" section that names its evidence, because that is what a reconciliation che
 
 ## Done when
 
-- [ ] {DoD criterion 1}
-- [ ] {DoD criterion 2}
-- [ ] {DoD criterion 3}
+- [ ] {The change, and its evidence: "a pull request merges that <updates X>"}
+- [ ] {A check that proves nothing broke: "`<check command>` passes"}
+- [ ] {If a running system changes: "<check> shows the new version is live"}
 
 ```
 
@@ -174,16 +171,19 @@ If type not specified, detect from:
 - "migrate", "deprecate", "remove"
 
 ### Keywords suggesting a small ticket:
-- "add", "create", "implement", "build"
-- "configure", "setup", "integrate"
-- Default if no other signals
+- "add", "create", "implement", "build", "configure", "setup", "integrate", **and** the
+  change fits in one pull request with no design questions
+
+### Default
+With no other signal, the type is `ticket` and the full
+[ticket-template.md](ticket-template.md) applies, as in the skill's type detection.
 
 ## Validation Checklist
 
 ### Small ticket
 - [ ] Clear, actionable title
 - [ ] Description explains what to do
-- [ ] Definition of done is specific
+- [ ] "Done when" lines each name their evidence
 - [ ] Fits in one pull request
 - [ ] In a project; parent linked if it is a sub-issue
 
@@ -197,7 +197,7 @@ If type not specified, detect from:
 ### Chore
 - [ ] Scope is well-defined
 - [ ] Approach is clear
-- [ ] Definition of done is measurable
+- [ ] "Done when" lines each name their evidence
 - [ ] Small enough for one pull request
 
 ## Quick Prompts (Create Mode)

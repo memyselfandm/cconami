@@ -35,7 +35,8 @@ The project or the scheduled job supplies these. Defaults in brackets.
 
 ## Inputs
 
-Read these, and only these:
+Read these, and only these (`list_projects`, `list_initiatives`, `list_updates`,
+`list_items`, `get_item`, `list_comments`):
 
 1. **Projects and initiatives in progress**, each with its latest update and its open
    tickets, plus each ticket's status, last activity and blocking links.
@@ -100,7 +101,8 @@ only where the owner has pre-approved this one write for the runner:
 
 1. Read both workstreams' tickets and pull requests, then decide the order.
 2. Answer where you were asked, with the ruling and its reasons.
-3. Record the ruling as **one comment** on the affected project or initiative, naming
+3. Record the ruling as **one comment** on the affected project or initiative
+   (`add_comment({project: ...} | {initiative: ...}, body)`), naming
    the tickets it orders, and sign it as your platform note says. Do not wait for
    further approval.
 

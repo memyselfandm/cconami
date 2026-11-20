@@ -8,11 +8,16 @@
 
   ```sh
   gh pr list -R <owner/repo> --state open \
-    --json number,title,headRefName,updatedAt,statusCheckRollup,files
+    --json number,title,headRefName,headRefOid,statusCheckRollup,files,commits \
+    --jq '.[] | {number, title, headRefName, headRefOid, files: [.files[].path],
+                 checks: [.statusCheckRollup[] | {name, conclusion}],
+                 last_commit: (.commits | last | .committedDate)}'
   ```
 
-  `files` gives the changed paths for the collision check; `updatedAt` stands in for the
-  last push. Run this once per repository, not once per ticket.
+  `files` gives the changed paths for the collision check. Judge staleness by
+  `last_commit`, the date of the head commit, not by `updatedAt`, which also moves on
+  comments, labels and bot activity. Record `headRefOid` so the next run can tell whether
+  anything was pushed. Run this once per repository, not once per ticket.
 - Where the report goes depends on how it was started:
   - asked in a session: reply with the report text in the session;
   - a scheduled cloud routine (the `schedule` skill): the routine's prompt names the

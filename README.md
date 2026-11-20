@@ -10,7 +10,7 @@ It provides a structured approach to extending Claude Code's capabilities throug
 Skills for running agent work in Linear, where projects are workstreams, tickets are one to three units of value and initiatives cover large efforts (no time boxes). See [plugins/README.md](./plugins/README.md):
 - **`refining-work-items`** - turn an idea into a ticket with a checkable "Done when", or a project brief
 - **`breaking-down-work`** - split a project or an oversized ticket into tickets with blocking links
-- **`executing-work-items`** - implement named tickets with parallel agents, one pull request each
+- **`executing-work-items`** - implement named tickets with parallel agents, one branch and pull request at a time
 - **`reconciling-linear-projects`** - make a project's tickets match the pull requests and the running system
 - **`reporting-workstream-status`** - report what is stuck, stale or colliding across projects
 

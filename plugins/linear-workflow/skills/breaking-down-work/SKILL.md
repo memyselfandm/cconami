@@ -20,8 +20,10 @@ and writes go through [pm-context](../pm-context/SKILL.md). A ticket here means 
 
 - **Source**, one of:
   - a **project**: break its brief (the description) into tickets in that project;
-  - an **initiative**: propose which projects it needs, then break each down in turn
-    (one project per run; say which come next);
+  - an **initiative**: propose the projects it needs (name, one-line brief, lead if
+    known). After approval, create each missing one with
+    `create_project({name, description, initiative})`; then break down one project per
+    run and say which come next. Without approval, only propose;
   - a **ticket key**: split an oversized ticket into tickets in the same project.
 - `--project <name>`: put the tickets in a different project from the source's.
 - `--dry-run`: propose only; create nothing.

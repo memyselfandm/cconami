@@ -142,6 +142,19 @@ CreateProjectParams:
   initiative: string?
 ```
 
+### update_project(name_or_id, params) → Project
+
+```yaml
+UpdateProjectParams:   # only the fields given change
+  description: string?  # The brief
+  status: enum?         # planned | in_progress | paused | completed | cancelled
+  lead: string?
+  initiative: string?   # Attach to an initiative (null to detach)
+```
+
+A project's status belongs to its lead (see `linear-workflow`); other sessions report
+what they see instead of calling this with `status`.
+
 ### assign_to_project(key, project | null)
 
 Moves a ticket and, unless told otherwise, its sub-issues.
@@ -166,13 +179,31 @@ Initiative:
 
 Filter by `status`.
 
+### create_initiative(params) → Initiative
+
+```yaml
+CreateInitiativeParams:
+  name: string          # Required
+  description: string?  # The goal of the effort
+  owner: string?
+```
+
+Attach projects with `update_project(name, {initiative})`.
+
+### update_initiative(name_or_id, params) → Initiative
+
+Change `description`, `status` or `owner`; only the fields given change.
+
 ---
 
 ## Comments and updates
 
-### add_comment(key, body) → Comment
+`target` names what a comment belongs to: `{ticket: "ABC-123"}`, `{project: name}` or
+`{initiative: name}`. A bare ticket key is accepted as shorthand for `{ticket: key}`.
 
-### list_comments(key) → Comment[]
+### add_comment(target, body) → Comment
+
+### list_comments(target) → Comment[]
 
 ```yaml
 Comment:

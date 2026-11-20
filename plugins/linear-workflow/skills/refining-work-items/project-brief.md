@@ -11,7 +11,7 @@ or initiative description. For a one-pager, use [project-brief-lite.md](project-
 # Project: {title}
 
 **Initiative**: {initiative, if any}
-**Priority**: {P0|P1|P2|P3|P4}
+**Priority**: {urgent|high|normal|low|none}
 **Status**: {Planned|In Progress|Completed}
 **Lead**: {person or lead session}
 
@@ -36,6 +36,14 @@ or initiative description. For a one-pager, use [project-brief-lite.md](project-
 ### Success Metrics
 - {Metric 1}: {current} → {target}
 - {Metric 2}: {current} → {target}
+
+## Finished when
+{3-6 checkable lines that close the workstream. Each names its evidence, the same way a
+ticket's "Done when" does; a reconciliation checks them before the project closes.}
+
+- [ ] {Outcome, and the evidence that shows it}
+- [ ] {Outcome that needs a running system: "live, and <check> shows it"}
+- [ ] Every leftover sits on a named open ticket in another project
 ```
 
 **Prompts:**
@@ -267,6 +275,7 @@ Before starting work on the project:
 
 - [ ] Problem statement is clear and compelling
 - [ ] Success metrics are measurable
+- [ ] "Finished when" has checkable lines with their evidence
 - [ ] User stories cover primary use cases
 - [ ] Acceptance criteria are testable
 - [ ] Technical approach is feasible

@@ -17,7 +17,7 @@ This directory contains Claude Code skills following the Agent Skills specificat
 |-------|-------------|
 | [refining-work-items](linear-workflow/skills/refining-work-items/) | Turns an idea into a ticket with a "Done when", or a project brief |
 | [breaking-down-work](linear-workflow/skills/breaking-down-work/) | Splits a project or an oversized ticket into tickets with blocking links |
-| [executing-work-items](linear-workflow/skills/executing-work-items/) | Implements named tickets with agents, one pull request per ticket |
+| [executing-work-items](linear-workflow/skills/executing-work-items/) | Implements named tickets with agents, one branch and pull request at a time |
 
 ### Analysis & Organization
 
@@ -97,14 +97,15 @@ These skills can be installed via Claude Code plugins:
 Invoke skills with slash commands:
 
 ```bash
-# Refine a work item
-/refining-work-items CCC-123 --type epic
+# Refine a ticket, or write a project brief
+/refining-work-items ABC-123
+/refining-work-items "Sync engine" --type project-lite
 
-# Break down an epic
-/breaking-down-work CCC-123
+# Break a project into tickets
+/breaking-down-work "Sync engine"
 
-# Execute a work item
-/executing-work-items CCC-123
+# Implement tickets
+/executing-work-items ABC-120 ABC-123
 ```
 
 ## Development

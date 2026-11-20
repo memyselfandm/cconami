@@ -72,16 +72,21 @@ Comments are not part of an issue read. Fetch them with `list_comments`.
 | get_children | List issues whose parent is the key |
 | add_blocking_link / remove_blocking_link | Create or delete a `blocks` relation |
 | add_link | Create an attachment with the URL |
-| get_project / list_projects / create_project | Project read, list (by state, by initiative), create |
+| get_project / list_projects / create_project | Project read, list (by state, by initiative), create (in `pm_team`, attached to the initiative if given) |
+| update_project | Update the project's description, status, lead, or add it to an initiative |
 | assign_to_project | Set the issue's project, then each sub-issue's |
 | get_initiative / list_initiatives | Initiative read and list, with its projects |
-| add_comment / list_comments | Issue comments |
+| create_initiative / update_initiative | Initiative create or update (description, status, owner) |
+| add_comment / list_comments | Comments on the issue, project or initiative named by `target` (Linear supports top-level comment threads on all three) |
 | add_update / list_updates | Project updates or initiative updates, with health |
 | list_statuses / transition_item | The team's workflow states; set the issue's state |
 | list_labels / add_label / remove_label | Team and workspace labels. Adding a label must keep the issue's other labels |
 
 Project status values map as: backlog/planned -> planned, started -> in_progress,
 paused -> paused, completed -> completed, canceled -> cancelled.
+
+Initiative status values map as: Proposed/Planned -> planned, Active -> in_progress,
+Completed -> completed, Canceled -> cancelled.
 
 ## Conventions
 

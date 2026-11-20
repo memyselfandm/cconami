@@ -5,4 +5,4 @@
 - Writing `ralph.yml` and `PROMPT.md` is a file write in the target repository; the
   profile's approval rules apply.
 - The tracker commands written into generated hats are for Ralph Orchestrator's shell,
-  not for Hermes. Use the same CLI table as `platforms/claude-code.md`.
+  not for Hermes. Use `references/tracker-commands.md`.

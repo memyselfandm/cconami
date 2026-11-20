@@ -1,7 +1,7 @@
 ---
 name: reconciling-linear-projects
 description: Audit one project's tickets against pull requests and the running system, fix the statuses the evidence settles, move tickets between projects when work is re-homed, and move leftovers to a named open ticket before anything is closed, cancelled or folded. Rolls the result up to the initiative. Use when a project's status is in doubt, before closing or folding tickets, at the end of a workstream, before a checkpoint, when priorities move work between projects, or when asked "is Linear up to date", "what is actually done", "audit this project", "reconcile the tickets".
-argument-hint: "<project> [--repos owner/a,owner/b] [--move-to <project> --tickets KEY,KEY] [--dry-run]"
+argument-hint: "<project> [--repos owner/a,owner/b] [--move-to <project> (--tickets KEY,KEY | --status S | --priority P | --unassigned)] [--dry-run]"
 version: 1.0.0
 metadata:
   hermes:
@@ -19,7 +19,11 @@ project's record match the facts.
 
 The model is the one in `linear-workflow`: a project is a workstream or a bucket, a
 ticket is one to three units of value, an initiative groups projects. Do not propose
-time boxes. All reads and writes go through [pm-context](../pm-context/SKILL.md).
+time boxes. All reads and writes go through [pm-context](../pm-context/SKILL.md):
+`get_project`, `list_items`, `get_item`, `list_comments` and `list_updates` to collect;
+`transition_item`, `add_comment`, `add_link`, `add_blocking_link`,
+`remove_blocking_link`, `create_item`, `update_item` and `assign_to_project` to fix and
+move; `add_update` on the project and the initiative to report.
 
 ## Settings
 
@@ -59,8 +63,8 @@ Compare the status with the evidence and give each ticket one verdict.
 
 | Verdict | Evidence |
 |---|---|
-| **Matches** | Status agrees with the pull requests and, where relevant, the running system |
-| **Behind** | Work merged, or the "Done when" is met, but the ticket is still open |
+| **Matches** | Status agrees with the pull requests and, where relevant, the running system. A merge with "Done when" lines still unchecked is Matches for an open ticket, with those lines listed under **Not verified** |
+| **Behind** | Every "Done when" line is met (merged, plus the live-state check for any line about a running system), but the ticket is still open |
 | **Ahead** | Marked done, but a pull request is open or unmerged, a "Done when" line is unmet, or the change is not on the running system |
 | **Stalled** | In progress, with no pull-request activity and no comment since the last project update |
 | **Orphaned** | A merged pull request or a running change with no ticket, or a ticket blocked by something already closed |
@@ -79,18 +83,28 @@ anything recorded as "not done" or "not verified".
 the ticket, or add the leftover to an existing open one, and link the two. Never fold a
 ticket into one that is itself about to close.
 
-### 4. Move tickets between projects (when asked, or when the evidence says so)
+### 4. Move tickets between projects (only when asked)
 
-When work is re-homed (priorities change, a project closes with open tickets, a ticket
-sits in the wrong workstream):
+Moves happen only when the request asks for them (`--move-to`). When the audit finds a
+ticket that looks re-homed or misfiled, list the proposed move under **Proposed moves**
+in the report and leave it where it is.
+
+A move request names the destination and the tickets, either by key (`--tickets`) or by
+filter on the source project: `--status <status type>`, `--priority <priority>`,
+`--unassigned`. Filters combine (all must match). With `--move-to` alone, steps 1-3 (the
+pull-request audit) may be skipped; say so in the report.
 
 1. **Check the links.** For each ticket to move, list its blockers and the tickets it
    blocks. A blocker left behind in a closing project is a leftover (step 3). A link
    across two open projects is fine; report it so both leads know.
-2. **Preview.** Show the tickets, from and to, the links that now cross projects, and
-   each project's open count before and after. With `--dry-run`, stop here.
-3. **Move.** `assign_to_project` for each ticket; sub-issues move with their parent.
-4. **Record.** Comment on each moved ticket: "Moved from <project> to <project>:
+2. **Update the links.** If a blocker staying behind is cancelled or done, remove the
+   stale link (`remove_blocking_link`). If a moved ticket blocks one staying behind,
+   either move that one too (say so in the preview) or keep the link and report it.
+   Never drop a link to an open blocker just to make a move tidy.
+3. **Preview.** Show the tickets, from and to, the links added, removed or now crossing
+   projects, and each project's open count before and after. With `--dry-run`, stop here.
+4. **Move.** `assign_to_project` for each ticket; sub-issues move with their parent.
+5. **Record.** Comment on each moved ticket: "Moved from <project> to <project>:
    <reason>".
 
 Never move a ticket another session is working on; tell that session instead.
@@ -125,6 +139,7 @@ Post a project update with this shape. Leave out an empty section.
 
 **Changed.** <Ticket: old status to new status, and the evidence.>
 **Moved.** <Ticket: from project, to project, and why.>
+**Proposed moves.** <Ticket: from project, to project, and the evidence. Not done.>
 **Leftovers moved.** <Leftover, from which ticket, to which open ticket.>
 **Stalled.** <Ticket, last activity, what it is waiting on.>
 **Needs the owner.** <Each owner action filed, with its ticket.>

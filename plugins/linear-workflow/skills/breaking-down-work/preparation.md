@@ -42,6 +42,10 @@ A stray ticket may belong to another project, or the brief may be missing a goal
 List strays in the proposal and ask. Do not move or close them in a breakdown;
 `reconciling-linear-projects` is where tickets are moved and closed.
 
+**One exception:** when the source is an oversized ticket, the breakdown itself may close
+that original ticket once every one of its "Done when" lines is carried by a new ticket
+(step 5 of the skill). It closes nothing else.
+
 ## 5. Output
 
 ```markdown

@@ -100,8 +100,10 @@ files. See Platform notes for how to run parallel searches.
   that still applies; do not discard someone's notes. Add a comment saying what changed.
 - **Create a ticket:** `create_item({title, project, description, type, parent,
   blocked_by, blocks})`.
-- **Project brief:** write it into the project description (`create_project` or update
-  the existing one). Do not create the first tickets here; that is `breaking-down-work`.
+- **Project brief:** write it into the project description: `create_project({name,
+  description, initiative})` for a new project, `update_project(name, {description})`
+  for an existing one. For an initiative brief, `create_initiative` or
+  `update_initiative(name, {description})`. Do not create the first tickets here; that is `breaking-down-work`.
 
 Read the ticket back after writing and check the description landed.
 

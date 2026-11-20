@@ -181,13 +181,9 @@ The epic workflow adds these hats on top of the standard pattern:
 
 ### Tracker Integration
 
-Epic mode integrates with your project management tool. Adapt commands:
-
-| Tool | Fetch Issue | Comment |
-|------|-------------|---------|
-| Linear | the Linear CLI the hats can run (see Platform notes) | the same CLI's comment command |
-| Jira | `jira issue view KEY --plain` | `jira issue comment KEY "message"` |
-| GitHub | `gh issue view NUM` | `gh issue comment NUM -b "message"` |
+Epic mode integrates with your project management tool. Hats run in Ralph
+Orchestrator's shell, whichever agent generated the config, so they need tracker CLI
+commands. Take them from [references/tracker-commands.md](references/tracker-commands.md).
 
 All hats comment on tracker tickets to maintain an audit trail.
 

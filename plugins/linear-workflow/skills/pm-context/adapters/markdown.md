@@ -64,6 +64,11 @@ Description.
 ### [ABC-103] Conflict rule for concurrent edits {#abc-103}
 **Status:** todo | **Parent:** ABC-102 | **Blocked by:** ABC-102
 
+## Comments
+
+> **@bob** (2026-01-17): Ruling: ABC-103 goes before ABC-110; both change the merge
+> code and the conflict rule must land first. — Status runner
+
 ## Updates
 
 ### 2026-01-16, on_track, @alice
@@ -79,6 +84,8 @@ Log format merged; replay under review.
 **Projects:** Sync engine, Settings page
 
 Goal of the effort.
+
+## Comments
 
 ## Updates
 
@@ -118,10 +125,13 @@ Sync engine on track; settings page waiting on design.
 | remove_blocking_link | Remove it |
 | add_link | Append to `**Links:**` |
 | get_project, list_projects | Parse the header of each project file |
-| create_project | Write a new project file with an empty `## Tickets` and `## Updates` |
+| create_project | Write a new project file with empty `## Tickets`, `## Comments` and `## Updates` sections; add its name to the initiative file's `**Projects:**` if given |
+| update_project | Rewrite the project file's header line or brief; for `initiative`, also update `**Projects:**` in both initiative files |
 | assign_to_project | Move the entry, and its sub-issues, to the other file |
 | get_initiative, list_initiatives | Parse the initiative files |
-| add_comment, list_comments | The `#### Comments` block of the entry, one blockquote per comment |
+| create_initiative | Write a new initiative file with empty `**Projects:**`, `## Comments` and `## Updates` |
+| update_initiative | Rewrite the initiative file's header or goal |
+| add_comment, list_comments | For a ticket, the entry's `#### Comments` block; for a project or initiative, the file's `## Comments` section. One dated blockquote per comment, newest last in the file |
 | add_update, list_updates | Append a dated `###` entry under `## Updates`; never edit an old one |
 | list_statuses | The six values above |
 | list_labels, add_label, remove_label | The `**Labels:**` field; labels are free text |
@@ -141,6 +151,6 @@ commit when there is none (`git log -1 --format=%cI -- <file>`).
 ```sh
 mkdir -p backlog/projects backlog/initiatives
 echo 1 > backlog/NEXT_ID
-printf '# Project: Maintenance\n\n**Status:** in_progress\n\nSmall, unrelated tickets.\n\n## Tickets\n\n## Updates\n' \
+printf '# Project: Maintenance\n\n**Status:** in_progress\n\nSmall, unrelated tickets.\n\n## Tickets\n\n## Comments\n\n## Updates\n' \
   > backlog/projects/maintenance.md
 ```

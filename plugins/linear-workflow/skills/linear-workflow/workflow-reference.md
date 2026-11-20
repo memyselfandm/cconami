@@ -11,8 +11,9 @@ workstream of its own.
 - One idea, one to three units of value: `refining-work-items <idea> --type ticket`.
 - A new workstream: `refining-work-items <idea> --type project` writes the brief into
   the project description.
-- A large effort spanning several workstreams: create an initiative, write its goal
-  in the initiative description, and attach the projects to it as they appear.
+- A large effort spanning several workstreams: create an initiative with its goal as
+  the description (`create_initiative`), and attach each project as it appears
+  (`update_project(name, {initiative})`).
 
 ## 2. Shape
 
@@ -28,7 +29,8 @@ A project brief, or a ticket that turned out too big, is split into tickets.
 - A session picks up a ticket: it assigns itself, moves the ticket to in progress and
   comments that it has started.
 - `executing-work-items <keys...>` implements one or more tickets. It works on a branch
-  named from the team key, opens a pull request per ticket, and hands off to review.
+  named from the team key, opens one pull request at a time (a ticket may take up to
+  three), and hands off to review.
 - Long work leaves checkpoints as project updates, so another session can continue it.
 
 ## 4. Keep the record true
@@ -43,11 +45,14 @@ A project brief, or a ticket that turned out too big, is split into tickets.
 
 ## 5. Close
 
-- A ticket closes when every "Done when" line is met, with the evidence in a comment.
+- A ticket closes when every "Done when" line is met, with the evidence in a comment
+  (`add_comment`, then `transition_item(key, "done")`).
 - A project closes when its lead decides the workstream is done, after a final
-  reconciliation. Its leftovers live on in open tickets in other projects.
-- An initiative closes when its projects are closed. Its last update says what was
-  delivered and where the follow-ups went.
+  reconciliation (`update_project(name, {status: completed})`). Its leftovers live on in
+  open tickets in other projects.
+- An initiative closes when its projects are closed. Its last update (`add_update`) says
+  what was delivered and where the follow-ups went; then
+  `update_initiative(name, {status: completed})`.
 
 ## Example
 

@@ -49,104 +49,107 @@ elif project:
 elif initiative:
     items = pm_context.list_items({initiative: initiative})
 
-# Fetch blockers outside the scope too, so they can be reported as external
+# Fetch linked tickets outside the scope too, so they can be reported as external
+scope_keys = {i.key for i in items}
 for item in list(items):
     for k in item.blocked_by + item.blocks:
-        if k not in keys(items):
-            items.append(pm_context.get_item(k))  # mark as external
+        if k not in {i.key for i in items}:
+            items.append(pm_context.get_item(k))
 ```
 
-### Step 2: Build Dependency Graph
+### Step 2: Build the graph
+
+Nodes are keyed by ticket key (`ABC-123`), the same identifier `blocks` and
+`blocked_by` use. Only **active** blockers make edges: a blocker that is done or
+cancelled no longer blocks anything, and is listed separately as a stale link.
 
 ```python
+INACTIVE = {"done", "cancelled"}
+
 graph = {}
 for item in items:
-    graph[item.id] = {
-        "item": item,
-        "blocks": [],      # Items this blocks
-        "blocked_by": [],  # Items blocking this
-        "parent": item.parent,
-        "children": []
-    }
+    graph[item.key] = {"item": item, "blocks": [], "blocked_by": [],
+                       "external": item.key not in scope_keys}
 
-# Add dependency edges
+stale_links = []   # (blocker, blocked) where the blocker is done or cancelled
 for item in items:
-    if item.blocked_by:
-        for blocker_id in item.blocked_by:
-            if blocker_id in graph:
-                graph[blocker_id]["blocks"].append(item.id)
-                graph[item.id]["blocked_by"].append(blocker_id)
+    for blocker_key in item.blocked_by:
+        blocker = graph.get(blocker_key)
+        if blocker is None:
+            continue                          # broken link: reported in Errors
+        if blocker["item"].status_type in INACTIVE:
+            stale_links.append((blocker_key, item.key))
+            continue
+        graph[blocker_key]["blocks"].append(item.key)
+        graph[item.key]["blocked_by"].append(blocker_key)
 ```
 
-### Step 3: Analyze Graph
+### Step 3: Analyse the graph
 
 **Find circular links:**
 ```python
 def find_loops(graph):
-    visited = set()
-    path = []
+    done, loops = set(), []
 
-    def dfs(node):
+    def dfs(node, path):
         if node in path:
-            return path[path.index(node):]  # loop found
-        if node in visited:
-            return None
-
-        visited.add(node)
+            loops.append(path[path.index(node):] + [node])
+            return
+        if node in done:
+            return
         path.append(node)
-
         for blocked in graph[node]["blocks"]:
-            loop = dfs(blocked)
-            if loop:
-                return loop
-
+            dfs(blocked, path)
         path.pop()
-        return None
+        done.add(node)
 
-    loops = []
     for node in graph:
-        loop = dfs(node)
-        if loop:
-            loops.append(loop)
+        dfs(node, [])
     return loops
 ```
 
-**Find the longest chain:**
+**Find the longest chain** (only meaningful once there are no loops):
 ```python
-def find_critical_path(graph):
-    # Topological sort + longest path
+def find_longest_chain(graph):
     in_degree = {n: len(graph[n]["blocked_by"]) for n in graph}
     queue = [n for n in graph if in_degree[n] == 0]
     dist = {n: 0 for n in graph}
+    prev = {n: None for n in graph}      # predecessor on the longest chain
 
     while queue:
         node = queue.pop(0)
         for blocked in graph[node]["blocks"]:
-            dist[blocked] = max(dist[blocked], dist[node] + 1)
+            if dist[node] + 1 > dist[blocked]:
+                dist[blocked] = dist[node] + 1
+                prev[blocked] = node
             in_degree[blocked] -= 1
             if in_degree[blocked] == 0:
                 queue.append(blocked)
 
-    # Reconstruct path
-    max_node = max(dist, key=dist.get)
-    return reconstruct_path(graph, max_node, dist)
+    end = max(dist, key=dist.get)
+    chain = []
+    while end is not None:               # walk back along prev
+        chain.append(end)
+        end = prev[end]
+    return list(reversed(chain))
 ```
 
-**Find active blockers:**
+**Find active blockers and what is ready:**
 ```python
 def find_blockers(graph):
-    blockers = []
-    for node_id, node in graph.items():
-        if node["blocked_by"]:
-            for blocker_id in node["blocked_by"]:
-                blocker = graph.get(blocker_id)
-                if blocker and blocker["item"].status_type != "done":
-                    blockers.append({
-                        "blocked": node["item"],
-                        "blocker": blocker["item"],
-                        "status": blocker["item"].status
-                    })
-    return blockers
+    # Every remaining edge is active by construction (Step 2)
+    return [
+        {"blocked": graph[n]["item"], "blocker": graph[b]["item"]}
+        for n in graph for b in graph[n]["blocked_by"]
+    ]
+
+def ready_to_start(graph):
+    return [
+        graph[n]["item"] for n in graph
+        if not graph[n]["blocked_by"]
+        and graph[n]["item"].status_type not in INACTIVE
+        and not graph[n]["external"]
+    ]
 ```
 
 ### Step 4: Generate Report
@@ -174,6 +177,9 @@ Length: {path_length} items
 🔴 [{blocker.key}] ({blocker.status}) blocks:
    - [{blocked1.key}] {blocked1.title}
    - [{blocked2.key}] {blocked2.title}
+
+### Stale links
+{blocker that is done or cancelled -> ticket it still points at; safe to remove}
 
 ### Blockers in other projects
 {blocker key, its project, its status, and what it blocks here}
