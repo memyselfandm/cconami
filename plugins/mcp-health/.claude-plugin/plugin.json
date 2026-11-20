@@ -1,8 +1,9 @@
 {
   "name": "mcp-health",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Shows a band above the prompt when a plugin's MCP server is not connected, naming the server and the next step. Hidden while every watched server is connected.",
   "license": "MIT",
+  "author": { "name": "memyselfandm" },
   "types": "./types/index.d.ts",
   "userConfig": {
     "watch": {

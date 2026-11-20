@@ -91,7 +91,7 @@ previous copy automatically. If that restore also failed, move it back by hand:
 `mv '<out-root>/.hermes-dist/<name>.old-XXXX/<name>' '<out-root>/<category>/<name>'`.
 
 Discovery (`--all`, the lint and `install.sh` share it) searches the roots,
-default `apps/dot-claude/skills` and `plugins/*/skills`, and skips hidden
+default `plugins/*/skills`, and skips hidden
 directories, `node_modules`, any `platforms/` or `external/` directory, and
 `docs/archive/`.
 

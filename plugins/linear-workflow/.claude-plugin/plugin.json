@@ -1,7 +1,7 @@
 {
   "name": "linear-workflow",
   "description": "Linear project-management skills for the project, ticket and initiative model: refine, break down, analyze and execute tickets, reconcile projects and report workstream status.",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "license": "MIT",
   "author": { "name": "memyselfandm" }
 }

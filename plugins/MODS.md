@@ -6,10 +6,10 @@ installed from this repository by name.
 
 | Mod | What it does |
 |---|---|
-| `owner-inbox` | Shows the Linear issues waiting on you: a band above the prompt, a panel toggled with `/inbox`, and a marked row in the chat when an agent files a new one |
-| `peer-messages` | Draws a message from another session, agent or channel as a bordered card with the sender's name |
-| `ci-status` | Shows the GitHub CI state of the current branch, and of the PRs this session opened, in a band above the prompt |
-| `mcp-health` | Shows a band above the prompt when a plugin's MCP server is not connected, naming the server and the next step |
+| [`owner-inbox`](owner-inbox/) | Shows the Linear issues waiting on you: a band above the prompt, a panel toggled with `/inbox`, and a marked row in the chat when an agent files a new one |
+| [`peer-messages`](peer-messages/) | Draws a message from another session, agent or channel as a bordered card with the sender's name |
+| [`ci-status`](ci-status/) | Shows the GitHub CI state of the current branch, and of the PRs this session opened, in a band above the prompt |
+| [`mcp-health`](mcp-health/) | Shows a band above the prompt when a plugin's MCP server is not connected, naming the server and the next step |
 
 ## Install
 

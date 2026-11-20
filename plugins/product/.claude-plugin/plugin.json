@@ -1,7 +1,8 @@
 {
   "name": "product",
-  "description": "Product skills: workshop PRDs and brainstorm designs.",
-  "version": "0.1.0",
+  "description": "Product skills: workshop PRDs, prioritise features, write one-page product overviews, and brainstorm designs.",
+  "version": "0.2.0",
   "license": "MIT",
-  "author": { "name": "memyselfandm" }
+  "author": { "name": "memyselfandm" },
+  "dependencies": ["linear-workflow"]
 }

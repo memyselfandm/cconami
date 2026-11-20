@@ -127,10 +127,10 @@ Fix any issues found during validation.
 
 ## Step 5: Write Files and Summarize
 
-**Create the skill directory**:
+**Create the skill directory** in the location confirmed in Step 1: `.claude/skills/` for a project skill, `~/.claude/skills/` for a personal one, or `plugins/<plugin>/skills/` inside a plugin:
 
 ```
-apps/dot-claude/skills/<skill-name>/
+<skills-root>/<skill-name>/
 ├── SKILL.md
 ├── [supporting files as needed]
 ```

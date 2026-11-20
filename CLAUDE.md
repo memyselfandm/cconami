@@ -1,149 +1,125 @@
-# Claude Code Enhancements System
+# CLAUDE.md
 
-## Project Overview
-This is a personal system of Claude Code enhancements inspired by IndieDevDan's work. It provides a structured approach to extending Claude Code's capabilities through hooks, custom commands, subagents, and settings configurations.
+Orientation for agents working in this repository. It is a Claude Code plugin
+marketplace; skills also render for Hermes. What lives where and why:
+[docs/layout.md](docs/layout.md).
 
-## Project Goals
-- The goal of this project is to develop my personal enhancements to Claude Code
-
-## Architecture Overview
-
-### Core Components
-
-1. **Hooks System** (`apps/dot-claude/hooks/`)
-   - Event-driven automation for Claude Code lifecycle
-   - Uses UV single-file scripts for dependency isolation
-   - Configured in `.claude/settings.json`
-   - Available hooks: PreToolUse, PostToolUse, Notification, Stop, SubagentStop, UserPromptSubmit, PreCompact, SessionStart
-
-2. **Custom Commands** (`apps/dot-claude/commands/`)
-   - Slash commands as Markdown files with YAML frontmatter
-   - Example: `/git_status` command for git repository state
-   - Supports bash command execution with `!` prefix
-   - File references with `@` prefix
-
-3. **Subagents** (`apps/dot-claude/agents/`)
-   - Specialized AI assistants for specific tasks
-   - Markdown files with YAML frontmatter defining name, description, and allowed tools
-   - Can be project-level or user-level
-
-4. **Settings Management** (`apps/dot-claude/settings/`)
-   - JSON configuration files for permissions, hooks, and environment
-   - Hierarchical precedence: Enterprise > CLI > Local > Project > User
-   - Example configurations provided (settings.base.json)
-
-5. **Agentic Layer Wrapper** (`apps/agent-app-wrapper/`)
-   - Framework for wrapping applications with AI-friendly structure
-   - Creates standard directories: `ai_docs/`, `apps/`, `.claude/`
-   - Designed for maximum AI coding agent effectiveness
-
-## Key Features
-
-### UV Single-File Scripts Architecture
-- All hooks implemented as standalone Python scripts
-- Dependencies declared inline within each script
-- No virtual environment management required
-- Fast execution with UV's dependency resolution
-- Complete isolation from main project dependencies
-
-### Permission System
-- Fine-grained control over tool access
-- Allow/deny lists for specific commands and file patterns
-- Configurable through settings.json
-- Example permissions in settings.base.json
-
-### Event-Driven Automation
-- Hooks execute automatically at various Claude Code lifecycle points
-- Can block operations (PreToolUse) or react to events (PostToolUse)
-- Notification hooks for custom alerting
-- Session management hooks for initialization and cleanup
-
-## Project Structure
+## Layout
 
 ```
-claudecode-dev/
-├── README.md                    # Basic project overview
-├── ai_docs/                     # AI context and documentation
-│   ├── knowledge/               # Claude Code feature documentation
-│   │   ├── claude-code-hooks-docs.md
-│   │   ├── claude-code-settings-docs.md
-│   │   ├── claude-code-slash-commands-docs.md
-│   │   └── claude-code-subagents-docs.md
-│   └── prds/                    # Product requirements (empty)
-└── apps/
-    ├── agent-app-wrapper/       # Agentic layer initialization
-    │   ├── README.md
-    │   └── init-agentic-layer.sh
-    └── dot-claude/              # .claude directory templates
-        ├── agents/              # Subagent definitions
-        ├── commands/            # Custom slash commands
-        │   └── git_status.md
-        ├── hooks/               # Hook scripts
-        │   └── HOOKS_README.md
-        └── settings/            # Configuration templates
-            ├── SETTINGS_README.md
-            ├── settings.base.json
-            └── settings.chronicle.json
-
+.claude-plugin/marketplace.json   # The marketplace: one entry per plugin
+plugins/<plugin>/
+  .claude-plugin/plugin.json      # Plugin manifest (name, description, version, license, author)
+  README.md                       # What it holds and its install line
+  skills/<skill>/SKILL.md         # Agent-neutral skill
+  skills/<skill>/platforms/*.md   # Per-agent notes (claude-code.md, hermes.md)
+  agents/*.md                     # Subagents (authoring only)
+  hooks/                          # Hooks (operating-model) or a mod's hooks module
+  tests/                          # A mod's tests (*.test.ts, *.test.tsx)
+plugins/MODS.md                   # Detailed behaviour of the four mods
+platforms/hermes/                 # render.py, install.sh, test-render.sh
+scripts/lint-skills.py            # Cross-platform lint (allowlist must stay empty)
+scripts/check-catalog.py          # README table vs marketplace.json vs plugins/
+scripts/check-versions.py         # Changed plugins must bump their version
+tests/fixtures/                   # Fixtures for the lint and the renderer
+docs/                             # layout.md, inventory.md, recommended-external.md, archive/
 ```
 
-## Usage Instructions
+`docs/archive/` is reference material that is not shipped. Do not edit it or link
+skills to it.
 
-### Setting Up Hooks
-1. Copy desired settings from `apps/dot-claude/settings/` to your project's `.claude/settings.json`
-2. Implement hook scripts in `.claude/hooks/` using UV single-file script format
-3. Configure hook matchers and commands in settings.json
+## The cross-platform rule
 
-### Creating Custom Commands
-1. Create Markdown files in `.claude/commands/` or `~/.claude/commands/`
-2. Add YAML frontmatter with allowed-tools, description, argument-hint
-3. Use `!` for bash commands and `@` for file references
-4. Access with `/command-name` in Claude Code
+- A `SKILL.md` body is agent-neutral: it names operations ("list the project's
+  open issues"), not tools. Tool names, CLIs and invocation syntax go in
+  `platforms/<platform>.md` beside it, linked under `## Platform notes`.
+- The agents a skill supports go in `targets` (for example
+  `[claude-code, hermes]`; absent means all). Never put agent names in
+  `platforms`: Hermes reads it as an OS filter (`linux`, `macos`, `windows`).
+- `scripts/lint-skills.py` imports the Hermes renderer's frontmatter rules and
+  fails on forbidden names in a body (`linctl`, `mcp__`, `/oh-my-claudecode:`,
+  `hermes -p`, `kanban_create`). Fix the skill; do not add allowlist entries.
+- Full key table: the "Cross-Platform Skills" section of
+  `plugins/authoring/skills/building-skills/references/format-spec.md`.
 
-### Developing Subagents
-1. Create Markdown files in `.claude/agents/` or `~/.claude/agents/`
-2. Define name, description, and tools in YAML frontmatter
-3. Write detailed system prompts for specialized behavior
-4. Claude will automatically delegate appropriate tasks
+## Adding things
 
-### Using the Agentic Layer
-1. Run the init-agentic-layer.sh script in your project
-2. Populate `ai_docs/knowledge/` with relevant documentation
-3. Add PRDs and specs to `ai_docs/prds/`
-4. Place application code in `apps/`
+**A skill.** Create `plugins/<plugin>/skills/<gerund-name>/SKILL.md` with `name`
+and `description` frontmatter, plus `platforms/claude-code.md` and
+`platforms/hermes.md` when steps differ by agent. Keep `SKILL.md` under 500
+lines; move detail into supporting files. Add a row to the plugin's README and
+update the skill count in the root README's Contents cell (`check-catalog.py`
+compares it with `skills/*/SKILL.md`). Tracker operations go through
+`pm-context`; a skill outside `linear-workflow` that uses it needs
+`"dependencies": ["linear-workflow"]` in its plugin's `plugin.json`.
 
-## Development Guidelines
+**A plugin.** Create `plugins/<name>/.claude-plugin/plugin.json` (name equal to
+the directory, description, version, license, `author: {"name": "memyselfandm"}`,
+and `dependencies` on other plugins it calls) and a `README.md` with
+`/plugin install <name> --marketplace memyselfandm/cconami`. Add an entry to
+`.claude-plugin/marketplace.json` with `"source": "./plugins/<name>"`, and a
+row to the `## Plugins` table in `README.md` whose Contents cell states its
+skill and agent counts. `check-catalog.py` fails if these disagree, or if a
+dependency names a plugin not in the marketplace.
 
-### Hook Development
-- Keep hooks focused and fast-executing
-- Use UV's inline dependency declarations
-- Handle errors gracefully to avoid blocking Claude Code
-- Test hooks thoroughly before deployment
+**A mod.** As a plugin, plus:
 
-### Command Best Practices
-- Make commands reusable and parameterized with $ARGUMENTS
-- Include clear descriptions for discoverability
-- Limit tool access to what's necessary
-- Use bash execution for dynamic context
+- `"types": "./types/index.d.ts"` in `plugin.json`, when the mod declares
+  `$.state` values;
+- `hooks/hooks.json` naming the hooks module: `{ "modules": ["./register.tsx"] }`;
+- tests under `tests/` (`*.test.ts`, `*.test.tsx`), run by `claude plugin test`.
 
-### Subagent Design
-- Create specialized agents for distinct domains
-- Write comprehensive system prompts
-- Grant minimal necessary tools
-- Use proactive language in descriptions
+Types and tests are optional for a mod that does not need them. The plugin-root
+`types/` is source and is committed; `.claude-plugin/types/` is generated by
+Claude Code when it loads the mod and must not be committed. Describe the mod in
+`plugins/MODS.md` and link its README from the table there. Run a session
+against the checkout with `claude --plugin-dir plugins/<mod>`.
 
-## Security Considerations
-- Review all hook implementations before use
-- Limit tool permissions appropriately
-- Be cautious with bash command execution
-- Use deny lists to protect sensitive files
+## Versions
 
-## Credits
-Much of this system is adapted or inspired by IndieDevDan's work. The UV single-file scripts architecture and agentic layer concept are particularly noteworthy contributions.
+Bump `version` in `plugins/<p>/.claude-plugin/plugin.json` whenever a shipped
+file under `plugins/<p>/` changes: installs are pinned to that version, so an
+unbumped change never reaches existing users. Use a minor bump for behaviour or
+interface changes, a patch bump for docs and metadata. On pull requests,
+`scripts/check-versions.py` fails when a plugin changed against the merge base
+and its version did not (changes under `tests/` are exempt).
 
-## Future Enhancements
-- Framework for hook script organization by type
-- Standard PRD format for ai_docs
-- Task management integration for requirements
-- Shell script support in hook system
-- Automated safety checks in init script
+## Checks before a PR
+
+Set `UV_CACHE_DIR` to a temp directory if the default cache is not writable.
+
+```sh
+uv run --script scripts/lint-skills.py          # 0 errors, 0 warnings
+bash scripts/test-lint-skills.sh
+bash platforms/hermes/test-render.sh
+bash platforms/hermes/install.sh --dry-run "$(mktemp -d)"
+bash plugins/operating-model/hooks/test-guard-bash-command.sh
+python3 scripts/check-catalog.py
+bash scripts/test-check-catalog.sh
+git fetch origin && python3 scripts/check-versions.py --base origin/main
+bash scripts/test-check-versions.sh
+claude plugin validate .
+for p in plugins/*/; do claude plugin validate "$p"; done
+claude plugin test plugins/<mod>                 # each mod with tests
+```
+
+CI (`.github/workflows/skills.yml`) runs all of these on every pull request.
+
+Fresh-install check (scratch config, nothing touches your real `~/.claude`;
+dependencies install automatically):
+
+```sh
+d=$(mktemp -d); for p in product authoring operating-model; do env HOME="$d" CLAUDE_CONFIG_DIR="$d/.claude" claude plugin install "$p" --marketplace "$PWD" >/dev/null; done; for p in linear-workflow product authoring operating-model; do env HOME="$d" CLAUDE_CONFIG_DIR="$d/.claude" claude plugin details "$p@cconami" | grep -E '^  (Skills|Agents|Hooks)'; done; rm -rf "$d"
+```
+
+## PR flow
+
+- Branch from `origin/main` as `mike/ccc-<n>-<desc>`, created with `--no-track`.
+- Push with `git push origin HEAD:refs/heads/<branch>`. Never push to `main`.
+- Open the PR against `main` and reference the Linear ticket.
+- Wait for CI to pass, then merge explicitly. Never use `gh pr merge --auto`:
+  `main` has no required checks, so it merges before CI finishes.
+
+## Linear
+
+Tickets live in the **CCC** team (`CCC-<n>`).
