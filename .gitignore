@@ -29,3 +29,6 @@ temp/
 dist/
 build/
 out/
+
+# oh-my-claudecode runtime state
+.omc/
