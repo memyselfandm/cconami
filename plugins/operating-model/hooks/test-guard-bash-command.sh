@@ -5,20 +5,44 @@
 #
 # Usage: test-guard-bash-command.sh [--generic-only | --project-only]
 #
-# With no option it runs every section, then a mutation check: each rule is
-# turned off in turn (generic rules through a project `disable` list, the
-# example project rule by leaving its file out) and the cases must then fail.
-# A rule whose cases still pass with the rule off is not tested by them.
+# With no option it runs every section, then a mutation check: every `when`
+# entry, every condition inside an entry, and every raw pattern of every rule
+# is removed in turn, and the matching section must then fail. A piece whose
+# removal leaves the cases passing is not tested by them.
+#
+# Environment, used by the mutation check: GUARD_TEST_HOOK (the hook to run),
+# GUARD_TEST_PROJECT (the project directory for the section), and
+# GUARD_TEST_FAIL_FAST=1 (stop at the first failing case).
 #
 # Offline: it runs Python against fixed inputs, writes only to a temp
 # directory, and contacts nothing.
 set -u
 
 here="$(cd "$(dirname "$0")" && pwd)"
-hook="$here/guard-bash-command.py"
+hook="${GUARD_TEST_HOOK:-$here/guard-bash-command.py}"
 mode="${1:-all}"
 fail=0
 count=0
+export PYTHONDONTWRITEBYTECODE=1
+
+# One mutant, run by the mutation check: `--mutant <generic|project> <label>
+# <dir>`. Prints `caught <label> -> <first failing case>` or `missed <label>`.
+if [ "$mode" = --mutant ]; then
+  kind="$2" label="$3" dir="$4"
+  if [ "$kind" = generic ]; then
+    out="$(GUARD_TEST_HOOK="$dir/guard-bash-command.py" GUARD_TEST_FAIL_FAST=1 bash "$0" --generic-only 2>&1)"
+  else
+    out="$(GUARD_TEST_PROJECT="$dir" GUARD_TEST_FAIL_FAST=1 bash "$0" --project-only 2>&1)"
+  fi
+  status=$?
+  first="$(printf '%s\n' "$out" | grep -m1 '^FAIL' || true)"
+  if [ "$status" -ne 0 ] && [ -n "$first" ]; then
+    echo "caught $label -> $first"
+  else
+    echo "missed $label"
+  fi
+  exit 0
+fi
 
 scratch="$(mktemp -d)"
 trap 'rm -rf "$scratch"' EXIT
@@ -35,6 +59,14 @@ cp "$here/tests/example-project-rules.json" "$example_project/.claude/guard-rule
 generic_project="${GUARD_TEST_PROJECT:-$scratch/empty-project}"
 project="$generic_project"
 
+failed() {
+  fail=1
+  if [ "${GUARD_TEST_FAIL_FAST:-0}" = 1 ]; then
+    echo "guard-bash-command: FAILED" >&2
+    exit 1
+  fi
+}
+
 run_case() {
   local expect="$1" needle="$2" command="$3" payload out status
   count=$((count + 1))
@@ -44,17 +76,44 @@ run_case() {
   if [ "$status" -ne "$expect" ]; then
     echo "FAIL (exit $status, want $expect): $command" >&2
     [ -n "$out" ] && echo "  output: $out" >&2
-    fail=1
+    failed
     return
   fi
   if [ "$expect" -eq 2 ] && ! printf '%s' "$out" | grep -qF -- "$needle"; then
     echo "FAIL (message lacks '$needle'): $command" >&2
-    fail=1
+    failed
   fi
 }
 
 refused() { run_case 2 "$1" "$2"; }
 allowed() { run_case 0 "" "$1"; }
+
+# Raw fallbacks: each listed command must be caught by the raw patterns of the
+# named rules alone, and each safe one left alone. Usage:
+#   raw_cases <project dir> <rule id> banned:<cmd> ... safe:<cmd> ...
+raw_cases() {
+  count=$((count + 1))
+  python3 - "$hook" "$@" <<'EOF' || failed
+import importlib.util, sys
+spec = importlib.util.spec_from_file_location("guard", sys.argv[1])
+guard = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(guard)
+project, rule_id, cases = sys.argv[2], sys.argv[3], sys.argv[4:]
+rules = [r for r in guard.load_rules(project, [], []) if r.id == rule_id]
+bad = 0
+if len(rules) != 1:
+    print(f"FAIL: raw: no single rule {rule_id!r}", file=sys.stderr)
+    sys.exit(1)
+for case in cases:
+    kind, command = case.split(":", 1)
+    hit = guard.check_raw(command, rules) is not None
+    if hit != (kind == "banned"):
+        print(f"FAIL: raw fallback of {rule_id} {'misses' if kind == 'banned' else 'refuses'}: {command}",
+              file=sys.stderr)
+        bad = 1
+sys.exit(bad)
+EOF
+}
 
 AUTO='gh pr checks'
 LOOKUP='auth/token/lookup-self'
@@ -227,6 +286,75 @@ refused "$LOOKUP" $'(( m = 1<<4 ))\nbao token lookup'
 allowed 'echo $((1<<4)) && bao read -field=ttl auth/token/lookup-self'
 
 
+# --- review findings: forms the original guard let through
+# bao and vault parse flags only before the first positional argument, so a
+# -field after the path is ignored and the whole token is printed.
+refused "$LOOKUP" 'bao read auth/token/lookup-self -field=ttl'
+refused "$LOOKUP" 'vault read auth/token/lookup-self -field=policies'
+refused "$LOOKUP" 'bao read -format=json auth/token/lookup-self -field=ttl'
+allowed 'bao read -format=json -field=ttl auth/token/lookup-self'
+allowed 'bao read -field ttl auth/token/lookup-self'
+# print token, and write against the lookup endpoints.
+refused "$LOOKUP" 'bao print token'
+refused "$LOOKUP" 'vault print token'
+refused "$LOOKUP" 'BAO_ADDR=x bao print token | cat'
+refused "$LOOKUP" 'bao write auth/token/lookup token=hvs.example'
+refused "$LOOKUP" 'vault write auth/token/lookup-accessor accessor=abc'
+refused "$LOOKUP" 'bao write -f auth/token/lookup-self'
+refused "$LOOKUP" 'vault write -f auth/token/lookup-self'
+refused "$LOOKUP" 'bao write auth/token/lookup-self -field=ttl'
+refused "$LOOKUP" 'bao write -field=id auth/token/lookup-self'
+allowed 'bao write -field=ttl auth/token/lookup-self'
+allowed 'bao write secret/app/x key=value'
+allowed 'bao print'
+allowed 'bao token capabilities auth/token/lookup-self'
+allowed 'bao read secret/app/x'
+# A shell option cluster that holds c anywhere still takes a command string.
+refused "$AUTO" "bash -ce 'gh pr merge 7 --auto'"
+refused "$AUTO" "sh -ec 'gh pr merge 7 --auto'"
+refused "$LOOKUP" "bash -lce 'bao token lookup'"
+allowed "bash -ce 'gh pr merge 7 --squash'"
+# A here-string fed to a shell is a script.
+refused "$AUTO" "bash <<< 'gh pr merge 7 --auto'"
+refused "$AUTO" 'sh <<< "gh pr merge 7 --auto"'
+refused "$LOOKUP" "bash<<<'bao token lookup'"
+refused "$AUTO" "cat <<< 'gh pr merge 7 --auto' | bash"
+allowed "grep -c merge <<< 'gh pr merge 7 --auto'"
+allowed "tee notes.md <<< 'never run gh pr merge --auto'"
+# eval and ssh join their arguments into one command line.
+refused "$AUTO" "eval 'gh pr merge 7' --auto"
+refused "$AUTO" "eval gh pr merge 7 '--auto'"
+refused "$LOOKUP" "ssh host 'bao token' lookup"
+allowed "eval 'gh pr merge 7' --squash"
+# An --auto flag elsewhere is not a merge, and a mention is not an API call.
+allowed 'gh pr view 5 --auto'
+allowed 'gh pr comment 5 --body "enablePullRequestAutoMerge is banned here"'
+allowed 'gh api repos/owner/repo/pulls/5'
+# A long command is refused outright rather than checked past the timeout.
+refused 'too long for the command guard' "echo $(printf 'a %.0s' $(seq 1 5001))"
+refused 'too long for the command guard' "echo $(head -c 70000 /dev/zero | tr '\0' 'x')"
+allowed "echo $(printf 'a %.0s' $(seq 1 4990))"
+
+# --- raw fallbacks of the generic rules
+raw_cases "$project" gh-pr-merge-auto \
+  'banned:gh pr merge 5 --squash --auto' \
+  "banned:gh api graphql -f query='mutation { enablePullRequestAutoMerge }'" \
+  'safe:gh pr merge 5 --squash' \
+  'safe:gh api repos/o/r/pulls'
+raw_cases "$project" token-lookup \
+  'banned:vault token lookup' \
+  'banned:bao print token' \
+  'banned:bao read auth/token/lookup-self' \
+  'banned:bao read auth/token/lookup-self -field=ttl' \
+  'banned:bao read -field=id auth/token/lookup-self' \
+  'banned:bao write -f auth/token/lookup-self' \
+  'banned:vault write auth/token/lookup token=x' \
+  'banned:vault write auth/token/lookup-accessor accessor=y' \
+  'safe:bao read -field=ttl auth/token/lookup-self' \
+  'safe:bao write -field=ttl auth/token/lookup-self' \
+  'safe:bao write secret/app/x k=v' \
+  'safe:bao token create -orphan'
+
 # --- other tools and malformed input pass through
 count=$((count + 5))
 for input in \
@@ -236,7 +364,7 @@ for input in \
   '{"tool_name":"Bash","tool_input":"bao token lookup"}' \
   '{"tool_name":"Bash","tool_input":{"command":["bao"]}}'; do
   printf '%s' "$input" | CLAUDE_PROJECT_DIR="$project" python3 "$hook" \
-    || { echo "FAIL: did not pass through: $input" >&2; fail=1; }
+    || { echo "FAIL: did not pass through: $input" >&2; failed; }
 done
 
 # --- recorded gap: a command that reaches a shell as data is not seen.
@@ -262,32 +390,38 @@ allowed 'gh workflow run coder-templates-push.yml --ref main -f templates=both'
 refused "$PUSH" 'coder templates create web --directory .'
 refused "$PUSH" 'sudo -u coder coder templates push web'
 allowed $'kubectl apply -f - <<\'EOF\'\n# coder templates push is banned\nkind: ConfigMap\nEOF'
+refused "$PUSH" 'coder template create web'
 # Project rules add to the generic ones; they do not replace them.
 refused "$AUTO" 'gh pr merge 1 --auto'
 refused "$LOOKUP" 'bao token lookup'
+raw_cases "$project" coder-templates-push \
+  'banned:coder templates push web' \
+  'banned:coder template create web' \
+  'safe:coder templates list'
 project="$generic_project"
 fi
 
 if [ "$mode" = all ]; then
-# ===== the cwd field stands in for CLAUDE_PROJECT_DIR =======================
-count=$((count + 1))
-payload="$(python3 -c 'import json,sys; print(json.dumps({"tool_name":"Bash","cwd":sys.argv[1],"tool_input":{"command":"coder templates push web"}}))' "$example_project")"
-printf '%s' "$payload" | env -u CLAUDE_PROJECT_DIR python3 "$hook" 2>/dev/null
-[ $? -eq 2 ] || { echo "FAIL: project rules not read from the cwd field" >&2; fail=1; }
-
-# ===== failure modes: the guard fails open, and says so =====================
+# ===== failure modes and project files =====================================
 # Each case: a project directory, a command, the exit status wanted, and a
-# phrase the output must contain.
+# phrase the output must contain. An optional fifth argument is the hook, and
+# a sixth, "cwd", sends the project as the input's cwd field instead of
+# CLAUDE_PROJECT_DIR.
 fail_mode() {
   local dir="$1" command="$2" want="$3" needle="$4" payload out status
   count=$((count + 1))
-  payload="$(python3 -c 'import json,sys; print(json.dumps({"tool_name":"Bash","tool_input":{"command":sys.argv[1]}}))' "$command")"
-  out="$(printf '%s' "$payload" | CLAUDE_PROJECT_DIR="$dir" python3 "${5:-$hook}" 2>&1)"
+  if [ "${6:-}" = cwd ]; then
+    payload="$(python3 -c 'import json,sys; print(json.dumps({"tool_name":"Bash","cwd":sys.argv[2],"tool_input":{"command":sys.argv[1]}}))' "$command" "$dir")"
+    out="$(printf '%s' "$payload" | env -u CLAUDE_PROJECT_DIR python3 "${5:-$hook}" 2>&1)"
+  else
+    payload="$(python3 -c 'import json,sys; print(json.dumps({"tool_name":"Bash","tool_input":{"command":sys.argv[1]}}))' "$command")"
+    out="$(printf '%s' "$payload" | CLAUDE_PROJECT_DIR="$dir" python3 "${5:-$hook}" 2>&1)"
+  fi
   status=$?
-  if [ "$status" -ne "$want" ] || ! printf '%s' "$out" | grep -qF -- "$needle"; then
+  if [ "$status" -ne "$want" ] || { [ -n "$needle" ] && ! printf '%s' "$out" | grep -qF -- "$needle"; }; then
     echo "FAIL (exit $status, want $want with '$needle'): [$dir] $command" >&2
     echo "  output: $out" >&2
-    fail=1
+    failed
   fi
 }
 project_with() {
@@ -296,15 +430,20 @@ project_with() {
   printf '%s' "$scratch/$1"
 }
 
+# The cwd field stands in for CLAUDE_PROJECT_DIR when that is unset.
+fail_mode "$example_project" 'coder templates push web' 2 "$PUSH" "$hook" cwd
+
+# A broken project file fails open, and does not switch off the generic rules.
 bad_json="$(project_with bad-json '{ not json')"
 fail_mode "$bad_json" 'ls' 1 'cannot be read as JSON'
-fail_mode "$bad_json" 'ls' 1 'fails open'
-# A broken project file does not switch off the generic rules.
+fail_mode "$bad_json" 'ls' 1 'the command was allowed'
 fail_mode "$bad_json" 'gh pr merge 1 --auto' 2 'gh pr checks'
 fail_mode "$bad_json" 'gh pr merge 1 --auto' 2 'cannot be read as JSON'
 
 no_version="$(project_with no-version '{"rules": []}')"
 fail_mode "$no_version" 'ls' 1 '"version": 1'
+bool_version="$(project_with bool-version '{"version": true, "rules": []}')"
+fail_mode "$bool_version" 'ls' 1 '"version": 1'
 
 bad_rule="$(project_with bad-rule '{"version": 1, "rules": [
   {"id": "Bad Id", "message": "x", "when": [{"command": ["x"]}]},
@@ -317,68 +456,120 @@ fail_mode "$bad_rule" 'ls' 1 "rule id 'Bad Id'"
 fail_mode "$bad_rule" 'ls' 1 "'when' must be a non-empty list"
 fail_mode "$bad_rule" 'ls' 1 "unknown keys ['comand']"
 fail_mode "$bad_rule" 'ls' 1 'raw pattern'
-# The valid rule in the same file still applies.
 fail_mode "$bad_rule" 'rm-everything now' 2 'use the safe form'
 
 unknown_disable="$(project_with unknown-disable '{"version": 1, "disable": ["no-such-rule"]}')"
 fail_mode "$unknown_disable" 'ls' 1 "no generic rule named 'no-such-rule'"
 
-# A missing generic rules file: the hook allows everything and says why.
-mkdir -p "$scratch/bare-hook"
-cp "$hook" "$scratch/bare-hook/guard-bash-command.py"
-fail_mode "$scratch/empty-project" 'gh pr merge 1 --auto' 1 'not found, so its rules are not enforced' \
-  "$scratch/bare-hook/guard-bash-command.py"
+# The token rule is locked: a disable entry for it is ignored, with a warning.
+lock="$(project_with lock '{"version": 1, "disable": ["token-lookup"]}')"
+fail_mode "$lock" 'bao token lookup' 2 "$LOOKUP"
+fail_mode "$lock" 'ls' 1 "'token-lookup' cannot be turned off"
 
-# ===== raw fallbacks: used when the parser fails ===========================
-# Every rule's raw patterns must catch a plain form of its command and leave a
-# safe form alone.
+# Turning off gh-pr-merge-auto works, and every other refusal says so.
+no_auto="$(project_with no-auto '{"version": 1, "disable": ["gh-pr-merge-auto"]}')"
+fail_mode "$no_auto" 'gh pr merge 1 --auto' 0 ''
+fail_mode "$no_auto" 'bao token lookup' 2 "turns off the 'gh-pr-merge-auto' rule"
+
+# A disable list found through the cwd field is not honoured.
+fail_mode "$no_auto" 'gh pr merge 1 --auto' 2 'came from the hook input' "$hook" cwd
+
+# A missing, broken or invalid generic file falls back to the embedded rules.
+for variant in missing broken invalid; do
+  mkdir -p "$scratch/hook-$variant"
+  cp "$hook" "$scratch/hook-$variant/guard-bash-command.py"
+  case "$variant" in
+    broken) printf '{ nope' > "$scratch/hook-$variant/guard-rules.json" ;;
+    invalid) printf '{"version": 1, "rules": [{"id": "x"}]}' > "$scratch/hook-$variant/guard-rules.json" ;;
+  esac
+  fail_mode "$scratch/empty-project" 'gh pr merge 1 --auto' 2 'using the copy built into the guard' \
+    "$scratch/hook-$variant/guard-bash-command.py"
+  fail_mode "$scratch/empty-project" 'bao print token' 2 "$LOOKUP" \
+    "$scratch/hook-$variant/guard-bash-command.py"
+done
+
+# The embedded copy and guard-rules.json must hold the same rules.
 count=$((count + 1))
-PYTHONDONTWRITEBYTECODE=1 python3 - "$hook" "$example_project" <<'EOF' || fail=1
-import importlib.util, sys
+python3 - "$hook" "$here/guard-rules.json" <<'EOF' || failed
+import importlib.util, json, sys
 spec = importlib.util.spec_from_file_location("guard", sys.argv[1])
 guard = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(guard)
-problems = []
-rules = {r.id: r for r in guard.load_rules(sys.argv[2], problems)}
-assert not problems, problems
-cases = {
-    "gh-pr-merge-auto": ("gh pr merge 5 --squash --auto", "gh pr merge 5 --squash"),
-    "token-lookup": ("vault token lookup", "bao read -field=ttl auth/token/lookup-self"),
-    "coder-templates-push": ("coder templates push web", "coder templates list"),
-}
-bad = 0
-assert set(rules) == set(cases), sorted(rules)
-for rule_id, (banned, safe) in cases.items():
-    rule = [rules[rule_id]]
-    if guard.check_raw(banned, rule) is None:
-        print(f"FAIL: raw fallback of {rule_id} misses: {banned}", file=sys.stderr); bad = 1
-    if guard.check_raw(safe, rule) is not None:
-        print(f"FAIL: raw fallback of {rule_id} refuses: {safe}", file=sys.stderr); bad = 1
-sys.exit(bad)
+shipped = json.load(open(sys.argv[2]))
+shipped.pop("$comment", None)
+if shipped != guard.EMBEDDED_RULES:
+    print("FAIL: guard-rules.json and EMBEDDED_RULES differ; change both together", file=sys.stderr)
+    sys.exit(1)
 EOF
 
-# ===== mutation check: each rule's cases fail with that rule off ===========
-mutant() {
-  local label="$1" option="$2" dir="$3" out status
-  count=$((count + 1))
-  out="$(GUARD_TEST_PROJECT="$dir" bash "$0" "$option" 2>&1)"
-  status=$?
-  if [ "$status" -eq 0 ]; then
-    echo "FAIL (mutation): the cases still pass with $label off" >&2
-    fail=1
-  elif ! printf '%s' "$out" | grep -q 'FAIL (exit 0, want 2)'; then
-    echo "FAIL (mutation): with $label off the suite failed for another reason:" >&2
-    echo "$out" | head -5 >&2
-    fail=1
-  fi
-}
-for rule_id in $(python3 -c 'import json,sys; print(" ".join(r["id"] for r in json.load(open(sys.argv[1]))["rules"]))' "$here/guard-rules.json"); do
-  dir="$(project_with "disable-$rule_id" "{\"version\": 1, \"disable\": [\"$rule_id\"]}")"
-  mutant "generic rule $rule_id" --generic-only "$dir"
-done
-# The project section with the project rules file left out.
-mkdir -p "$scratch/no-rules"
-mutant "project rule coder-templates-push" --project-only "$scratch/no-rules"
+# ===== a long command is refused fast ======================================
+count=$((count + 1))
+python3 - "$hook" <<'EOF' || failed
+import json, subprocess, sys, time
+payload = json.dumps({"tool_name": "Bash", "tool_input": {"command": "echo " + "a " * 20000}})
+start = time.monotonic()
+done = subprocess.run([sys.executable, sys.argv[1]], input=payload, capture_output=True, text=True, timeout=10)
+took = time.monotonic() - start
+print(f"guard-bash-command: a 20,000-word command: exit {done.returncode} in {took:.2f}s")
+if done.returncode != 2 or "too long" not in done.stderr or took > 2:
+    print(f"FAIL: 20,000-word command: exit {done.returncode}, {took:.2f}s: {done.stderr[:200]}", file=sys.stderr)
+    sys.exit(1)
+EOF
+
+# ===== mutation check: remove each piece of each rule in turn ==============
+# Generic mutants run the generic section against a copy of the hook with a
+# mutated guard-rules.json beside it; project mutants run the project section
+# with a mutated project file.
+mutants="$scratch/mutants"
+python3 - "$here/guard-rules.json" "$here/tests/example-project-rules.json" "$mutants" "$hook" <<'EOF' > "$scratch/mutants.tsv" || failed
+import copy, json, os, shutil, sys
+generic, project, out, hook = sys.argv[1:5]
+
+def pieces(rule):
+    """(label, mutate) for every when entry, condition and raw pattern."""
+    for w, when in enumerate(rule["when"]):
+        yield f"when[{w}]", lambda r, w=w: r["when"].pop(w)
+        for key in ("words", "flag", "arg_contains", "arg_endswith", "unless_option"):
+            if key in when:
+                yield f"when[{w}].{key}", lambda r, w=w, key=key: r["when"][w].pop(key)
+        option = when.get("unless_option", {})
+        for key in ("except", "before_positional"):
+            if key in option:
+                yield f"when[{w}].unless_option.{key}", \
+                    lambda r, w=w, key=key: r["when"][w]["unless_option"].pop(key)
+    for k, _ in enumerate(rule.get("raw", [])):
+        yield f"raw[{k}]", lambda r, k=k: r["raw"].pop(k)
+
+n = 0
+for kind, path in (("generic", generic), ("project", project)):
+    table = json.load(open(path))
+    for r, rule in enumerate(table["rules"]):
+        for label, mutate in pieces(rule):
+            n += 1
+            mutant = copy.deepcopy(table)
+            mutate(mutant["rules"][r])
+            d = os.path.join(out, f"m{n}")
+            if kind == "generic":
+                os.makedirs(d)
+                shutil.copy(hook, os.path.join(d, "guard-bash-command.py"))
+                json.dump(mutant, open(os.path.join(d, "guard-rules.json"), "w"))
+            else:
+                os.makedirs(os.path.join(d, ".claude"))
+                json.dump(mutant, open(os.path.join(d, ".claude", "guard-rules.json"), "w"))
+            print(f"{kind} {rule['id']}:{label} {d}")
+EOF
+# Run the mutants in parallel; each prints one result line.
+xargs -n 3 -P "${GUARD_TEST_JOBS:-8}" bash "$0" --mutant < "$scratch/mutants.tsv" > "$scratch/mutants.out" 2>&1
+sort "$scratch/mutants.out" | sed -n 's/^caught /mutation caught: /p'
+total="$(wc -l < "$scratch/mutants.tsv" | tr -d ' ')"
+caught="$(grep -c '^caught ' "$scratch/mutants.out" || true)"
+count=$((count + total))
+if grep -q '^missed ' "$scratch/mutants.out" || [ "$caught" -ne "$total" ]; then
+  grep -v '^caught ' "$scratch/mutants.out" | sed 's/^missed /FAIL (mutation): the cases still pass without /' >&2
+  failed
+fi
+echo "guard-bash-command: mutation check caught $caught of $total mutants"
+[ "$total" -gt 0 ] || { echo "FAIL (mutation): no mutants were generated" >&2; failed; }
 fi
 
 if [ "$fail" -ne 0 ]; then

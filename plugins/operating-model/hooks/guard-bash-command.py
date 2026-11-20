@@ -8,10 +8,14 @@ the call and returns stderr to the agent; exit status 0 lets it through.
 The rules are data, not code. They come from two files, read on every call:
 
 - `guard-rules.json` beside this script: the generic rules the plugin ships.
+  An identical copy is embedded below (EMBEDDED_RULES) and used if that file
+  is missing or invalid.
 - `<project>/.claude/guard-rules.json`, if it exists: the project's own rules,
   added to the generic ones, plus an optional `disable` list of generic rule
   ids the project turns off. The project directory is `$CLAUDE_PROJECT_DIR`,
-  or the `cwd` field of the hook input when that is unset.
+  or the `cwd` field of the hook input when that is unset; a file found
+  through `cwd` may add rules but its `disable` list is ignored. A rule
+  marked `locked` (the token rule) cannot be turned off.
 
 The file format is documented in README.md beside this script. Each rule names
 the safe form, because a refusal that does not say what to do instead invites
@@ -24,10 +28,16 @@ command the shell would run is refused, however it is wrapped.
 
 Failure behaviour:
 
-- A rules file that is missing, unreadable or malformed, or a single invalid
-  rule, FAILS OPEN: the guard skips what it cannot use, keeps every rule it
-  could load, and says what it skipped on stderr (exit 1, which Claude Code
-  shows to the user without blocking the call). A refusal still exits 2.
+- A broken generic rules file does not drop the generic rules: the embedded
+  copy is used, with a warning.
+- A project rules file that is unreadable or malformed, or a single invalid
+  project rule, FAILS OPEN: the guard skips what it cannot use, keeps every
+  rule it could load, and says what it skipped on stderr (exit 1, which
+  Claude Code shows to the user without blocking the call). A refusal still
+  exits 2.
+- A command longer than MAX_COMMAND_BYTES or MAX_COMMAND_WORDS is refused
+  outright, so that a hook timeout (which lets a command through) is never a
+  way past the guard.
 - A hook input that is not a Bash tool call with a string command passes
   silently (exit 0), as in the original guard.
 - If the shell parser itself fails on a command, the guard does not open: it
@@ -41,6 +51,7 @@ command of their own: a git alias or `git rebase --exec`, sed's `e`, awk's
 `system()`. The written rule covers that case: on a refusal, use
 the safe form or report it; do not wrap the command.
 """
+import bisect
 import json
 import os
 import re
@@ -67,9 +78,87 @@ MAX_DEPTH = 6
 BUILTIN_RULES = Path(__file__).resolve().parent / "guard-rules.json"
 PROJECT_RULES = Path(".claude") / "guard-rules.json"
 RULE_ID = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
-RULE_KEYS = {"id", "message", "when", "raw", "$comment"}
+RULE_KEYS = {"id", "message", "when", "raw", "locked", "$comment"}
 WHEN_KEYS = {"command", "words", "flag", "arg_contains", "arg_endswith", "unless_option"}
+OPTION_KEYS = {"name", "except", "before_positional"}
 MAX_RULES_BYTES = 256 * 1024
+
+# Above these sizes a command is refused outright: checking it could outlast
+# the hook timeout, and a timed-out hook lets the command through.
+MAX_COMMAND_BYTES = 64 * 1024
+MAX_COMMAND_WORDS = 5000
+TOO_LONG = (
+    "This command is refused because it is too long for the command guard to "
+    "check ({size}; the limit is {max_bytes} bytes and {max_words} words). Safe "
+    "form: put long content in a file with your file-writing tool, then run a "
+    "short command that reads it, or split the command into smaller ones."
+)
+
+# The generic rules, as shipped in guard-rules.json. Used only when that file
+# is missing or invalid, so a broken plugin file never drops the generic rules.
+# test-guard-bash-command.sh checks that the two stay identical.
+EMBEDDED_RULES = {
+    "version": 1,
+    "rules": [
+        {
+            "id": "gh-pr-merge-auto",
+            "message": (
+                "`gh pr merge --auto` is refused: in a repository whose default branch "
+                "has no required status checks, --auto merges at once, before CI "
+                "finishes. Safe form: watch the checks (`gh pr checks <pr> --watch`), "
+                "then merge explicitly (`gh pr merge <pr> --squash`). A project that "
+                "does require checks can turn this rule off in .claude/guard-rules.json."
+            ),
+            "when": [
+                {"command": ["gh"], "words": ["pr", "merge"], "flag": ["--auto"]},
+                {"command": ["gh"], "words": ["api"], "arg_contains": ["enablePullRequestAutoMerge"]},
+            ],
+            "raw": [
+                r"\bgh\b[^;&|\n]*\bpr\s+merge\b[^;&|\n]*--auto\b",
+                r"enablePullRequestAutoMerge",
+            ],
+        },
+        {
+            "id": "token-lookup",
+            "locked": True,
+            "message": (
+                "This command prints a Vault or OpenBao token itself: `token lookup`, "
+                "`print token`, and a `read` or `write` of `auth/token/lookup`, "
+                "`lookup-self` or `lookup-accessor` without a `-field=` (other than "
+                "`id`) placed before the path. Safe form: read one field, with the flag "
+                "before the path, for example `bao read -field=ttl "
+                "auth/token/lookup-self` (other fields: policies, display_name, "
+                "expire_time)."
+            ),
+            "when": [
+                {"command": ["bao", "vault"], "words": ["token", "lookup"]},
+                {"command": ["bao", "vault"], "words": ["print", "token"]},
+                {
+                    "command": ["bao", "vault"],
+                    "words": ["read"],
+                    "arg_endswith": ["auth/token/lookup-self"],
+                    "unless_option": {"name": "field", "except": ["id"], "before_positional": True},
+                },
+                {
+                    "command": ["bao", "vault"],
+                    "words": ["write"],
+                    "arg_endswith": [
+                        "auth/token/lookup",
+                        "auth/token/lookup-self",
+                        "auth/token/lookup-accessor",
+                    ],
+                    "unless_option": {"name": "field", "except": ["id"], "before_positional": True},
+                },
+            ],
+            "raw": [
+                r"\b(?:bao|vault)\b[^;&|\n]*\btoken\s+lookup\b",
+                r"\b(?:bao|vault)\b[^;&|\n]*\bprint\s+token\b",
+                r"\b(?:bao|vault)\b[^;&|\n]*\bread\b(?:(?!--?field[= ](?!id\b))[^;&|\n])*auth/token/lookup-self",
+                r"\b(?:bao|vault)\b[^;&|\n]*\bwrite\b(?:(?!--?field[= ](?!id\b))[^;&|\n])*auth/token/lookup(?:-self|-accessor)?\b",
+            ],
+        },
+    ],
+}
 
 
 # --- rules -----------------------------------------------------------------
@@ -77,61 +166,103 @@ MAX_RULES_BYTES = 256 * 1024
 class Rule:
     """One entry of a rule table. See README.md for the format."""
 
-    def __init__(self, rule_id, message, when, raw):
+    def __init__(self, rule_id, message, when, raw, locked=False):
         self.id = rule_id
         self.message = message
         self.when = when
         self.raw = raw
+        self.locked = locked
 
 
-def _follows(tokens, start, *words):
-    """Index where `words` appear adjacent, in order, after `start`; else -1."""
-    n = len(words)
-    for i in range(start + 1, len(tokens) - n + 1):
-        if tuple(tokens[i:i + n]) == words:
-            return i
-    return -1
+class Words:
+    """One simple command's words, with the lookups rules need computed once.
+
+    Matching a rule at every word of a long command would otherwise rescan
+    the rest of the command for each word, which grows with the square of
+    its length."""
+
+    def __init__(self, tokens):
+        self.tokens = tokens
+        self.names = [os.path.basename(t) for t in tokens]
+        self._cache = {}
+
+    def sequence_after(self, i, words):
+        """Index of the first adjacent run of `words` after position i, or -1."""
+        key = ("seq", tuple(words))
+        starts = self._cache.get(key)
+        if starts is None:
+            n, t = len(words), self.tokens
+            starts = [k for k in range(len(t) - n + 1) if t[k] == words[0] and t[k:k + n] == list(words)]
+            self._cache[key] = starts
+        k = bisect.bisect_right(starts, i)
+        return starts[k] if k < len(starts) else -1
+
+    def last(self, key, predicate):
+        """Index of the last word that satisfies `predicate`, or -1."""
+        found = self._cache.get(key)
+        if found is None:
+            found = -1
+            for k, t in enumerate(self.tokens):
+                if predicate(t):
+                    found = k
+            self._cache[key] = found
+        return found
 
 
-def _option_values(rest, name):
-    """Values given to `-name`/`--name`, as `-name=v` or `-name v`."""
+def _option_values(tokens, start, name, before_positional):
+    """Values given to `-name`/`--name` after position `start`, as `-name=v`
+    or `-name v`. With `before_positional`, only options before the first
+    word that is not an option count: Go's flag parser, used by bao and
+    vault, stops at the first positional argument and ignores the rest."""
     flag = re.compile(r"^--?" + re.escape(name) + "=")
-    values = [t.split("=", 1)[1] for t in rest if flag.match(t)]
-    values += [rest[k + 1] for k, t in enumerate(rest[:-1]) if t in ("-" + name, "--" + name)]
+    values, k = [], start + 1
+    while k < len(tokens):
+        t = tokens[k]
+        if flag.match(t):
+            values.append(t.split("=", 1)[1])
+        elif t in ("-" + name, "--" + name):
+            if k + 1 < len(tokens):
+                values.append(tokens[k + 1])
+            k += 1
+        elif before_positional and not t.startswith("-"):
+            break
+        k += 1
     return values
 
 
-def _when_matches(tokens, i, when):
-    """True if the simple command `tokens`, read from position `i`, meets
+def _when_matches(words, i, when):
+    """True if the simple command `words`, read from position `i`, meets
     every condition of one `when` entry."""
-    if os.path.basename(tokens[i]) not in when["command"]:
+    if words.names[i] not in when["command"]:
         return False
-    rest = tokens[i + 1:]
-    start = i
+    tokens, start = words.tokens, i
     if "words" in when:
-        start = _follows(tokens, i, *when["words"])
+        start = words.sequence_after(i, when["words"])
         if start < 0:
             return False
-    if "flag" in when and not any(
-        t == f or t.startswith(f + "=") for t in tokens[start:] for f in when["flag"]
-    ):
-        return False
-    if "arg_contains" in when and not any(s in t for t in rest for s in when["arg_contains"]):
-        return False
-    if "arg_endswith" in when and not any(
-        t.rstrip("/").endswith(s) for t in rest for s in when["arg_endswith"]
-    ):
-        return False
+    wid = id(when)
+    if "flag" in when:
+        flags = when["flag"]
+        if words.last((wid, "flag"), lambda t: any(t == f or t.startswith(f + "=") for f in flags)) < start:
+            return False
+    if "arg_contains" in when:
+        subs = when["arg_contains"]
+        if words.last((wid, "contains"), lambda t: any(s in t for s in subs)) <= i:
+            return False
+    if "arg_endswith" in when:
+        ends = when["arg_endswith"]
+        if words.last((wid, "endswith"), lambda t: any(t.rstrip("/").endswith(s) for s in ends)) <= i:
+            return False
     if "unless_option" in when:
         option = when["unless_option"]
-        values = _option_values(rest, option["name"])
+        values = _option_values(tokens, start, option["name"], option.get("before_positional", False))
         if values and not set(values) & set(option.get("except", [])):
             return False
     return True
 
 
-def rule_matches(rule, tokens, i):
-    return any(_when_matches(tokens, i, when) for when in rule.when)
+def rule_matches(rule, words, i):
+    return any(_when_matches(words, i, when) for when in rule.when)
 
 
 def _string_list(value, where, allow_empty=False):
@@ -155,6 +286,9 @@ def parse_rule(entry):
     message = entry.get("message")
     if not isinstance(message, str) or not message.strip():
         raise ValueError(f"rule {rule_id}: 'message' must be a non-empty string")
+    locked = entry.get("locked", False)
+    if not isinstance(locked, bool):
+        raise ValueError(f"rule {rule_id}: 'locked' must be true or false")
     whens = entry.get("when")
     if not isinstance(whens, list) or not whens:
         raise ValueError(f"rule {rule_id}: 'when' must be a non-empty list")
@@ -171,71 +305,110 @@ def parse_rule(entry):
                 _string_list(when[key], f"{where}.{key}")
         if "unless_option" in when:
             option = when["unless_option"]
-            if not isinstance(option, dict) or set(option) - {"name", "except"}:
-                raise ValueError(f"{where}.unless_option must be {{name, except}}")
+            if not isinstance(option, dict) or set(option) - OPTION_KEYS:
+                raise ValueError(f"{where}.unless_option keys must be among {sorted(OPTION_KEYS)}")
             if not isinstance(option.get("name"), str) or not option["name"]:
                 raise ValueError(f"{where}.unless_option.name must be a non-empty string")
             _string_list(option.get("except", []), f"{where}.unless_option.except", allow_empty=True)
+            if not isinstance(option.get("before_positional", False), bool):
+                raise ValueError(f"{where}.unless_option.before_positional must be true or false")
     raw = []
     for pattern in _string_list(entry.get("raw", []), f"rule {rule_id}: raw", allow_empty=True):
         try:
             raw.append(re.compile(pattern))
         except re.error as exc:
             raise ValueError(f"rule {rule_id}: raw pattern {pattern!r}: {exc}") from None
-    return Rule(rule_id, message.strip(), whens, raw)
+    return Rule(rule_id, message.strip(), whens, raw, locked)
 
 
-def read_table(path, problems, required):
-    """Return (rules, disable) from one rules file. Problems are appended to
-    `problems` and the file, or the bad rule, is skipped: the guard fails open."""
+def read_table(path, problems):
+    """Return (table, error) for one rules file: the parsed object, or None
+    and a reason. A missing file is (None, None)."""
     try:
         if path.stat().st_size > MAX_RULES_BYTES:
-            problems.append(f"{path}: larger than {MAX_RULES_BYTES} bytes, skipped")
-            return [], []
+            return None, f"larger than {MAX_RULES_BYTES} bytes"
         table = json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError:
-        if required:
-            problems.append(f"{path}: not found, so its rules are not enforced")
-        return [], []
+        return None, None
     except (OSError, ValueError, RecursionError) as exc:
-        problems.append(f"{path}: cannot be read as JSON ({exc}), so its rules are not enforced")
-        return [], []
-    if not isinstance(table, dict) or table.get("version") != 1:
-        problems.append(f"{path}: want an object with \"version\": 1, so its rules are not enforced")
-        return [], []
+        return None, f"cannot be read as JSON ({exc})"
+    if not isinstance(table, dict) or type(table.get("version")) is not int or table["version"] != 1:
+        return None, 'want an object with "version": 1'
     unknown = set(table) - {"version", "rules", "disable", "$comment"}
     if unknown:
         problems.append(f"{path}: unknown keys {sorted(unknown)} ignored")
+    if not isinstance(table.get("rules", []), list):
+        return None, '"rules" must be a list'
+    return table, None
+
+
+def parse_rules(table, path, problems, strict):
+    """Rules from a table. With `strict`, any invalid rule is an error
+    (raised); otherwise it is skipped with a problem noted."""
     rules = []
-    entries = table.get("rules", [])
-    if not isinstance(entries, list):
-        problems.append(f"{path}: \"rules\" must be a list, so its rules are not enforced")
-        entries = []
-    for entry in entries:
+    for entry in table.get("rules", []):
         try:
             rules.append(parse_rule(entry))
         except ValueError as exc:
+            if strict:
+                raise
             problems.append(f"{path}: {exc}; that rule is not enforced")
-    disable = table.get("disable", [])
-    if not isinstance(disable, list) or not all(isinstance(d, str) for d in disable):
-        problems.append(f"{path}: \"disable\" must be a list of rule ids, ignored")
-        disable = []
-    return rules, disable
+    return rules
 
 
-def load_rules(project_dir, problems):
-    """The generic rules, minus any the project disables, plus the project's."""
-    builtin, _ = read_table(BUILTIN_RULES, problems, required=True)
+def load_generic(problems):
+    """The generic rules from guard-rules.json, or the embedded copy when that
+    file is missing or invalid in any way."""
+    table, error = read_table(BUILTIN_RULES, problems)
+    if table is None:
+        error = error or "not found"
+    else:
+        try:
+            return parse_rules(table, BUILTIN_RULES, problems, strict=True)
+        except ValueError as exc:
+            error = str(exc)
+    problems.append(f"{BUILTIN_RULES}: {error}; using the copy built into the guard")
+    return parse_rules(EMBEDDED_RULES, "built-in rules", problems, strict=True)
+
+
+def load_rules(project_dir, problems, notices, from_env=True):
+    """The generic rules, minus any the project disables, plus the project's.
+
+    `notices` collects lines to print alongside any refusal, so that a rule a
+    project turned off is visible whenever the guard is seen working."""
+    builtin = load_generic(problems)
     project, disable = [], []
     if project_dir:
-        project, disable = read_table(Path(project_dir) / PROJECT_RULES, problems, required=False)
-    known = {r.id for r in builtin}
+        path = Path(project_dir) / PROJECT_RULES
+        table, error = read_table(path, problems)
+        if error:
+            problems.append(f"{path}: {error}, so its rules are not enforced")
+        elif table is not None:
+            project = parse_rules(table, path, problems, strict=False)
+            disable = table.get("disable", [])
+            if not isinstance(disable, list) or not all(isinstance(d, str) for d in disable):
+                problems.append(f"{path}: \"disable\" must be a list of rule ids, ignored")
+                disable = []
+            if disable and not from_env:
+                problems.append(
+                    f"{path}: \"disable\" ignored, because the project directory came from "
+                    "the hook input's cwd, not CLAUDE_PROJECT_DIR"
+                )
+                disable = []
+    by_id = {r.id: r for r in builtin}
+    honoured = []
     for rule_id in disable:
-        if rule_id not in known:
+        rule = by_id.get(rule_id)
+        if rule is None:
             problems.append(f"disable: no generic rule named {rule_id!r}")
-    rules = [r for r in builtin if r.id not in disable]
+        elif rule.locked:
+            problems.append(f"disable: {rule_id!r} cannot be turned off; it still applies")
+        else:
+            honoured.append(rule_id)
+            notices.append(f"guard-bash-command: note: this project turns off the {rule_id!r} rule.")
+    rules = [r for r in builtin if r.id not in honoured]
     for rule in project:
-        if rule.id in known:
+        if rule.id in by_id:
             problems.append(f"project rule {rule.id!r} has the same id as a generic rule; both apply")
         rules.append(rule)
     return rules
@@ -296,6 +469,7 @@ class Parser:
         self.scripts = []
         self.level = 0
         self._index = {}        # id(word list) -> position in self.segments
+        self.herestrings = []   # (owning word list, here-string text)
 
     def _substitution(self):
         """Parse a `$(...)` body in place; the `$(` is already passed."""
@@ -349,6 +523,27 @@ class Parser:
             else:
                 self.i += 1
 
+    def _feeds_a_shell(self, owner):
+        """True if standard input given to the simple command `owner` is run
+        as a script. Input feeds its own command and, if that command is
+        piped onward, whatever reads the pipe. Commands inside a
+        substitution (a deeper level) are not part of that pipeline."""
+        k = self._index.get(id(owner))
+        if k is None:
+            return False
+        words, sep, level = self.segments[k]
+        return _runs_stdin(words) or (sep == "|" and any(
+            lvl == level and _runs_stdin(w)
+            for w, _sep, lvl in self.segments[k + 1:]
+        ))
+
+    def resolve_herestrings(self):
+        """After parsing: a here-string fed to something that runs its
+        standard input (`bash <<< '...'`) is a script."""
+        for owner, text in self.herestrings:
+            if self._feeds_a_shell(owner):
+                self.scripts.append(text)
+
     def _heredoc_bodies(self, pending):
         """Consume the bodies of the here-documents opened on the line that
         just ended, and decide for each whether it is a script or text."""
@@ -364,18 +559,7 @@ class Parser:
                     break
                 lines.append(line)
             body = "\n".join(lines)
-            # The here-document feeds its own command and, if that command
-            # is piped onward, whatever reads the pipe. Commands inside a
-            # substitution (a deeper level) are not part of that pipeline.
-            k = self._index.get(id(owner))
-            is_script = False
-            if k is not None:
-                words, sep, level = self.segments[k]
-                is_script = _runs_stdin(words) or (sep == "|" and any(
-                    lvl == level and _runs_stdin(w)
-                    for w, _sep, lvl in self.segments[k + 1:]
-                ))
-            if is_script:
+            if self._feeds_a_shell(owner):
                 self.scripts.append(body)
             elif not quoted:
                 inner = Parser(body)
@@ -388,11 +572,16 @@ class Parser:
         seg, word = [], None
         pending = []
         depth = 0
+        herestring_next = False
 
         def end_word():
-            nonlocal word
+            nonlocal word, herestring_next
             if word is not None:
-                seg.append("".join(word))
+                text = "".join(word)
+                seg.append(text)
+                if herestring_next:
+                    self.herestrings.append((seg, text))
+                    herestring_next = False
                 word = None
 
         def end_seg(sep):
@@ -448,6 +637,7 @@ class Parser:
                 self.i = n if j < 0 else j
             elif t.startswith("<<<", self.i):                # here-string
                 end_word()
+                herestring_next = True                       # the next word is its text
                 self.i += 3
             elif t.startswith("<<", self.i):
                 match = HEREDOC.match(t, self.i)
@@ -512,16 +702,24 @@ def check_raw(text, rules):
 
 def _command_strings(words):
     """The arguments of a simple command that it will run as command lines:
-    every quoted argument of `ssh`, `eval` and the like, and the argument
-    after `-c` once a shell has been named (`bash -c`, `kubectl exec -- sh -c`).
+    every quoted argument of `ssh`, `eval` and the like, the arguments that
+    `eval` and `ssh` join into one command line, and the argument after any
+    option cluster holding `c` once a shell has been named (`bash -c`,
+    `bash -ce`, `kubectl exec -- sh -c`).
     """
     name = os.path.basename(words[0])
     if name in RUNS_ARGUMENTS:
-        return [w for w in words[1:] if re.search(r"\s", w)]
+        found = [w for w in words[1:] if re.search(r"\s", w)]
+        # The shell joins eval's arguments, and ssh's remote command, with
+        # spaces before running them: `eval 'gh pr merge 7' --auto`.
+        joined = words[1:] if name == "eval" else _ssh_remote_command(words) if name == "ssh" else []
+        if len(joined) > 1:
+            found.append(" ".join(joined))
+        return found
     found = []
     seen_shell = name in SHELLS | {"su", "script", "flock"}
     for k, word in enumerate(words[1:], start=1):
-        if seen_shell and re.fullmatch(r"-[A-Za-z]*c", word):
+        if seen_shell and re.fullmatch(r"-[A-Za-z]*c[A-Za-z]*", word):
             found.extend(w for w in words[k + 1:k + 3] if w != "--")
         if os.path.basename(word) in SHELLS:
             seen_shell = True
@@ -535,16 +733,21 @@ def check(command, rules, depth=0):
     try:
         parser = Parser(command)
         parser.parse()
+        parser.resolve_herestrings()
     except Exception:  # noqa: BLE001 - a parser bug must not open the guard
         return check_raw(command, rules)
 
+    commands = {name for rule in rules for when in rule.when for name in when["command"]}
     for words, _sep, _level in parser.segments:
         name, words = _command_name(words)
         if not words or name in TEXT_TOOLS:
             continue
-        for i in range(len(words)):
+        indexed = Words(words)
+        for i, word_name in enumerate(indexed.names):
+            if word_name not in commands:
+                continue
             for rule in rules:
-                if rule_matches(rule, words, i):
+                if rule_matches(rule, indexed, i):
                     return rule.message
         for inner in _command_strings(words):
             message = check(inner, rules, depth + 1)
@@ -558,9 +761,23 @@ def check(command, rules, depth=0):
     return None
 
 
-def _report(problems):
-    for problem in problems:
-        sys.stderr.write(f"guard-bash-command: {problem}\n")
+def too_long(command):
+    """A refusal message if the command is past the size the guard checks."""
+    size = len(command.encode("utf-8", "surrogatepass"))
+    words = len(command.split())
+    if size > MAX_COMMAND_BYTES or words > MAX_COMMAND_WORDS:
+        return TOO_LONG.format(
+            size=f"{size} bytes, {words} words",
+            max_bytes=MAX_COMMAND_BYTES,
+            max_words=MAX_COMMAND_WORDS,
+        )
+    return None
+
+
+def _report(lines):
+    for line in lines:
+        sys.stderr.write(line if line.startswith("guard-bash-command:") else f"guard-bash-command: {line}")
+        sys.stderr.write("\n")
 
 
 def main():
@@ -574,11 +791,23 @@ def main():
     command = tool_input.get("command") if isinstance(tool_input, dict) else None
     if not isinstance(command, str):
         return 0
-    cwd = payload.get("cwd")
-    project_dir = os.environ.get("CLAUDE_PROJECT_DIR") or (cwd if isinstance(cwd, str) else None)
 
-    problems = []
-    rules = load_rules(project_dir, problems)
+    message = too_long(command)
+    if message:
+        sys.stderr.write(message + "\n")
+        return 2
+
+    # The project directory, and whether it came from Claude Code itself.
+    # The cwd field follows the session's working directory, so a project
+    # file found through it may add rules but may not turn any off.
+    project_dir = os.environ.get("CLAUDE_PROJECT_DIR")
+    from_env = bool(project_dir)
+    if not project_dir:
+        cwd = payload.get("cwd")
+        project_dir = cwd if isinstance(cwd, str) else None
+
+    problems, notices = [], []
+    rules = load_rules(project_dir, problems, notices, from_env=from_env)
     try:
         message = check(command, rules)
     except RecursionError:
@@ -589,13 +818,13 @@ def main():
             + " Do not retry through another tool or wrap the command in a "
             "script: use the safe form, or report the refusal.\n"
         )
-        _report(problems)
+        _report(notices + problems)
         return 2
     if problems:
         # Exit 1 is a non-blocking error: the call goes ahead and the user
         # sees why the guard could not apply every rule.
         _report(problems)
-        sys.stderr.write("guard-bash-command: the command was allowed (the guard fails open).\n")
+        sys.stderr.write("guard-bash-command: the command was allowed.\n")
         return 1
     return 0
 
