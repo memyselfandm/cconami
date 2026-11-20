@@ -58,13 +58,13 @@ the row in full. It changes the drawing only; what the model reads is unchanged.
 Run a session with the mod loaded from this checkout, so a saved file reloads it:
 
 ```
-claude --plugin-dir apps/dot-claude/mods/owner-inbox
+claude --plugin-dir plugins/owner-inbox
 ```
 
 Check it before committing:
 
 ```
-claude plugin validate apps/dot-claude/mods/owner-inbox
+claude plugin validate plugins/owner-inbox
 ```
 
 `.claude-plugin/types/` inside a mod is written by Claude Code when it loads the mod.

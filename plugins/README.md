@@ -8,36 +8,36 @@ This directory contains Claude Code skills following the Agent Skills specificat
 
 | Skill | Description |
 |-------|-------------|
-| [pm-context](pm-context/) | **Background context skill** - Provides PM tool abstraction layer. Auto-loads when working with work items. Supports Linear and markdown backlogs. |
+| [pm-context](linear-workflow/skills/pm-context/) | **Background context skill** - Provides PM tool abstraction layer. Auto-loads when working with work items. Supports Linear and markdown backlogs. |
 
 ### Work Item Lifecycle
 
 | Skill | Description |
 |-------|-------------|
-| [refining-work-items](refining-work-items/) | Refines epics, features, tasks into AI-ready specifications with templates |
-| [breaking-down-work](breaking-down-work/) | Breaks down epics into features and tasks with parallel codebase analysis |
-| [executing-work-items](executing-work-items/) | Executes specific items ad-hoc with dependency resolution |
+| [refining-work-items](linear-workflow/skills/refining-work-items/) | Refines epics, features, tasks into AI-ready specifications with templates |
+| [breaking-down-work](linear-workflow/skills/breaking-down-work/) | Breaks down epics into features and tasks with parallel codebase analysis |
+| [executing-work-items](linear-workflow/skills/executing-work-items/) | Executes specific items ad-hoc with dependency resolution |
 
 ### Analysis & Organization
 
 | Skill | Description |
 |-------|-------------|
-| [analyzing-dependencies](analyzing-dependencies/) | Maps dependencies, finds blockers and critical paths |
-| [shuffling-projects](shuffling-projects/) | Reorganizes work items between projects/sprints |
+| [analyzing-dependencies](linear-workflow/skills/analyzing-dependencies/) | Maps dependencies, finds blockers and critical paths |
+| [shuffling-projects](linear-workflow/skills/shuffling-projects/) | Reorganizes work items between projects/sprints |
 
 ### Development Utilities
 
 | Skill | Description |
 |-------|-------------|
-| [scraping-documentation](scraping-documentation/) | Scrapes docs sites to organized markdown |
-| [building-subagents](building-subagents/) | Creates production-ready Claude Code subagents |
+| [scraping-documentation](authoring/skills/scraping-documentation/) | Scrapes docs sites to organized markdown |
+| [building-subagents](authoring/skills/building-subagents/) | Creates production-ready Claude Code subagents |
 
 ### Product & Design
 
 | Skill | Description |
 |-------|-------------|
-| [workshopping-prds](workshopping-prds/) | Interactive PRD workshops with multi-phase workflow |
-| [brainstorming-designs](brainstorming-designs/) | Design ideation and exploration sessions |
+| [workshopping-prds](product/skills/workshopping-prds/) | Interactive PRD workshops with multi-phase workflow |
+| [brainstorming-designs](product/skills/brainstorming-designs/) | Design ideation and exploration sessions |
 
 ## PM Tool Support
 
@@ -45,8 +45,8 @@ All skills use the `pm-context` abstraction layer, supporting:
 
 | Tool | Adapter | CLI |
 |------|---------|-----|
-| Linear | [linear.md](pm-context/adapters/linear.md) | `linctl` |
-| Markdown | [markdown.md](pm-context/adapters/markdown.md) | filesystem |
+| Linear | [linear.md](linear-workflow/skills/pm-context/adapters/linear.md) | `linctl` |
+| Markdown | [markdown.md](linear-workflow/skills/pm-context/adapters/markdown.md) | filesystem |
 
 Configure in your project's CLAUDE.md:
 ```markdown

@@ -3,13 +3,28 @@
   "owner": { "name": "memyselfandm" },
   "plugins": [
     {
+      "name": "linear-workflow",
+      "source": "./plugins/linear-workflow",
+      "description": "Linear project-management skills: refine, break down, analyze and execute work items, and keep projects organized."
+    },
+    {
+      "name": "product",
+      "source": "./plugins/product",
+      "description": "Product skills: workshop PRDs and brainstorm designs."
+    },
+    {
+      "name": "authoring",
+      "source": "./plugins/authoring",
+      "description": "Authoring skills and subagents: build skills and subagents, scrape documentation, configure Ralph."
+    },
+    {
       "name": "owner-inbox",
-      "source": "./apps/dot-claude/mods/owner-inbox",
+      "source": "./plugins/owner-inbox",
       "description": "The Linear issues waiting on you, in a band above the prompt and a panel toggled with /inbox, in every session."
     },
     {
       "name": "peer-messages",
-      "source": "./apps/dot-claude/mods/peer-messages",
+      "source": "./plugins/peer-messages",
       "description": "Messages from other Claude sessions, agents and channels, drawn as a card in the chat."
     }
   ]

@@ -4,5 +4,6 @@
 #
 # CCC-127 must empty this file: it rewrites these skills so the platform names
 # move into platforms/<platform>.md. Do not add new entries; fix the skill.
-apps/dot-claude/skills/pm-context/SKILL.md linctl
-apps/dot-claude/skills/ralph-config/SKILL.md linctl
+plugins/linear-workflow/skills/pm-context/SKILL.md linctl
+plugins/authoring/skills/ralph-config/SKILL.md linctl
+plugins/linear-workflow/skills/linear-workflow/SKILL.md linctl

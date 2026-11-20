@@ -5,7 +5,7 @@ Tooling that turns this repo's canonical skills into other agents' formats.
 Each skill has one agent-neutral `SKILL.md`. Platform specifics live in
 `platforms/<platform>.md` files beside it (for example
 `skills/foo/platforms/hermes.md`). The rule and the frontmatter keys are
-documented in `apps/dot-claude/skills/building-skills/references/format-spec.md`
+documented in `plugins/authoring/skills/building-skills/references/format-spec.md`
 under "Cross-Platform Skills".
 
 Everything here needs [uv](https://docs.astral.sh/uv/), or `python3` with PyYAML.
