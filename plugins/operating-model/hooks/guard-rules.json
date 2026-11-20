@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "$comment": "Generic rules shipped with the operating-model plugin. A project adds its own, or disables one of these by id, in <project>/.claude/guard-rules.json. Format: README.md beside this file.",
+  "rules": [
+    {
+      "id": "gh-pr-merge-auto",
+      "message": "`gh pr merge --auto` is refused: in a repository whose default branch has no required status checks, --auto merges at once, before CI finishes. Safe form: watch the checks (`gh pr checks <pr> --watch`), then merge explicitly (`gh pr merge <pr> --squash`). A project that does require checks can turn this rule off in .claude/guard-rules.json.",
+      "when": [
+        { "command": ["gh"], "words": ["pr", "merge"], "flag": ["--auto"] },
+        { "command": ["gh"], "words": ["api"], "arg_contains": ["enablePullRequestAutoMerge"] }
+      ],
+      "raw": [
+        "\\bgh\\b[^;&|\\n]*\\bpr\\s+merge\\b[^;&|\\n]*--auto\\b",
+        "enablePullRequestAutoMerge"
+      ]
+    },
+    {
+      "id": "token-lookup",
+      "message": "`bao token lookup` and `vault token lookup`, and a `lookup-self` read without a `-field=` other than `id`, are refused: they print the token itself. Safe form: read one field, for example `bao read -field=ttl auth/token/lookup-self` (other fields: policies, display_name, expire_time).",
+      "when": [
+        { "command": ["bao", "vault"], "words": ["token", "lookup"] },
+        {
+          "command": ["bao", "vault"],
+          "words": ["read"],
+          "arg_endswith": ["auth/token/lookup-self"],
+          "unless_option": { "name": "field", "except": ["id"] }
+        }
+      ],
+      "raw": [
+        "\\b(?:bao|vault)\\b[^;&|\\n]*\\btoken\\s+lookup\\b",
+        "\\b(?:bao|vault)\\b[^;&|\\n]*\\bread\\b(?![^;&|\\n]*-field[= ](?!id\\b))[^;&|\\n]*auth/token/lookup-self"
+      ]
+    }
+  ]
+}

@@ -45,5 +45,11 @@ jobs:
         run: bash scripts/test-lint-skills.sh
       - name: Test the Hermes renderer
         run: bash platforms/hermes/test-render.sh
+      - name: Test the operating-model command guard
+        run: |
+          python3 -m json.tool plugins/operating-model/hooks/hooks.json >/dev/null
+          python3 -m json.tool plugins/operating-model/hooks/guard-rules.json >/dev/null
+          grep -q 'guard-bash-command.py' plugins/operating-model/hooks/hooks.json
+          bash plugins/operating-model/hooks/test-guard-bash-command.sh
       - name: Render every skill for Hermes (dry run)
         run: bash platforms/hermes/install.sh --dry-run "$RUNNER_TEMP/hermes"
