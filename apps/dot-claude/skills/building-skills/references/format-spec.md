@@ -154,3 +154,51 @@ Invalid: pdf-             (ends with hyphen)
 | `${CLAUDE_SESSION_ID}` | Yes | No |
 | Supporting file structure | Flexible | `scripts/`, `references/`, `assets/` |
 | Portability | Claude Code only | Cross-agent |
+
+---
+
+## Cross-Platform Skills (this repo)
+
+Skills in this repo run on Claude Code and on Hermes. Each skill has one canonical `SKILL.md`, written agent-neutral.
+
+### Layout
+
+```
+skill-name/
+├── SKILL.md              # Agent-neutral instructions
+├── platforms/
+│   ├── claude-code.md    # How to do each step on Claude Code
+│   └── hermes.md         # How to do each step on Hermes
+└── references/ ...       # Shared supporting files
+```
+
+The body names operations ("list the project's open issues"), not tools. Tool names, CLI commands, loop mechanisms and messaging channels go in `platforms/<platform>.md`. The body links each platform file under a `## Platform notes` heading.
+
+### Frontmatter
+
+The frontmatter is the union of both platforms' keys. Each platform ignores keys it does not know.
+
+| Key | Read by | Notes |
+|-----|---------|-------|
+| `name`, `description` | Both | Required. The lint fails without them. |
+| `argument-hint`, `user-invocable`, `disable-model-invocation`, `allowed-tools` | Claude Code | Dropped when rendering for Hermes. |
+| `version`, `author`, `license` | Hermes | |
+| `targets` | Renderer | Agents the skill supports, e.g. `[claude-code, hermes]`. Absent means all agents. A list without `hermes` is not rendered for Hermes. |
+| `platforms` | Hermes | Operating systems only: `linux`, `macos`, `windows`. Absent means every OS. Usually omitted; the lint fails on any other value. |
+| `metadata.hermes.tags`, `metadata.hermes.related_skills` | Hermes | |
+| `metadata.hermes.category` | Renderer | Hermes directory: `skills/<category>/<name>/`. Default `general`. |
+| `metadata.hermes.os` | Renderer | The rendered output's `platforms` key: `linux`, `macos`, `windows` only, e.g. `[linux]`. Omit it to allow every OS. |
+
+Any other `metadata.hermes` key is dropped with a warning.
+
+Hermes reads `platforms` as an OS filter, so agent names there would hide the skill on every OS, including in a `SKILL.md` copied into Hermes by hand. Agents therefore go in `targets`, a key Hermes ignores. The renderer drops both `targets` and any source `platforms`, and writes the output `platforms` only from `metadata.hermes.os`.
+
+`name` and `metadata.hermes.category` become directory names, so both must match `^[a-z0-9][a-z0-9-]{0,63}$`.
+
+The frontmatter must be valid YAML. Quote any value that starts with `[`, `{`, `@` or a backtick, or that contains `: `.
+
+### Enforcement
+
+`scripts/lint-skills.py` runs in CI. It applies the renderer's frontmatter rules (it imports `platforms/hermes/render.py`), so a skill that lints clean also renders. It also fails when a `SKILL.md` body names a platform-specific tool; the list is the `FORBIDDEN` tuple at the top of that script. Body names are not checked in `platforms/` files or in the frontmatter.
+
+`platforms/hermes/render.py` renders one skill into the Hermes layout; `platforms/hermes/install.sh` renders all of them. See `platforms/README.md`.

@@ -160,6 +160,17 @@ apps/dot-claude/skills/<skill-name>/
 - Deploy to ~/.claude/skills/ (personal) or .claude/skills/ (project)
 ```
 
+## Cross-platform skills
+
+Skills in this repo run on Claude Code and Hermes. When building one here:
+
+- Write one canonical `SKILL.md`, agent-neutral. Name operations ("list the project's open issues"), not tools or CLI commands.
+- Put platform specifics in `platforms/claude-code.md` and `platforms/hermes.md` beside it, and link them from the body under a `## Platform notes` heading.
+- Use the union frontmatter: `name` and `description` (required); `argument-hint`, `user-invocable`, `disable-model-invocation` for Claude Code; `targets` (agents, e.g. `[claude-code, hermes]`; absent means all); `version`, `author`, `license` and `metadata.hermes.{category,tags,related_skills,os}` for Hermes. Do not put agent names in `platforms`: Hermes reads it as an OS list (`linux`, `macos`, `windows`).
+- `scripts/lint-skills.py` enforces this in CI: it fails on a platform-specific tool name in the body, or on any frontmatter the Hermes renderer would reject (a missing `name` or `description`, a non-OS value in `platforms`, and so on).
+
+Details, including the key table and how the Hermes renderer maps keys: [references/format-spec.md](references/format-spec.md#cross-platform-skills-this-repo).
+
 ## Error Handling
 
 - **Research fails**: Continue with general best practices, note limited context

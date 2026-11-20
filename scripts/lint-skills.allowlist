@@ -1,0 +1,8 @@
+# Existing lint-skills.py violations, reported as warnings instead of errors.
+# Format: <path relative to the repo root> <pattern>, one per line. An entry
+# covers every hit of that pattern in that file.
+#
+# CCC-127 must empty this file: it rewrites these skills so the platform names
+# move into platforms/<platform>.md. Do not add new entries; fix the skill.
+apps/dot-claude/skills/pm-context/SKILL.md linctl
+apps/dot-claude/skills/ralph-config/SKILL.md linctl
