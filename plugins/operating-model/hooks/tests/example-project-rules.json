@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "$comment": "Example project rules: the rule the homelab repository adds. Used by test-guard-bash-command.sh.",
+  "rules": [
+    {
+      "id": "coder-templates-push",
+      "message": "`coder templates push` and `create` are refused: run directly they skip the vendor step, so a template fails at plan time or embeds nothing. Safe form: `deployments/coder/templates/push.sh [template ...]`, or the `coder-templates-push.yml` workflow.",
+      "when": [
+        { "command": ["coder"], "words": ["templates", "push"] },
+        { "command": ["coder"], "words": ["templates", "create"] },
+        { "command": ["coder"], "words": ["template", "push"] },
+        { "command": ["coder"], "words": ["template", "create"] }
+      ],
+      "raw": ["\\bcoder\\b[^;&|\\n]*\\btemplates?\\s+(?:push|create)\\b"]
+    }
+  ]
+}

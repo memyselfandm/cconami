@@ -49,7 +49,7 @@ rules are added to the generic ones; they never replace them.
 ```
 
 That rule is the one the homelab repository adds; the full example is
-`tests/example-project/.claude/guard-rules.json`.
+`tests/example-project-rules.json`.
 
 ### Format
 

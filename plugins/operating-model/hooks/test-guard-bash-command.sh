@@ -16,7 +16,6 @@ set -u
 
 here="$(cd "$(dirname "$0")" && pwd)"
 hook="$here/guard-bash-command.py"
-example_project="$here/tests/example-project"
 mode="${1:-all}"
 fail=0
 count=0
@@ -24,6 +23,12 @@ count=0
 scratch="$(mktemp -d)"
 trap 'rm -rf "$scratch"' EXIT
 mkdir -p "$scratch/empty-project"
+
+# A project with the example project rules file in place. The fixture is kept
+# outside a `.claude/` directory in the repository, which .gitignore excludes.
+example_project="$scratch/example-project"
+mkdir -p "$example_project/.claude"
+cp "$here/tests/example-project-rules.json" "$example_project/.claude/guard-rules.json"
 
 # The project directory the generic cases run against. Empty by default, so a
 # rules file in the repository running the tests cannot change the result.
@@ -240,7 +245,7 @@ allowed 'echo "bao token lookup" | sh'
 fi
 
 if [ "$mode" = all ] || [ "$mode" = --project-only ]; then
-# ===== a project rule (tests/example-project/.claude/guard-rules.json) =====
+# ===== a project rule (tests/example-project-rules.json) ===================
 # The example is the rule the homelab repository adds.
 project="${GUARD_TEST_PROJECT:-$example_project}"
 # --- coder templates push
