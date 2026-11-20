@@ -27,20 +27,16 @@ expect() {
 }
 # fresh NAME: copy the real catalog sources to $WORK/NAME and print the path.
 fresh() {
-  local dir="$WORK/$1" p
-  mkdir -p "$dir/.claude-plugin" "$dir/plugins"
+  local dir="$WORK/$1"
+  mkdir -p "$dir/.claude-plugin"
   cp "$REPO/README.md" "$dir/README.md"
   cp "$REPO/.claude-plugin/marketplace.json" "$dir/.claude-plugin/"
-  for p in "$REPO"/plugins/*/.claude-plugin/plugin.json; do
-    p="${p%/.claude-plugin/plugin.json}"
-    mkdir -p "$dir/plugins/${p##*/}/.claude-plugin"
-    cp "$p/.claude-plugin/plugin.json" "$dir/plugins/${p##*/}/.claude-plugin/"
-  done
+  cp -R "$REPO/plugins" "$dir/plugins"
   echo "$dir"
 }
-# edit_json DIR PYTHON: apply a Python expression to marketplace.json as `m`.
+# edit_json FILE PYTHON: apply a Python statement to the JSON in FILE as `m`.
 edit_json() {
-  python3 - "$1/.claude-plugin/marketplace.json" "$2" <<'EOF'
+  python3 - "$1" "$2" <<'EOF'
 import json, sys
 path, code = sys.argv[1], sys.argv[2]
 m = json.load(open(path))
@@ -48,6 +44,8 @@ exec(code)
 json.dump(m, open(path, "w"), indent=2)
 EOF
 }
+market() { echo "$1/.claude-plugin/marketplace.json"; }
+manifest() { echo "$1/plugins/$2/.claude-plugin/plugin.json"; }
 
 expect "the repo's catalog is consistent" 0 '^catalog ok: [0-9]+ plugins$' "$REPO"
 
@@ -75,7 +73,7 @@ sed 's/^## Plugins$/## Plugin list/' "$REPO/README.md" >"$d/README.md"
 expect "a README without the Plugins section fails" 1 'no "## Plugins" section' "$d"
 
 d="$(fresh entry-removed)"
-edit_json "$d" 'm["plugins"] = [p for p in m["plugins"] if p["name"] != "mcp-health"]'
+edit_json "$(market "$d")" 'm["plugins"] = [p for p in m["plugins"] if p["name"] != "mcp-health"]'
 expect "a marketplace entry removed fails (README side)" 1 'mcp-health is in the README table but not in marketplace.json' "$d"
 expect "a marketplace entry removed fails (directory side)" 1 'plugins/mcp-health is not in marketplace.json' "$d"
 
@@ -85,12 +83,43 @@ echo '{"name": "stray"}' >"$d/plugins/stray/.claude-plugin/plugin.json"
 expect "a plugin directory not in the marketplace fails" 1 'plugins/stray is not in marketplace.json' "$d"
 
 d="$(fresh bad-source)"
-edit_json "$d" 'm["plugins"][0]["source"] = "./plugins/elsewhere"'
+edit_json "$(market "$d")" 'm["plugins"][0]["source"] = "./plugins/elsewhere"'
 expect "a marketplace source that is not ./plugins/<name> fails" 1 "marketplace source is './plugins/elsewhere'" "$d"
 
 d="$(fresh missing-dir)"
 rm -rf "$d/plugins/product"
 expect "a marketplace entry without a plugin directory fails" 1 'product: ./plugins/product has no .claude-plugin/plugin.json' "$d"
+
+# Mutation: rename a plugin in its manifest only.
+d="$(fresh manifest-renamed)"
+edit_json "$(manifest "$d" ci-status)" 'm["name"] = "ci-state"'
+expect "a manifest-only rename fails" 1 "plugins/ci-status: plugin.json name is 'ci-state', want 'ci-status'" "$d"
+
+d="$(fresh dep-unknown)"
+edit_json "$(manifest "$d" product)" 'm["dependencies"] = ["linear-flow"]'
+expect "a dependency not in the marketplace fails" 1 "plugins/product: dependency 'linear-flow' is not in marketplace.json" "$d"
+
+d="$(fresh dep-qualified)"
+edit_json "$(manifest "$d" product)" 'm["dependencies"] = [{"name": "nope", "marketplace": "cconami"}]'
+expect "a dependency qualified with this marketplace is checked" 1 "dependency 'nope' is not in marketplace.json" "$d"
+
+d="$(fresh dep-external)"
+edit_json "$(manifest "$d" product)" 'm["dependencies"] = ["linear-workflow", "other-tool@elsewhere"]'
+expect "a dependency on another marketplace is not checked" 0 '^catalog ok' "$d"
+
+d="$(fresh skill-added)"
+mkdir -p "$d/plugins/product/skills/extra"
+echo '---' >"$d/plugins/product/skills/extra/SKILL.md"
+expect "a skill count that no longer matches fails" 1 'product: README says 2 skills, plugins/product has 3' "$d"
+
+d="$(fresh agent-removed)"
+rm "$d/plugins/authoring/agents/database-engineer.md"
+expect "an agent count that no longer matches fails" 1 'authoring: README says 6 agents, plugins/authoring has 5' "$d"
+
+d="$(fresh mod-gains-skill)"
+mkdir -p "$d/plugins/ci-status/skills/x"
+echo '---' >"$d/plugins/ci-status/skills/x/SKILL.md"
+expect "a skill in a row that states none fails" 1 'ci-status: README says 0 skills, plugins/ci-status has 1' "$d"
 
 d="$(fresh bad-json)"
 echo '{' >"$d/.claude-plugin/marketplace.json"

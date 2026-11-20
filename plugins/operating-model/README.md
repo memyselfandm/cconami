@@ -5,9 +5,8 @@ one repository at once and Linear is the shared record.
 
 ## Install
 
-```sh
-claude plugin marketplace add memyselfandm/cconami
-claude plugin install operating-model@cconami
+```
+/plugin install operating-model --marketplace memyselfandm/cconami
 ```
 
 The command guard needs `python3` (3.8 or later) on `PATH`.

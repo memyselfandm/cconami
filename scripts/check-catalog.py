@@ -12,8 +12,17 @@ Three sources must name the same set of plugins:
   * the "plugins" list in .claude-plugin/marketplace.json;
   * the directories under plugins/ that hold .claude-plugin/plugin.json.
 
-It also checks that each marketplace entry's source is ./plugins/<name> and
-that no name appears twice in the table or the marketplace.
+It also checks that:
+  * no name appears twice in the table or the marketplace;
+  * each marketplace entry's source is ./plugins/<name>;
+  * each plugin.json "name" equals its directory name (and so the marketplace
+    name);
+  * each plugin.json dependency on this marketplace (a bare name,
+    "name@<this marketplace>", or an object without another marketplace)
+    names a plugin in the marketplace;
+  * the README "Contents" cell (last column) states the plugin's skill and
+    agent counts: "N skill(s)" must equal the number of skills/*/SKILL.md, and
+    "N agent(s)" the number of agents/*.md. A count left out means zero.
 Exit codes: 0 consistent, 1 a mismatch, 2 a file is missing or unreadable.
 """
 import argparse
@@ -24,16 +33,17 @@ from pathlib import Path
 
 HEADING = "## Plugins"
 NAME_CELL = re.compile(r"`([a-z0-9][a-z0-9-]*)`")
+COUNTS = {"skills": re.compile(r"(\d+)\s+skills?\b"), "agents": re.compile(r"(\d+)\s+agents?\b")}
 
 
-def readme_plugins(text):
-    """Return the plugin names in the README table, in order, or None."""
+def readme_rows(text):
+    """Return [(name, contents_cell)] from the README table, or None."""
     lines = text.splitlines()
     try:
         start = lines.index(HEADING)
     except ValueError:
         return None
-    names, in_table = [], False
+    rows, in_table = [], False
     for line in lines[start + 1:]:
         if line.startswith("## "):
             break
@@ -42,12 +52,13 @@ def readme_plugins(text):
                 break
             continue
         in_table = True
-        first = line.strip("|").split("|")[0].strip()
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        first = cells[0]
         if not first or set(first) <= set("-: ") or first == "Plugin":
             continue
         match = NAME_CELL.search(first)
-        names.append(match.group(1) if match else first)
-    return names
+        rows.append((match.group(1) if match else first, cells[-1]))
+    return rows
 
 
 def duplicates(names):
@@ -59,6 +70,24 @@ def duplicates(names):
     return dup
 
 
+def local_dependency(dep, marketplace):
+    """Return the plugin name a dependency names in this marketplace, else None."""
+    if isinstance(dep, str):
+        name, _, market = dep.partition("@")
+    elif isinstance(dep, dict):
+        name, market = dep.get("name", ""), dep.get("marketplace", "")
+    else:
+        return None
+    return name if market in ("", marketplace) else None
+
+
+def actual_counts(plugin_dir):
+    return {
+        "skills": len(list(plugin_dir.glob("skills/*/SKILL.md"))),
+        "agents": len(list(plugin_dir.glob("agents/*.md"))),
+    }
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     ap.add_argument("--repo", default=Path(__file__).resolve().parent.parent, type=Path)
@@ -68,21 +97,31 @@ def main(argv=None):
     try:
         readme = (repo / "README.md").read_text(encoding="utf-8")
         market = json.loads((repo / ".claude-plugin" / "marketplace.json").read_text(encoding="utf-8"))
+        market_name = market.get("name", "")
         entries = market["plugins"]
         market_names = [e["name"] for e in entries]
     except (OSError, ValueError, KeyError, TypeError) as exc:
         print(f"error: cannot read the catalog sources: {exc}", file=sys.stderr)
         return 2
 
-    table = readme_plugins(readme)
-    if table is None:
+    rows = readme_rows(readme)
+    if rows is None:
         print(f'error: README.md has no "{HEADING}" section', file=sys.stderr)
         return 1
+    table = [name for name, _ in rows]
 
-    dirs = sorted(
-        p.name for p in (repo / "plugins").iterdir()
-        if (p / ".claude-plugin" / "plugin.json").is_file()
-    ) if (repo / "plugins").is_dir() else []
+    manifests = {}
+    plugins_dir = repo / "plugins"
+    if plugins_dir.is_dir():
+        for p in sorted(plugins_dir.iterdir()):
+            path = p / ".claude-plugin" / "plugin.json"
+            if path.is_file():
+                try:
+                    manifests[p.name] = json.loads(path.read_text(encoding="utf-8"))
+                except (OSError, ValueError) as exc:
+                    print(f"error: cannot read {path}: {exc}", file=sys.stderr)
+                    return 2
+    dirs = sorted(manifests)
 
     errors = []
     for name in duplicates(table):
@@ -101,6 +140,24 @@ def main(argv=None):
             errors.append(f"{entry['name']}: marketplace source is {entry.get('source')!r}, want {want!r}")
         elif entry["name"] not in dirs:
             errors.append(f"{entry['name']}: {want} has no .claude-plugin/plugin.json")
+
+    for d, manifest in manifests.items():
+        if manifest.get("name") != d:
+            errors.append(f"plugins/{d}: plugin.json name is {manifest.get('name')!r}, want {d!r}")
+        for dep in manifest.get("dependencies", []):
+            name = local_dependency(dep, market_name)
+            if name is not None and name not in market_names:
+                errors.append(f"plugins/{d}: dependency {name!r} is not in marketplace.json")
+
+    for name, contents in rows:
+        if name not in manifests:
+            continue
+        actual = actual_counts(plugins_dir / name)
+        for kind, pattern in COUNTS.items():
+            match = pattern.search(contents)
+            stated = int(match.group(1)) if match else 0
+            if stated != actual[kind]:
+                errors.append(f"{name}: README says {stated} {kind}, plugins/{name} has {actual[kind]}")
 
     for line in errors:
         print(f"error: {line}", file=sys.stderr)

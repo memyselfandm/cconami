@@ -40,15 +40,17 @@ them.
 ## Plugin boundaries
 
 A plugin groups what a user would install together. A skill lives in the
-plugin whose job it serves. Where a skill uses one from another plugin (for
-example `workshopping-prds` and `building-subagents` call `pm-context` from
-`linear-workflow`), its `SKILL.md` names that skill so a user knows to install
-both.
+plugin whose job it serves. When a skill calls a skill from another plugin,
+the calling plugin's manifest declares that plugin in `dependencies`, and
+installing the caller installs and enables the dependency. Today one plugin
+does: `product` depends on `linear-workflow`, because `workshopping-prds` files
+its output through `pm-context`. `check-catalog.py` fails if a dependency names
+a plugin that is not in the marketplace.
 
 | Plugin | Scope | Not in scope |
 |---|---|---|
 | `linear-workflow` | Working a tracker: refining, breaking down, executing, reconciling and reporting on tickets and projects. `pm-context` is the tracker layer the other skills call | Product discovery (`product`); how sessions coordinate (`operating-model`) |
-| `product` | Shaping work before it is ticketed: PRDs, feature prioritisation, product overviews and design brainstorms | Writing tickets, which hands off to `linear-workflow` |
+| `product` | Shaping work before it is ticketed: PRDs, feature prioritisation, product overviews and design brainstorms. Depends on `linear-workflow` for `pm-context` | Breaking work into tickets, which hands off to `linear-workflow` |
 | `authoring` | Building agent tooling: skills, subagents, Ralph configs, scraped docs; the six domain subagents | Anything that runs a workflow on a tracker |
 | `operating-model` | How several agent sessions and the owner work together: checkpoints, owner asks, isolated PR review, workstream leads, peer messages, and the Bash command guard hook | Tracker workflow skills; the interface (mods) |
 | `owner-inbox`, `peer-messages`, `ci-status`, `mcp-health` | Mods: Claude Code interface changes, one concern each | Skills or agents |
@@ -72,4 +74,8 @@ rejects platform-specific tool names in a `SKILL.md` body. The rule in full:
 Three things must name the same plugins: the `## Plugins` table in the root
 `README.md`, `marketplace.json`, and the directories under `plugins/`.
 `scripts/check-catalog.py` checks this in CI, so a plugin cannot be added,
-renamed or removed in one place only.
+renamed or removed in one place only. It also checks that each manifest's
+`name` matches its directory, that dependencies stay inside the marketplace,
+and that the README's skill and agent counts match the files.
+`scripts/check-versions.py` fails a pull request that changes a plugin's
+shipped files without bumping its `version`, since installs are pinned to it.

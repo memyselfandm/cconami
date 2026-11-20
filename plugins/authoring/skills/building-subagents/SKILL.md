@@ -109,7 +109,7 @@ Select appropriate tools based on agent purpose:
 | File operations | Read, Write, Edit, MultiEdit, Glob, Grep |
 | Execution | Bash, Task |
 | Web | WebFetch, WebSearch |
-| PM Integration | pm-context tools |
+| Tracker access | The tools the agent's tracker needs (for example a tracker MCP server or CLI) |
 | Code analysis | Bash(ast-grep:*), Bash(rg:*) |
 
 **Principle of Least Privilege:**

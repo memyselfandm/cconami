@@ -168,4 +168,4 @@ When adding or modifying subagents:
 ## Related Documentation
 
 - [Claude Code subagents documentation](https://code.claude.com/docs/en/sub-agents)
-- [CLAUDE.md Best Practices](../../CLAUDE.md)
+- [building-subagents](skills/building-subagents/SKILL.md), the skill for writing a new subagent
