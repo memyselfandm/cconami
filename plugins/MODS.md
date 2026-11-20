@@ -230,6 +230,15 @@ running, and only under `OMC_BUDGET_ENFORCE=active`.
 - **Compactions.** The `usage` on each `session.compact` result: the summarising
   request's own counts, when the engine made one. It adds tokens, not a turn. A
   skipped compaction, or one that reused a summary already computed, adds nothing.
+  The types do not say whether a compaction that runs in the middle of a turn is
+  also folded into that turn's `turn.complete` usage. If the engine does fold it
+  in, that compaction is counted twice.
+
+  **Owner check.** Run a session with `claude --debug` and the mod loaded, and
+  let one auto-compaction happen inside a turn. In the debug log, compare that
+  turn's `turn.complete` usage with the compaction's `session.compact` usage. If
+  the turn's counts include the compaction's, the mod counts it twice, and the
+  compaction hook should skip compactions that happen inside a turn.
 - **When it starts over.** On `/clear`, and on a `/resume` inside the running
   process: each ends one conversation (`session.end` with `reason` `clear` or
   `resume`) and begins another, so the count begins again at 0. Other endings

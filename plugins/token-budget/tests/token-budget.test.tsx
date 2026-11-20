@@ -88,6 +88,9 @@ test('malformed names a set value that cannot be read, and nothing else', () => 
   expect(malformed(0, '')).toBeNull()
   expect(malformed(500_000, 'lots')).toBeNull()
   expect(malformed(0, '1e6')).toBeNull()
+  expect(malformed(0, '0')).toBeNull()
+  expect(malformed(0, ' 0 ')).toBeNull()
+  expect(malformed('0', undefined)).toBeNull()
   expect(malformed(0, 'lots')).toBe('OMC_RUN_BUDGET_TOKENS="lots"')
   expect(malformed(-5, '1e6')).toBe('the budget setting -5')
   expect(malformed(0.5, undefined)).toBe('the budget setting 0.5')
@@ -351,7 +354,10 @@ test('a compaction adds its tokens but not a turn', { options: { budget: 1_000_0
   await $.session.start(START)
   await $.turn.complete(turn(1, usage(0, 100_000, 0, 0)))
   const result = await $.session.compact({ trigger: 'manual', messages: MESSAGES })
+  // The hook only observes: the engine's result comes back as it answered.
   expect(result.skip).toBeUndefined()
+  expect(result.messages).toEqual(MESSAGES)
+  expect(result.skip === undefined ? result.usage : undefined).toEqual(usage(100_000, 20_000, 0, 30_000))
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
   expect((await ui.find(LINE))?.text).toBe('Budget 250k / 1.0M (25%)')
   await ui.unmount()
@@ -376,6 +382,15 @@ test('a malformed variable is named in one toast, and nothing is drawn', async (
   expect(toasts).toEqual([
     'token-budget: ignoring OMC_RUN_BUDGET_TOKENS="lots"; a budget is a token count of at least 1',
   ])
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect(await ui.find({ type: 'Text' })).toBeUndefined()
+  await ui.unmount()
+})
+
+test('OMC_RUN_BUDGET_TOKENS=0, OMC\'s off, raises no toast and draws nothing', async ($, on) => {
+  const { toasts } = engine(on, { OMC_RUN_BUDGET_TOKENS: '0' })
+  await $.session.start(START)
+  expect(toasts).toEqual([])
   const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
   expect(await ui.find({ type: 'Text' })).toBeUndefined()
   await ui.unmount()

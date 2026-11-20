@@ -42,13 +42,17 @@ export function total(spend: Spend): number {
   return spend.input + spend.output + spend.cacheRead + spend.cacheWrite
 }
 
-/** Whether a budget value is set at all: not absent, blank or the setting's 0. */
+/**
+ * Whether a budget value is set at all: not absent, and not anything that reads
+ * as 0 (the setting's default, a blank string, or `OMC_RUN_BUDGET_TOKENS=0`,
+ * which OMC treats as off).
+ */
 function isSet(value: unknown): boolean {
-  if (value === undefined || value === null || value === 0) {
+  if (value === undefined || value === null) {
     return false
   }
 
-  return !(typeof value === 'string' && value.trim() === '')
+  return !((typeof value === 'number' || typeof value === 'string') && Number(value) === 0)
 }
 
 /**
