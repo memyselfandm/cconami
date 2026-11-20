@@ -30,11 +30,11 @@ jobs:
           for plugin in plugins/*/; do
             claude plugin validate "$plugin"
           done
-      - name: Test the mods that have tests
+      - name: Run each mod's tests
         run: |
           failed=0
           for plugin in plugins/*/; do
-            if [ -d "${plugin}tests" ]; then
+            if [ -n "$(find "$plugin" \( -name '*.test.ts' -o -name '*.test.tsx' \) -print -quit)" ]; then
               claude plugin test "$plugin" || failed=1
             fi
           done
