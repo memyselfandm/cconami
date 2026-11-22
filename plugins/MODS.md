@@ -12,8 +12,9 @@ installed from this repository by name.
 | [`mcp-health`](mcp-health/) | Shows a band above the prompt when a plugin's MCP server is not connected, naming the server and the next step |
 | [`token-budget`](token-budget/) | Shows the session's token spend against a budget in a band above the prompt, with a warning at 90% and an alert at 100% |
 | [`guardrail-notice`](guardrail-notice/) | Shows a card in the chat and an entry above the prompt when a hook refuses a tool call, with the hook's message and the safe form it names |
-| [`omc-watchdog`](omc-watchdog/) | Shows a band above the prompt when an oh-my-claudecode run in this session is dead (active but stale) or looping, with its mode and phase |
+| [`omc-watchdog`](omc-watchdog/) | Superseded by `omc-runs`. Shows a band above the prompt when an oh-my-claudecode run in this session is dead (active but stale) or looping, with its mode and phase |
 | [`omc-launcher`](omc-launcher/) | A pane opened with `/omc` that steps through picking an oh-my-claudecode workflow, setting the options its argument-hint names, and running the exact command |
+| [`omc-runs`](omc-runs/) | Shows one row above the prompt per active oh-my-claudecode mode: its progress, elapsed time and running agents, with a stale, looping or awaiting-confirmation warning in the same row |
 
 ## Install
 
@@ -26,8 +27,8 @@ At the prompt of a terminal session:
 /plugin install mcp-health --marketplace memyselfandm/cconami
 /plugin install token-budget --marketplace memyselfandm/cconami
 /plugin install guardrail-notice --marketplace memyselfandm/cconami
-/plugin install omc-watchdog --marketplace memyselfandm/cconami
 /plugin install omc-launcher --marketplace memyselfandm/cconami
+/plugin install omc-runs --marketplace memyselfandm/cconami
 ```
 
 Or from a shell:
@@ -39,9 +40,12 @@ claude plugin install ci-status --marketplace memyselfandm/cconami
 claude plugin install mcp-health --marketplace memyselfandm/cconami
 claude plugin install token-budget --marketplace memyselfandm/cconami
 claude plugin install guardrail-notice --marketplace memyselfandm/cconami
-claude plugin install omc-watchdog --marketplace memyselfandm/cconami
 claude plugin install omc-launcher --marketplace memyselfandm/cconami
+claude plugin install omc-runs --marketplace memyselfandm/cconami
 ```
+
+`omc-watchdog` is superseded by `omc-runs` and left out of these lists; it can still
+be installed by name.
 
 Choose the user scope to have a mod in every session. To pick up a change after the
 repository moves on, run `claude plugin update <mod>` and then `/reload-plugins`.
@@ -403,6 +407,10 @@ by hand:
 
 ## omc-watchdog
 
+**Superseded by [omc-runs](#omc-runs)**, which carries these checks in its row.
+omc-watchdog is frozen; its state-finding and judging logic now lives in
+`omc-runs/hooks/watch.ts` and `omc-runs/hooks/locate.ts`, and changes go there.
+
 A band above the prompt, shown only when an oh-my-claudecode (OMC) run in this
 session is dead or looping:
 
@@ -719,6 +727,118 @@ included. Check them once, by hand:
    `~/.config`, then `/claude-omc/config.jsonc`) defines `autopilot.workflows`,
    the `--workflow from config` list on autopilot's form shows those profile
    names.
+
+## omc-runs
+
+One row above the prompt per oh-my-claudecode (OMC) mode active in this session:
+
+```
+autopilot · phase 3/5 execution · 14m · 3 agents running
+ralph · iteration 7 · reviewer: critic · 22m
+team · team-exec · 4 workers (3 busy) · 9m
+ultragoal · goal 2/5 · 31m
+```
+
+A healthy row is dim. When something is wrong, the warning follows in the same
+row, bold and in the warning colour:
+`autopilot · phase 3/5 execution · 3h · stale for 3h; cancel or resume`. With no
+active mode, or while a survey is showing, nothing is drawn. `/omc-runs` prints
+each active run's row with its warning, its plan file, its last phase change and
+the cancel command (`/oh-my-claudecode:cancel`).
+
+It **supersedes [omc-watchdog](#omc-watchdog)**: its stale and looping warnings are
+omc-watchdog's checks, unchanged, and the code that finds and judges OMC's state
+moved here (`hooks/watch.ts`, `hooks/locate.ts`). omc-watchdog is frozen and not
+deleted. Install one or the other.
+
+### What each row shows
+
+Each mode has two writers in OMC 5.8.6 with different file shapes (the hooks'
+`activateState()` in `scripts/keyword-detector.mjs` plus the `state_write` tool,
+and the TypeScript state modules under `src/hooks/`); both are read.
+
+- **autopilot.** A named workflow's stage, `stage <n>/<total> <id>`, from
+  `pipelineTracking.stages[currentStageIndex]` (`PipelineTracking`,
+  `src/hooks/autopilot/pipeline-types.ts`). Otherwise the legacy phase,
+  `phase <n>/5 <phase>`, counted through `expansion`, `planning`, `execution`,
+  `qa`, `validation` (`AutopilotPhase`, `src/hooks/autopilot/types.ts`). OMC's
+  own prompts number these Phase 0 to Phase 4; the row counts from 1 so the last
+  phase reads 5/5. Any other phase is shown by name.
+- **ralph.** `iteration <n>` and, when recorded, `reviewer: <critic_mode>`
+  (`RalphLoopState`, `src/hooks/ralph/loop.ts`: architect, critic or codex).
+  `max_iterations` is not shown: OMC extends it by 10 whenever it is reached.
+- **team.** The phase, then the workers: this session's teammates when it has
+  seen any, busy while in a turn; otherwise `execution.workers_total` and
+  `workers_active` (`TeamPipelineState`, `src/hooks/team-pipeline/types.ts`), or
+  the team skill's `agent_count` with no busy count.
+- **ultragoal.** `goal <n>/<total>` for `activeGoalId` in
+  `.omc/ultragoal/goals.json` (`UltragoalPlan`, `src/ultragoal/artifacts.ts`),
+  the file OMC's stop hook reads; else `<done>/<total> goals done`. Its state
+  file holds no goal index or count, so without a readable plan the row shows
+  the phase (`executing`).
+- **Elapsed time.** From `started_at`, else the first `phase_history` entry.
+  The team skill's `state_write` file records neither, so its row has none.
+- **Running agents.** Counted from this session's own events, not OMC's files:
+  a subagent from the `agent.spawn` that started it to its `agent.report`; a
+  teammate is a worker, busy from a `turn.start` in its loop to that turn's
+  `turn.complete`. A workflow script's agents are not counted, since no
+  `agent.report` is raised for them. At each read, agents `$.agent.list()` no
+  longer lists are dropped. A `/clear` or `/resume` starts the tally over.
+- **Warnings.** omc-watchdog's stale and looping checks, then `awaiting
+  confirmation` while OMC's stop hook holds the run for the person (two minutes
+  from `awaiting_confirmation_set_at`, as `isAwaitingConfirmation` holds it).
+  A stale run awaiting confirmation shows stale.
+- **Detail.** The plan file is `plan_path`, `planning.plan_path` or
+  `artifacts.plan_path`. The last phase change is the current pipeline stage's
+  `startedAt`, autopilot's `phase_durations['<phase>_start_ms']`
+  (`transitionPhase()`), team's last `phase_history` entry, or the last entry of
+  the team skill's `stage_history`.
+
+### When it reads, and what it reads
+
+At session start, every 60 seconds, after a submitted prompt (OMC writes a mode's
+state from its UserPromptSubmit hook), after the main loop's turn ends, after a
+`/clear` or `/resume`, and after a tool call that may have changed OMC's state.
+The state root, the session file order, the read-only `git` probes and the
+settings are omc-watchdog's, described under [omc-watchdog](#omc-watchdog). Every
+hook on tool calls, agents and turns only observes: it returns the engine's
+answer unchanged. The mod never writes or deletes OMC state and never calls OMC's
+tools.
+
+Settings, under `/config` or `pluginConfigs.omc-runs.options` in `settings.json`:
+`staleHours` (default 2) and `reinforcementLimit` (default 0, OMC's ceilings), as
+in omc-watchdog.
+
+Its tests run with `claude plugin test plugins/omc-runs`; their state files are
+synthetic, in the shapes each OMC writer produces. `bash
+plugins/omc-runs/tests/mutation-check.sh` breaks one behaviour at a time and fails
+if the tests miss any; CI runs it.
+
+### Owner smoke test
+
+The tests cannot run a live session, so check once by hand, in a scratch
+repository, that the row draws, that `$.session.id()` matches the directory
+OMC writes under, and that the agent count moves:
+
+1. If omc-watchdog is installed, uninstall it first:
+   `claude plugin uninstall omc-watchdog`.
+2. `d=$(mktemp -d) && git -C "$d" init -q && cd "$d"`, then
+   `claude --plugin-dir <cconami checkout>/plugins/omc-runs`.
+3. Run `/oh-my-claudecode:ralph count to three slowly, using one subagent per number`.
+   Within a minute a dim row reads `ralph · iteration 1 · 0m`, and while the
+   subagents run it ends `· 1 agent running` (or more). If no row appears,
+   check `find "$d" -path '*/.omc/state/sessions/*/ralph-state.json'`: its
+   directory name should be the session id `/status` shows; report it if not.
+4. Run `/omc-runs`: it prints the row, `plan: none recorded`, a last phase change
+   line and `cancel: /oh-my-claudecode:cancel`.
+5. Press Esc to stop the run. In another terminal, make it look dead, keeping a
+   backup:
+   `f=$(find "$d" -path '*/.omc/state/sessions/*/ralph-state.json') && cp "$f" "$f.bak"`, then
+   `python3 -c 'import json,sys,datetime as d; p=sys.argv[1]; s=json.load(open(p)); t=(d.datetime.now(d.timezone.utc)-d.timedelta(hours=3)).isoformat(); s.update(active=True, awaiting_confirmation=False, last_checked_at=t, started_at=t, updated_at=t); s.pop("_meta",None); json.dump(s,open(p,"w"))' "$f"`.
+   Within a minute the row ends `· stale for 3h; cancel or resume` in the
+   warning colour.
+6. Run `/oh-my-claudecode:cancel`, or `mv "$f.bak" "$f"`. The row goes at the next
+   read.
 
 ## Working on a mod
 

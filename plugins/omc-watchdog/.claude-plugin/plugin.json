@@ -1,7 +1,7 @@
 {
   "name": "omc-watchdog",
-  "version": "0.1.0",
-  "description": "Shows a band above the prompt when an oh-my-claudecode run in this session is dead or looping: ralph, autopilot, team or ultragoal marked active but not touched for hours, or at the reinforcement ceiling OMC enforces (ralph: near OMC's hard iteration limit) while still marked active. Names the mode and phase. Read only; hidden when all is well.",
+  "version": "0.1.1",
+  "description": "Superseded by omc-runs, which carries these checks in its row. Shows a band above the prompt when an oh-my-claudecode run in this session is dead or looping: ralph, autopilot, team or ultragoal marked active but not touched for hours, or at the reinforcement ceiling OMC enforces (ralph: near OMC's hard iteration limit) while still marked active. Names the mode and phase. Read only; hidden when all is well.",
   "license": "MIT",
   "author": { "name": "memyselfandm" },
   "types": "./types/index.d.ts",

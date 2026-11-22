@@ -41,8 +41,9 @@ then also addressable as `<plugin>@cconami`. To pick up changes, run
 | [`mcp-health`](plugins/mcp-health/) | A band above the prompt when a plugin's MCP server is not connected | mod |
 | [`token-budget`](plugins/token-budget/) | The session's token spend against a budget, above the prompt, with a warning at 90% | mod |
 | [`guardrail-notice`](plugins/guardrail-notice/) | A card in the chat and an entry above the prompt when a hook refuses a tool call | mod |
-| [`omc-watchdog`](plugins/omc-watchdog/) | A band above the prompt when an oh-my-claudecode run is dead or looping, with its mode and phase | mod |
+| [`omc-watchdog`](plugins/omc-watchdog/) | Superseded by `omc-runs`. A band above the prompt when an oh-my-claudecode run is dead or looping, with its mode and phase | mod |
 | [`omc-launcher`](plugins/omc-launcher/) | A pane opened with `/omc` to pick an oh-my-claudecode workflow, set its options and run it | mod |
+| [`omc-runs`](plugins/omc-runs/) | What oh-my-claudecode is running, in one row above the prompt: mode, progress, elapsed time and agents, with stale, looping and awaiting-confirmation warnings | mod |
 
 Each plugin's README lists its skills, agents or settings. Mods are small plugins
 that change what a Claude Code session shows; see [plugins/MODS.md](plugins/MODS.md).

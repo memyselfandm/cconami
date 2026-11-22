@@ -56,12 +56,17 @@
     {
       "name": "omc-watchdog",
       "source": "./plugins/omc-watchdog",
-      "description": "A band above the prompt when an oh-my-claudecode run in this session is dead (active but stale) or looping, with its mode and phase. Hidden when all is well."
+      "description": "Superseded by omc-runs. A band above the prompt when an oh-my-claudecode run in this session is dead (active but stale) or looping, with its mode and phase. Hidden when all is well."
     },
     {
       "name": "omc-launcher",
       "source": "./plugins/omc-launcher",
       "description": "A pane opened with /omc that steps through running an oh-my-claudecode workflow: pick a skill, set the options its argument-hint names, review the exact command and run it."
+    },
+    {
+      "name": "omc-runs",
+      "source": "./plugins/omc-runs",
+      "description": "One row above the prompt per active oh-my-claudecode mode: phase, iteration, workers or goal, elapsed time and running agents, with a stale, looping or awaiting-confirmation warning in the same row. Supersedes omc-watchdog."
     }
   ]
 }
