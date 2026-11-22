@@ -26,8 +26,9 @@ function machine(options: { installed?: boolean; active?: boolean; cacheOnly?: b
   const { installed = true, active = installed, cacheOnly = false } = options
   const files: Record<string, string> = {}
   const dirs: Tree['dirs'] = {}
-  // OMC's skills, one with no SKILL.md, and one of its commands/*.md, which is no skill.
-  const omc = [...SKILLS, 'no-skill-md', 'psm'].map(name => `oh-my-claudecode:${name}`)
+  // OMC's skills, one with no SKILL.md, and one of its commands/*.md, which is no
+  // skill. skills/plan is listed by its frontmatter name, omc-plan, as OMC 5.8.6's is.
+  const omc = [...SKILLS, 'omc-plan', 'no-skill-md', 'psm'].map(name => `oh-my-claudecode:${name}`)
   const commands = ['compact', 'other-plugin:ralph', ...(active ? omc : [])]
   if (!installed) {
     return { files, dirs, commands, cwd: CWD }
@@ -44,9 +45,18 @@ function machine(options: { installed?: boolean; active?: boolean; cacheOnly?: b
     { name: '5.8.6', kind: 'dir' },
     { name: '9.9.9', kind: 'file' },
   ]
+  dirs[`${OMC}/skills`] = [
+    ...[...SKILLS, 'plan', 'no-skill-md', 'unlisted'].map(name => ({ name, kind: 'dir' as const })),
+    { name: 'README.md', kind: 'file' },
+  ]
   for (const name of SKILLS) {
     files[`${OMC}/skills/${name}/SKILL.md`] = skillMd(name, HINTS_5_8_6[name] ?? null)
   }
+  files[`${OMC}/skills/plan/SKILL.md`] = skillMd('omc-plan', HINTS_5_8_6.plan ?? null)
+  // The reverse: listed by its folder name while its frontmatter names another.
+  files[`${OMC}/skills/verify/SKILL.md`] = skillMd('omc-verify', null)
+  // On disk, but not a command in this session: not runnable, so not listed.
+  files[`${OMC}/skills/unlisted/SKILL.md`] = skillMd('unlisted', null)
   files[`${CWD}/.claude/omc.jsonc`] = `{
     // project profiles
     "autopilot": { "workflows": { "plan-build-qa": { "version": 1, "stages": ["ralplan", "execution", "qa"] }, } }
@@ -164,7 +174,7 @@ for (const surface of ['terminal', 'desktop'] as const) {
   test(`ralph: --critic=codex and a task run the exact command, on ${surface}`, async ($, on) => {
     const world = await start($, on)
     expect(world.registered).toEqual(['omc'])
-    expect(await openWizard($)).toBe('OMC launcher opened: 5 skills.')
+    expect(await openWizard($)).toBe('OMC launcher opened: 6 skills.')
     expect(world.opened).toEqual([PANE])
 
     const ui = await $.ui.mount({ ...PANE_PROPS, surface })
@@ -202,7 +212,7 @@ test('a skill the session cannot run is not listed, though its SKILL.md is on di
   const tree = machine()
   tree.commands = tree.commands.filter(name => name !== 'oh-my-claudecode:verify')
   await start($, on, tree)
-  expect(await openWizard($)).toBe('OMC launcher opened: 4 skills.')
+  expect(await openWizard($)).toBe('OMC launcher opened: 5 skills.')
 })
 
 test('on a narrow pane every skill name shows whole; only the description is cut', async ($, on) => {
@@ -384,7 +394,7 @@ test('a skill with no hint gets one free-text arguments field, passed as typed',
 test('without installed_plugins.json, the highest cached version is used', async ($, on) => {
   const world = await start($, on, machine({ cacheOnly: true }))
   expect(world.registered).toEqual(['omc'])
-  expect(await openWizard($)).toBe('OMC launcher opened: 5 skills.')
+  expect(await openWizard($)).toBe('OMC launcher opened: 6 skills.')
 })
 
 test('an installed_plugins.json entry whose folder is gone falls back to the cache', async ($, on) => {
@@ -393,7 +403,7 @@ test('an installed_plugins.json entry whose folder is gone falls back to the cac
     plugins: { 'oh-my-claudecode@omc': [{ scope: 'user', installPath: '/gone/9.9.9', version: '9.9.9' }] },
   })
   await start($, on, tree)
-  expect(await openWizard($)).toBe('OMC launcher opened: 5 skills.')
+  expect(await openWizard($)).toBe('OMC launcher opened: 6 skills.')
 })
 
 test('a command that cannot run says so in a toast', async ($, on) => {
@@ -429,5 +439,32 @@ test('CLAUDE_CONFIG_DIR is where installed_plugins.json is read', async ($, on) 
   delete tree.dirs[`${PLUGINS}/cache/omc/oh-my-claudecode`]
   tree.files['/cfg/plugins/installed_plugins.json'] = json
   await start($, on, tree, { HOME, CLAUDE_CONFIG_DIR: '/cfg' })
-  expect(await openWizard($)).toBe('OMC launcher opened: 5 skills.')
+  expect(await openWizard($)).toBe('OMC launcher opened: 6 skills.')
+})
+
+test('plan, listed by its frontmatter name omc-plan, is offered and run by its folder name', async ($, on) => {
+  const world = await start($, on)
+  await openWizard($)
+  const ui = await $.ui.mount({ ...PANE_PROPS, surface: 'terminal' })
+  const values = ((await ui.find({ key: 'skill' }))?.props.options as { value: string }[]).map(option => option.value)
+  expect(values).toContain('plan')
+  expect(values).not.toContain('omc-plan')
+  expect(values).not.toContain('unlisted')
+  await ui.select({ key: 'skill', value: 'plan' })
+  await ui.select({ key: 'f0', value: '--consensus' })
+  await ui.input({ key: 'f3', text: 'split the monolith' })
+  await ui.press({ key: 'next' })
+  await ui.press({ key: 'run' })
+  expect(world.submitted).toEqual(['/oh-my-claudecode:plan --consensus "split the monolith"'])
+  await ui.unmount()
+})
+
+test('two presses on a toggle before it is drawn again turn it on and back off', async ($, on) => {
+  await start($, on)
+  await openWizard($)
+  const ui = await $.ui.mount({ ...PANE_PROPS, surface: 'terminal' })
+  await ui.select({ key: 'skill', value: 'ralph' })
+  await Promise.all([ui.press({ key: 'f0' }), ui.press({ key: 'f0' })])
+  expect((await ui.find({ type: 'Button', key: 'f0' }))?.text).toBe('[ ] --no-deslop')
+  await ui.unmount()
 })

@@ -599,11 +599,14 @@ different flags, and Claude Code hides the argument hint once you start typing.
   highest version whose folder holds `skills/`. Versions order as semver does,
   so a release ranks above its prereleases. With no usable entry it takes the
   highest version folder under `plugins/cache/omc/oh-my-claudecode/`.
-- **The picker.** Each runnable command that has a `skills/<name>/SKILL.md`
-  with frontmatter, named by its directory, which is what
-  `/oh-my-claudecode:<name>` runs. A frontmatter `name` such as `omc-plan` is
-  an alias and is ignored. A command with no such file, such as one of OMC's
-  `commands/*.md`, is not a skill and is left out. The main workflows come first
+- **The picker.** Each `skills/<dir>/SKILL.md` with frontmatter whose skill
+  the session can run. The command list names a skill by its frontmatter
+  `name`: OMC's `skills/plan` has `name: omc-plan`, so it is listed as
+  `oh-my-claudecode:omc-plan`, and `skills/review` as `omc-review`. A skill is
+  kept when either `oh-my-claudecode:<dir>` or `oh-my-claudecode:<name>` is in
+  the list. It is shown and run by its folder name (`/oh-my-claudecode:plan`),
+  which resolves as the alias does. A command with no skill folder, such as one
+  of OMC's `commands/*.md`, is left out. The main workflows come first
   in this order: autopilot, ralph, team, ralplan, ultragoal, deep-interview,
   autoresearch. The rest follow by name. That ordering list is the only
   per-skill knowledge in the mod. On a narrow pane the skill name always shows;
@@ -656,7 +659,9 @@ different flags, and Claude Code hides the argument hint once you start typing.
 - **The command.** `/oh-my-claudecode:<skill>` and every field's part, in hint
   order. Task text is trimmed at its ends. It goes in double quotes, as the
   skills' own usage examples write a task, unless it is one plain word that is
-  no keyword of the form (so a subcommand such as `list` stays bare). Quotes and
+  no keyword of the form and holds no `:` (so a subcommand such as `list`
+  stays bare, while `2:codex` is quoted rather than read as team's
+  `N:agent-type`). Quotes and
   backslashes inside it are escaped with a backslash. Quoting stops a task such
   as `--critic=codex is broken` from setting the critic, and stops team's task
   `ralph the logs` from turning on the ralph keyword. A value field cannot hold
@@ -690,8 +695,10 @@ included. Check them once, by hand:
    `d=$(mktemp -d) && cd "$d" && claude --plugin-dir <cconami checkout>/plugins/omc-launcher`.
 2. Type `/omc`. Expected: the reply `OMC launcher opened: <n> skills.` and a pane
    whose first step lists autopilot, ralph, team, ralplan, ultragoal,
-   deep-interview and autoresearch first. If `/omc` is not offered at all, the
-   command list does not name OMC's skills as expected: report it.
+   deep-interview and autoresearch first. Further down, `plan` and `review` are
+   listed (their frontmatter names are `omc-plan` and `omc-review`). If `/omc`
+   is not offered at all, or either is missing, the command list does not name
+   OMC's skills as expected: report it.
 3. Pick `ralph`. Set `--critic` to `codex`, type the task `say hello and stop`,
    and press Review. Expected: `/oh-my-claudecode:ralph --critic=codex "say hello and stop"`
    and a button reading Run.

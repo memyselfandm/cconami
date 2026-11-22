@@ -128,6 +128,9 @@ describe('the commands the main workflows submit', () => {
   test('quoteText', () => {
     expect(quoteText('list', [])).toBe('list')
     expect(quoteText('src/app.ts', [])).toBe('src/app.ts')
+    // A word with a colon would read as team's N:agent-type.
+    expect(quoteText('2:codex', [])).toBe('"2:codex"')
+    expect(buildCommand('team', form('team'), { f2: '2:codex' })).toBe('/oh-my-claudecode:team "2:codex"')
     expect(quoteText('ralph', ['ralph'])).toBe('"ralph"')
     expect(quoteText('-x', [])).toBe('"-x"')
     expect(quoteText('a"b', [])).toBe('"a\\"b"')

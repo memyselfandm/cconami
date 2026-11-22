@@ -8,6 +8,7 @@ import {
   commandName,
   configChoices,
   formFor,
+  frontmatter,
   highestVersion,
   installPathFrom,
   join,
@@ -92,16 +93,23 @@ export async function findOmc($: EngineInterface, cwd: string): Promise<string |
 }
 
 /**
- * The runnable skills that have a `<root>/skills/<name>/SKILL.md` with
- * frontmatter, main workflows first. A command with no such file (one of OMC's
- * `commands/*.md`, or an alias) is not a skill and is left out.
+ * Every `<root>/skills/<dir>/SKILL.md` with frontmatter whose skill this
+ * session can run, main workflows first. The command list names a skill by its
+ * frontmatter `name` (`skills/plan` is listed as `omc-plan`), so either name
+ * counts; the skill is run by its folder name, which resolves too.
  */
 async function readSkills($: EngineInterface, root: string, names: readonly string[]): Promise<Skill[]> {
+  // An entry that is not a folder has no SKILL.md under it, so its read fails.
+  const entries = await $.fs.list(join(root, 'skills')).catch(() => [])
   const found = await Promise.all(
-    names.map(async name => {
-      const text = await $.fs.read(join(root, 'skills', name, 'SKILL.md')).catch(() => null)
+    entries.map(async ({ name: dir }) => {
+      const text = await $.fs.read(join(root, 'skills', dir, 'SKILL.md')).catch(() => null)
+      if (typeof text !== 'string') {
+        return null
+      }
+      const alias = frontmatter(text)?.name ?? ''
 
-      return typeof text === 'string' ? skillFrom(name, text) : null
+      return names.includes(dir) || (alias !== '' && names.includes(alias)) ? skillFrom(dir, text) : null
     }),
   )
 

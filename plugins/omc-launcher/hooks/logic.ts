@@ -336,7 +336,8 @@ function keywords(fields: readonly Field[]): string[] {
  * arguments.
  */
 export function quoteText(text: string, words: readonly string[]): string {
-  if (/^[A-Za-z0-9][\w./:#@-]*$/.test(text) && !words.includes(text)) {
+  // No `:` in a bare word: `2:codex` would read as team's N:agent-type.
+  if (/^[A-Za-z0-9][\w./#@-]*$/.test(text) && !words.includes(text)) {
     return text
   }
 

@@ -65,7 +65,7 @@ hooks/logic.ts~s/ && field\.required && emitField/ \&\& emitField/~an optional f
 hooks/logic.ts~s/const first = field\.kind === 'choice' && field\.required \?/const first = field.kind === 'choice' ?/~an optional choice opens with an option picked
 # Quoting the task and guarding values.
 hooks/logic.ts~s/ && !words\.includes\(text\)\) \{/) {/~a task that is a keyword goes in bare and turns the keyword on
-hooks/logic.ts~s/\[A-Za-z0-9\]\[\\w\.\/:#@-\]\*\$\/\.test\(text\)/[^\\s]+\$\/.test(text)/~a task starting with - goes in bare and reads as a flag
+hooks/logic.ts~s/\[A-Za-z0-9\]\[\\w\.\/#@-\]\*\$\/\.test\(text\)/[^\\s]+\$\/.test(text)/~a task starting with - goes in bare and reads as a flag
 hooks/logic.ts~s/text\.replace\(\/\["\\\\\]\/g,/text.replace(\/[\\\\]\/g,/~double quotes in the task are not escaped
 hooks/logic.ts~s/text\.replace\(\/\["\\\\\]\/g,/text.replace(\/["]\/g,/~backslashes in the task are not escaped
 hooks/logic.ts~s/return field\.verbatim \? v : quoteText\(v, words\)/return quoteText(v, words)/~the fallback free-text field is quoted
@@ -93,6 +93,10 @@ hooks/logic.ts~s/\(path === root \|\| path\.startsWith\(`\$\{root\.replace\(\/\\
 hooks/logic.ts~s/compareVersions\(String\(b\.version \?\? '0'\), String\(a\.version \?\? '0'\)\)/compareVersions(String(a.version ?? '0'), String(b.version ?? '0'))/~the lowest installed version is used
 hooks/register.tsx~s/if \(path !== null && \(await hasSkills\(\$, path\)\)\) \{/if (path !== null) {/~an install path whose folder is gone is used
 hooks/register.tsx~s/const version = highestVersion\(/const version = null \&\& highestVersion(/~the plugin cache is not searched
+hooks/register.tsx~s/ \|\| \(alias !== '' && names\.includes\(alias\)\)//~a skill listed by its frontmatter name (plan as omc-plan) drops out
+hooks/register.tsx~s/names\.includes\(dir\) \|\| //~a skill listed by its folder name drops out
+hooks/register.tsx~s/void flip\(\$, field\.id\)/void setValue(\$, field.id, isOn ? '' : 'on')/~a toggle flips from the value it was drawn with
+hooks/logic.ts~s/\[A-Za-z0-9\]\[\\w\.\/#@-\]\*\$/[A-Za-z0-9][\\w.\/:#@-]*\$/~a task word with a colon goes in bare and reads as N:agent-type
 hooks/register.tsx~s/\(await \$\.env\.get\('CLAUDE_CONFIG_DIR'\)\) \|\| //~CLAUDE_CONFIG_DIR is ignored
 hooks/register.tsx~s/if \(\(await omcCommands\(\$\)\)\.length > 0\) \{/if (true) {/~/omc is registered without OMC
 hooks/register.tsx~s/\.filter\(name => name\.startsWith\(prefix\)\)//~another plugin's commands count as OMC being active
