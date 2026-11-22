@@ -55,6 +55,8 @@ jobs:
         run: bash plugins/guardrail-notice/tests/mutation-check.sh
       - name: Mutation check for omc-watchdog
         run: bash plugins/omc-watchdog/tests/mutation-check.sh
+      - name: Mutation check for omc-launcher
+        run: bash plugins/omc-launcher/tests/mutation-check.sh
       - name: Lint SKILL.md files
         run: uv run --script scripts/lint-skills.py
       - name: Test the lint
