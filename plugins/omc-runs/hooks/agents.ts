@@ -42,16 +42,43 @@ export function turned(tally: AgentTally, id: string, isBusy: boolean): AgentTal
   return { ...tally, teammates: tally.teammates.map(t => (t.id === id ? { id, isBusy } : t)) }
 }
 
-/**
- * Drops agents the engine no longer lists (`$.agent.list()`): a teammate that
- * ended, or a subagent whose report this module missed, as across a reload.
- * The list keeps an ended agent for a while, so it only ever prunes.
- */
-export function prune(tally: AgentTally, live: ReadonlySet<string>): AgentTally {
-  const running = tally.running.filter(id => live.has(id))
-  const teammates = tally.teammates.filter(t => live.has(t.id))
+/** Every agent id the tally holds. */
+export function tallyIds(tally: AgentTally): Set<string> {
+  return new Set([...tally.running, ...tally.teammates.map(t => t.id)])
+}
 
-  return running.length === tally.running.length && teammates.length === tally.teammates.length
-    ? tally
-    : { running, teammates }
+/**
+ * Brings the tally in line with `$.agent.list()`, read after `snapshot` (the
+ * tally's ids before the list was asked for):
+ *
+ * - an agent in the snapshot that the engine no longer lists is dropped: a
+ *   teammate that ended, or a subagent whose report this module missed, as
+ *   across a reload. The list keeps an ended agent for a while, so this only
+ *   ever prunes. An agent tallied while the list was awaited is not in the
+ *   snapshot and is kept, whatever the list says;
+ * - a listed teammate from the snapshot is busy when its `status` is
+ *   `running`, so a teammate in a terminal pane of its own, whose turns this
+ *   session's events do not show, is counted too.
+ */
+export function reconcile(
+  tally: AgentTally,
+  snapshot: ReadonlySet<string>,
+  listed: ReadonlyMap<string, string>,
+): AgentTally {
+  const isStale = (id: string) => snapshot.has(id) && !listed.has(id)
+  const running = tally.running.filter(id => !isStale(id))
+  let isChanged = running.length !== tally.running.length
+  const teammates: AgentTally['teammates'] = []
+  for (const t of tally.teammates) {
+    if (isStale(t.id)) {
+      isChanged = true
+      continue
+    }
+    const status = snapshot.has(t.id) ? listed.get(t.id) : undefined
+    const isBusy = status === undefined ? t.isBusy : status === 'running'
+    isChanged ||= isBusy !== t.isBusy
+    teammates.push(isBusy === t.isBusy ? t : { id: t.id, isBusy })
+  }
+
+  return isChanged ? { running, teammates } : tally
 }

@@ -70,6 +70,12 @@ type World = {
   writes: string[]
   /** The agent ids `$.agent.list()` answers; null makes it fail. */
   listed: string[] | null
+  /** A listed agent's `status`; `running` when not set. */
+  statuses: Map<string, string>
+  /** While set, `$.agent.list()` answers only once this settles. */
+  listGate: Promise<void> | null
+  /** The session id `$.session.id()` answers. */
+  sid: string
   clock: MockClock
 }
 
@@ -94,10 +100,13 @@ function session(on: On, setup: Setup = {}): World {
     reads: new Map(),
     writes: [],
     listed: null,
+    statuses: new Map(),
+    listGate: null,
+    sid: setup.sid ?? SID,
     clock: mock.clock(on, { now: NOW }),
   }
   mock.env(on, world.env)
-  on('session.id', () => ({ value: setup.sid ?? SID }))
+  on('session.id', () => ({ value: world.sid }))
   on('session.cwd', () => ({ value: world.cwd }))
   on('fs.read', (_, e) => {
     world.reads.set(e.path, (world.reads.get(e.path) ?? 0) + 1)
@@ -148,7 +157,10 @@ function session(on: On, setup: Setup = {}): World {
       },
     }
   })
-  on('agent.list', () => {
+  on('agent.list', async () => {
+    if (world.listGate !== null) {
+      await world.listGate
+    }
     if (world.listed === null) {
       return { deny: 'agent list unavailable' }
     }
@@ -158,7 +170,7 @@ function session(on: On, setup: Setup = {}): World {
         id,
         description: id,
         type: 'general-purpose',
-        status: 'running' as const,
+        status: (world.statuses.get(id) ?? 'running') as 'running',
         kind: 'local_agent' as const,
         taskStatus: 'running' as const,
         label: id,
@@ -208,18 +220,9 @@ async function drawn($: Engine, surface: 'terminal' | 'desktop' = 'terminal', ha
   return found
 }
 
-/** Each row's whole text: the main text, and its warning when it has one. */
+/** Each row's whole text: the row's own Text, which holds its warning. */
 async function lines($: Engine, surface: 'terminal' | 'desktop' = 'terminal', hasSurvey = false): Promise<string[]> {
-  const out: string[] = []
-  for (const t of await drawn($, surface, hasSurvey)) {
-    if (t.color === 'warning' && t.text.startsWith(' · ') && out.length > 0) {
-      out[out.length - 1] += t.text
-    } else {
-      out.push(t.text)
-    }
-  }
-
-  return out
+  return (await drawn($, surface, hasSurvey)).filter(t => t.color !== 'warning').map(t => t.text)
 }
 
 /** Only read-only git commands ran, under LC_ALL=C, and nothing was written. */
@@ -338,9 +341,17 @@ describe('a row per active mode', () => {
     expect(await lines($)).toEqual(['ralph · iteration 12 · 23m'])
   })
 
-  test('team as initTeamPipelineState() writes it: 4 workers, 3 busy', async ($, on) => {
+  test('team as initTeamPipelineState() writes it: phase and elapsed; its worker counts are 0, so none shown', async ($, on) => {
     const world = session(on)
     world.files.set(sessionFile(ROOT, 'team'), teamTyped(NOW))
+    await start($, world)
+    expect(await lines($)).toEqual(['team · team-exec · 9m'])
+  })
+
+  test('future-proofing: non-zero execution worker counts would be shown, with busy', async ($, on) => {
+    const world = session(on)
+    const execution = { workers_total: 4, workers_active: 3, tasks_total: 6, tasks_completed: 2, tasks_failed: 0 }
+    world.files.set(sessionFile(ROOT, 'team'), teamTyped(NOW, { execution }))
     await start($, world)
     expect(await lines($)).toEqual(['team · team-exec · 4 workers (3 busy) · 9m'])
   })
@@ -368,7 +379,7 @@ describe('a row per active mode', () => {
     world.files.set(sessionFile(ROOT, 'team'), teamTyped(NOW))
     world.files.set(sessionFile(ROOT, 'ralph'), ralphTyped(NOW))
     await start($, world)
-    expect(await lines($)).toEqual(['ralph · iteration 7 · reviewer: critic · 22m', 'team · team-exec · 4 workers (3 busy) · 9m'])
+    expect(await lines($)).toEqual(['ralph · iteration 7 · reviewer: critic · 22m', 'team · team-exec · 9m'])
   })
 
   test('the elapsed time moves with the timed read', async ($, on) => {
@@ -378,6 +389,85 @@ describe('a row per active mode', () => {
     await world.clock.advance(10 * REFRESH_MS)
     // Still fresh: last_checked_at is ten minutes old.
     expect(await lines($)).toEqual(['ralph · iteration 7 · reviewer: critic · 32m'])
+  })
+})
+
+describe('linked modes', () => {
+  test('ralph run by autopilot’s execution phase is labelled (in autopilot)', async ($, on) => {
+    const world = session(on)
+    world.files.set(sessionFile(ROOT, 'autopilot'), autopilot(NOW))
+    world.files.set(sessionFile(ROOT, 'ralph'), ralphTyped(NOW))
+    await start($, world)
+    expect(await lines($)).toEqual(['ralph (in autopilot) · iteration 7 · reviewer: critic · 22m', 'autopilot · phase 3/5 execution · 14m'])
+  })
+
+  test('ralph run by a named workflow’s ralph stage is labelled (in autopilot)', async ($, on) => {
+    const world = session(on)
+    const pipeline = JSON.parse(autopilotPipeline(NOW)) as { pipelineTracking: { currentStageIndex: number } }
+    pipeline.pipelineTracking.currentStageIndex = 2
+    world.files.set(sessionFile(ROOT, 'autopilot'), JSON.stringify(pipeline))
+    world.files.set(sessionFile(ROOT, 'ralph'), ralphTyped(NOW))
+    await start($, world)
+    expect(await lines($)).toEqual(['ralph (in autopilot) · iteration 7 · reviewer: critic · 22m', 'autopilot · stage 3/4 ralph · 20m'])
+  })
+
+  test('autopilot in another phase or stage does not claim ralph', async ($, on) => {
+    const world = session(on)
+    world.files.set(sessionFile(ROOT, 'autopilot'), autopilotTyped(NOW))
+    world.files.set(sessionFile(ROOT, 'ralph'), ralphTyped(NOW))
+    await start($, world)
+    expect(await lines($)).toEqual(['ralph · iteration 7 · reviewer: critic · 22m', 'autopilot · phase 2/5 planning · 20m'])
+    // A named workflow at its execution stage is not its ralph stage.
+    world.files.set(sessionFile(ROOT, 'autopilot'), autopilotPipeline(NOW))
+    await world.clock.advance(REFRESH_MS)
+    expect(await lines($)).toEqual(['ralph · iteration 7 · reviewer: critic · 23m', 'autopilot · stage 2/4 execution · 21m'])
+  })
+
+  test('ralph with linked_team is (in team), and team with linked_ralph is (with ralph)', async ($, on) => {
+    const world = session(on)
+    world.files.set(sessionFile(ROOT, 'ralph'), ralphTyped(NOW, { linked_team: true }))
+    world.files.set(sessionFile(ROOT, 'team'), team(NOW, { linked_ralph: 'true' }))
+    await start($, world)
+    expect(await lines($)).toEqual(['ralph (in team) · iteration 7 · reviewer: critic · 22m', 'team (with ralph) · team-exec · 3 workers'])
+  })
+
+  test('a link to a mode that is not active, or a "false" link, labels nothing', async ($, on) => {
+    const world = session(on)
+    world.files.set(sessionFile(ROOT, 'ralph'), ralphTyped(NOW, { linked_team: true }))
+    world.files.set(sessionFile(ROOT, 'team'), team(NOW, { active: false, linked_ralph: 'true' }))
+    await start($, world)
+    expect(await lines($)).toEqual(['ralph · iteration 7 · reviewer: critic · 22m'])
+    world.files.set(sessionFile(ROOT, 'ralph'), ralphTyped(NOW))
+    // The team skill's own fixture stores linked_ralph as the string "false".
+    world.files.set(sessionFile(ROOT, 'team'), team(NOW))
+    await world.clock.advance(REFRESH_MS)
+    expect(await lines($)).toEqual(['ralph · iteration 7 · reviewer: critic · 23m', 'team · team-exec · 3 workers'])
+  })
+})
+
+describe('narrow and switched sessions', () => {
+  test('at 40 columns a warned row is still one Text, its warning inside it', async ($, on) => {
+    const world = session(on)
+    world.files.set(sessionFile(ROOT, 'ralph'), STALE_RALPH(3))
+    await start($, world)
+    const band = await $.ui.mount({ ...BAND, props: { ...BAND.props, bodyColumns: 40 } })
+    const texts = await band.findAll({ type: 'Text' })
+    await band.unmount()
+    const rows = texts.filter(t => t.props.color !== 'warning')
+    expect(rows.map(t => t.text)).toEqual([staleRalphRow(3)])
+    expect(rows[0]?.children.some(child => typeof child === 'object')).toBe(true)
+  })
+
+  test('after a /clear or /resume, the new session’s rows are read', async ($, on) => {
+    const world = session(on)
+    world.files.set(sessionFile(ROOT, 'ralph'), ralphTyped(NOW))
+    world.files.set(sessionFile(ROOT, 'team', OTHER_SID), teamTyped(NOW, { session_id: OTHER_SID }))
+    await start($, world)
+    expect(await lines($)).toEqual(['ralph · iteration 7 · reviewer: critic · 22m'])
+    world.sid = OTHER_SID
+    await $.session.end({ reason: 'clear', sessionId: SID } as Parameters<Engine['session']['end']>[0])
+    await world.clock.settle()
+    expect(await lines($)).toEqual(['team · team-exec · 9m'])
   })
 })
 
@@ -444,9 +534,10 @@ describe('the warning in the row', () => {
     world.files.set(sessionFile(ROOT, 'ralph'), ralphTyped(NOW))
     await start($, world)
     for (const surface of ['terminal', 'desktop'] as const) {
+      // The warning is a Text nested in its row's Text.
       expect(await drawn($, surface)).toEqual([
-        { text: 'ralph · iteration 7 · reviewer: critic · 22m', color: undefined, bold: undefined, dim: true },
-        { text: 'autopilot · phase 3/5 execution · 3h', color: undefined, bold: undefined, dim: false },
+        { text: 'ralph (in autopilot) · iteration 7 · reviewer: critic · 22m', color: undefined, bold: undefined, dim: true },
+        { text: 'autopilot · phase 3/5 execution · 3h · stale for 3h; cancel or resume', color: undefined, bold: undefined, dim: false },
         { text: ' · stale for 3h; cancel or resume', color: 'warning', bold: true, dim: undefined },
       ])
     }
@@ -457,7 +548,7 @@ describe('the warning in the row', () => {
     world.files.set(sessionFile(ROOT, 'team'), teamTyped(NOW, { reinforcement_count: 20 }))
     world.files.set(sessionFile(ROOT, 'ralph'), LOOPING())
     await start($, world)
-    expect(await lines($)).toEqual([LOOPING_ROW, 'team · team-exec · 4 workers (3 busy) · 9m · looping: reinforcement 20/20'])
+    expect(await lines($)).toEqual([LOOPING_ROW, 'team · team-exec · 9m · looping: reinforcement 20/20'])
   })
 
   test('awaiting confirmation, for OMC’s two minutes only', async ($, on) => {
@@ -588,8 +679,58 @@ describe('agents, counted from this session’s events', () => {
     await spawn($, 'w2', { isTeammate: true })
     expect(await lines($)).toEqual(['team · team-exec · 2 workers (0 busy) · 2 agents running'])
     world.listed = ['a2', 'w2']
+    world.statuses.set('w2', 'idle')
     await world.clock.advance(REFRESH_MS)
     expect(await lines($)).toEqual(['team · team-exec · 1 worker (0 busy) · 1 agent running'])
+  })
+
+  test('a teammate the engine lists as running is busy, as one in its own pane would be', async ($, on) => {
+    const world = session(on)
+    world.files.set(sessionFile(ROOT, 'team'), team(NOW))
+    await start($, world)
+    await spawn($, 'w1', { isTeammate: true })
+    await spawn($, 'w2', { isTeammate: true })
+    await turnStart($, 'w2')
+    world.listed = ['w1', 'w2']
+    world.statuses.set('w2', 'idle')
+    await world.clock.advance(REFRESH_MS)
+    expect(await lines($)).toEqual(['team · team-exec · 2 workers (1 busy)'])
+    // w1 is busy and w2 idle by the list, whatever the turns said.
+    expect(await command($)).toContain('2 workers (1 busy)')
+    world.statuses.set('w2', 'running')
+    await world.clock.advance(REFRESH_MS)
+    expect(await lines($)).toEqual(['team · team-exec · 2 workers (2 busy)'])
+  })
+
+  test('an agent started while the list is awaited is not pruned by that list', async ($, on) => {
+    const world = session(on)
+    world.files.set(sessionFile(ROOT, 'ralph'), ralphTyped(NOW))
+    await start($, world)
+    await spawn($, 'a1')
+    let open = (): void => undefined
+    world.listGate = new Promise<void>(resolve => {
+      open = resolve
+    })
+    // The list, once it answers, holds neither a1 nor a2.
+    world.listed = []
+    await world.clock.advance(REFRESH_MS)
+    await spawn($, 'a2')
+    open()
+    await world.clock.settle()
+    expect(await lines($)).toEqual(['ralph · iteration 7 · reviewer: critic · 23m · 1 agent running'])
+    world.listGate = null
+    await world.clock.advance(REFRESH_MS)
+    expect(await lines($)).toEqual(['ralph · iteration 7 · reviewer: critic · 24m'])
+  })
+
+  test('the session’s agent count is on the first row only', async ($, on) => {
+    const world = session(on)
+    world.files.set(sessionFile(ROOT, 'team'), teamTyped(NOW))
+    world.files.set(sessionFile(ROOT, 'ultragoal'), ultragoal(NOW))
+    await start($, world)
+    await spawn($, 'a1')
+    await spawn($, 'a2')
+    expect(await lines($)).toEqual(['team · team-exec · 9m · 2 agents running', 'ultragoal · executing · 31m'])
   })
 
   test('when the engine cannot list agents, nothing is dropped', async ($, on) => {
@@ -687,7 +828,7 @@ describe('the detail command', () => {
         `  last phase change: planning at ${new Date(NOW - 5 * MIN).toISOString()}`,
         '  cancel: /oh-my-claudecode:cancel',
         '',
-        'team · team-exec · 4 workers (3 busy) · 9m · 1 agent running',
+        'team · team-exec · 9m',
         '  plan: .omc/plans/team-plan.md',
         `  last phase change: team-exec at ${new Date(NOW - 4 * MIN).toISOString()}`,
         '  cancel: /oh-my-claudecode:cancel',

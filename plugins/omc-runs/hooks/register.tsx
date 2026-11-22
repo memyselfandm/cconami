@@ -2,9 +2,9 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, Timer } from 'claude-code'
 
 import type { AgentTally, Run } from '../types'
-import { EMPTY_TALLY, prune, reported, spawned, turned } from './agents'
+import { EMPTY_TALLY, reconcile, reported, spawned, tallyIds, turned } from './agents'
 import { readGoals, readMode, resolveRoot } from './locate'
-import { buildRun, detailText, rowText } from './progress'
+import { buildRun, detailText, labelRuns, rowText } from './progress'
 import { GUARDED_MODES, isSafeSessionId, ralphHardLimit, thresholds, touchesOmcState } from './watch'
 import type { Thresholds } from './watch'
 
@@ -40,11 +40,11 @@ async function readAll($: EngineInterface): Promise<void> {
     root = cached.root
   }
   await readRuns($, root, sessionId)
-  await pruneAgents($)
+  await reconcileAgents($)
 }
 
 async function readRuns($: EngineInterface, root: string | null, sessionId: string): Promise<void> {
-  const found: Run[] = []
+  let found: Run[] = []
   if (root !== null && isSafeSessionId(sessionId)) {
     const home = (await $.env.get('HOME')) || null
     const now = await $.clock.now()
@@ -61,6 +61,7 @@ async function readRuns($: EngineInterface, root: string | null, sessionId: stri
         found.push(run)
       }
     }
+    found = labelRuns(found)
   }
   // Redraw only when what the rows hold changes.
   if (JSON.stringify(await read($, runs)) !== JSON.stringify(found)) {
@@ -68,15 +69,17 @@ async function readRuns($: EngineInterface, root: string | null, sessionId: stri
   }
 }
 
-async function pruneAgents($: EngineInterface): Promise<void> {
-  const tally = await read($, agents)
-  if (tally.running.length === 0 && tally.teammates.length === 0) {
+async function reconcileAgents($: EngineInterface): Promise<void> {
+  // The ids tallied before the list is asked for: an agent tallied while it is
+  // awaited is not judged by a list that may predate it.
+  const snapshot = tallyIds(await read($, agents))
+  if (snapshot.size === 0) {
     return
   }
   const listed = await $.agent.list().catch(() => null)
   if (listed !== null) {
-    const live = new Set(listed.map(agent => agent.id))
-    await update($, agents, t => prune(t, live))
+    const statuses = new Map(listed.map(agent => [agent.id, String(agent.status)] as const))
+    await tallied($, t => reconcile(t, snapshot, statuses))
   }
 }
 
@@ -145,7 +148,8 @@ export const register: Register = (on, options) => {
   })
 
   // A /clear or a /resume goes on under another session id, with no
-  // session.start: start the tally over and read again for the new one.
+  // session.start: start the tally over and read again for the new one. The
+  // read waits on a zero-delay timer, by when $.session.id() is the new id.
   on('session.end', async ($, e, next) => {
     const result = await next(e)
     await update($, agents, () => EMPTY_TALLY)
@@ -219,7 +223,7 @@ export const register: Register = (on, options) => {
       return { text: 'No oh-my-claudecode mode is active in this session.' }
     }
 
-    return { text: list.map(run => detailText(run, tally)).join('\n\n') }
+    return { text: list.map((run, i) => detailText(run, tally, i === 0)).join('\n\n') }
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
@@ -230,16 +234,20 @@ export const register: Register = (on, options) => {
     const tally = await read($, agents)
     const { Box, Text } = $.ui.resolve(e)
 
+    // One Text per row, the warning nested inside it, so a narrow terminal
+    // wraps the row as one line rather than as two columns.
     return (
       <Box flexDirection="column">
-        {list.map(run => (
-          <Box key={`omc-${run.mode}`} flexDirection="row">
-            <Text dimColor={run.warning === null}>{rowText(run, tally)}</Text>
-            {run.warning === null ? null : (
-              <Text bold color="warning">
-                {` · ${run.warning}`}
-              </Text>
-            )}
+        {list.map((run, i) => (
+          <Box key={`omc-${run.mode}`}>
+            <Text dimColor={run.warning === null}>
+              {rowText(run, tally, i === 0)}
+              {run.warning === null ? null : (
+                <Text bold color="warning">
+                  {` · ${run.warning}`}
+                </Text>
+              )}
+            </Text>
           </Box>
         ))}
       </Box>

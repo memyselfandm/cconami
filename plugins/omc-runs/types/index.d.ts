@@ -29,6 +29,14 @@ export type Finding =
 export type Run = {
   /** The mode: `autopilot`, `ralph`, `team` or `ultragoal`. */
   mode: string
+  /** What the row calls it: the mode, or a linked form such as `ralph (in autopilot)`. */
+  label: string
+  /**
+   * How its state links it to another mode: `hosts-ralph` for an autopilot
+   * running ralph, `team` for ralph with `linked_team`, `ralph` for team with
+   * `linked_ralph`; null for none.
+   */
+  link: 'hosts-ralph' | 'team' | 'ralph' | null
   /**
    * The row's progress segments after the mode, from the state file, such as
    * `phase 3/5 execution` or `iteration 7`. Agent counts are not here: they

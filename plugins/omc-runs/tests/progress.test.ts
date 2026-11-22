@@ -3,11 +3,13 @@
 import { describe, expect, test } from 'claude-code/testing'
 
 import type { AgentTally, Run } from '../types'
-import { EMPTY_TALLY, prune, reported, spawned, turned } from '../hooks/agents'
+import { EMPTY_TALLY, reconcile, reported, spawned, tallyIds, turned } from '../hooks/agents'
 import {
   AUTOPILOT_PHASES,
   autopilotProgress,
+  labelRuns,
   lastChange,
+  linkOf,
   parseRaw,
   planPath,
   ralphProgress,
@@ -33,7 +35,9 @@ function raw(text: string): Raw {
 }
 
 function run(overrides: Partial<Run> = {}): Run {
-  return { mode: 'team', progress: [], elapsed: null, workers: null, warning: null, planPath: null, lastChange: null, ...overrides }
+  const mode = overrides.mode ?? 'team'
+
+  return { mode, label: mode, link: null, progress: [], elapsed: null, workers: null, warning: null, planPath: null, lastChange: null, ...overrides }
 }
 
 describe('autopilot', () => {
@@ -49,6 +53,19 @@ describe('autopilot', () => {
     expect(autopilotProgress(raw(autopilotPipeline(NOW)), 'execution')).toBe('stage 2/4 execution')
     const tracking = raw(autopilotPipeline(NOW)).pipelineTracking
     expect(autopilotProgress({ pipeline: tracking }, null)).toBe('stage 2/4 execution')
+  })
+
+  test('stages marked skipped are not counted, as getPipelineStatus counts its total', () => {
+    const stages = [
+      { id: 'ralplan', status: 'skipped' },
+      { id: 'execution', status: 'active' },
+      { id: 'ralph', status: 'skipped' },
+      { id: 'qa', status: 'pending' },
+    ]
+    expect(autopilotProgress({ pipelineTracking: { stages, currentStageIndex: 1 } }, null)).toBe('stage 1/2 execution')
+    expect(autopilotProgress({ pipelineTracking: { stages, currentStageIndex: 3 } }, null)).toBe('stage 2/2 qa')
+    // A skipped current stage has no place in the count: shown by name.
+    expect(autopilotProgress({ pipelineTracking: { stages, currentStageIndex: 2 } }, null)).toBe('stage ralph')
   })
 
   test('a pipeline with an index out of range, a fractional index, or no stages falls back to the phase', () => {
@@ -71,26 +88,67 @@ describe('ralph', () => {
 })
 
 describe('team', () => {
-  test('workers from execution, else agent_count; none for zero or missing', () => {
-    expect(teamWorkers(raw(teamTyped(NOW)))).toEqual({ total: 4, busy: 3 })
+  test('agent_count from the team skill; OMC 5.8.6’s execution counts are all 0, so they give nothing', () => {
+    expect(teamWorkers(raw(teamTyped(NOW)))).toBeNull()
     expect(teamWorkers(raw(team(NOW)))).toEqual({ total: 3, busy: null })
     expect(teamWorkers({ execution: { workers_total: 0, workers_active: 0 }, agent_count: '2' })).toEqual({ total: 2, busy: null })
-    expect(teamWorkers({ execution: { workers_total: 2 } })).toEqual({ total: 2, busy: null })
     expect(teamWorkers({ agent_count: '0' })).toBeNull()
     expect(teamWorkers({})).toBeNull()
   })
 
+  test('future-proofing: non-zero execution counts are read first, with busy when recorded', () => {
+    expect(teamWorkers({ execution: { workers_total: 4, workers_active: 3 }, agent_count: '2' })).toEqual({ total: 4, busy: 3 })
+    expect(teamWorkers({ execution: { workers_total: 2 } })).toEqual({ total: 2, busy: null })
+  })
+
   test('the row prefers this session’s teammates to the state file', () => {
     const tally: AgentTally = { running: [], teammates: [{ id: 'a', isBusy: true }, { id: 'b', isBusy: false }] }
-    expect(rowText(run({ workers: { total: 4, busy: 3 } }), tally)).toBe('team · 2 workers (1 busy)')
-    expect(rowText(run({ workers: { total: 4, busy: 3 } }), EMPTY_TALLY)).toBe('team · 4 workers (3 busy)')
-    expect(rowText(run({ workers: { total: 1, busy: null } }), EMPTY_TALLY)).toBe('team · 1 worker')
-    expect(rowText(run(), EMPTY_TALLY)).toBe('team')
+    expect(rowText(run({ workers: { total: 4, busy: 3 } }), tally, true)).toBe('team · 2 workers (1 busy)')
+    expect(rowText(run({ workers: { total: 4, busy: 3 } }), EMPTY_TALLY, true)).toBe('team · 4 workers (3 busy)')
+    expect(rowText(run({ workers: { total: 1, busy: null } }), EMPTY_TALLY, true)).toBe('team · 1 worker')
+    expect(rowText(run(), EMPTY_TALLY, true)).toBe('team')
   })
 
   test('another mode’s row never counts workers', () => {
     const tally: AgentTally = { running: [], teammates: [{ id: 'a', isBusy: true }] }
-    expect(rowText(run({ mode: 'ralph', workers: { total: 4, busy: 3 } }), tally)).toBe('ralph')
+    expect(rowText(run({ mode: 'ralph', workers: { total: 4, busy: 3 } }), tally, true)).toBe('ralph')
+  })
+})
+
+describe('the row', () => {
+  test('the label leads, and the agent count is added only when asked for', () => {
+    const tally: AgentTally = { running: ['a', 'b'], teammates: [] }
+    const r = run({ mode: 'ralph', label: 'ralph (in team)', elapsed: '5m', progress: ['iteration 3'] })
+    expect(rowText(r, tally, true)).toBe('ralph (in team) · iteration 3 · 5m · 2 agents running')
+    expect(rowText(r, tally, false)).toBe('ralph (in team) · iteration 3 · 5m')
+    expect(rowText(r, { running: ['a'], teammates: [] }, true)).toBe('ralph (in team) · iteration 3 · 5m · 1 agent running')
+  })
+})
+
+describe('linked modes', () => {
+  test('links from each state', () => {
+    expect(linkOf('autopilot', {}, 'execution')).toBe('hosts-ralph')
+    expect(linkOf('autopilot', {}, 'planning')).toBeNull()
+    expect(linkOf('autopilot', raw(autopilotPipeline(NOW)), 'execution')).toBeNull()
+    const atRalph = { pipelineTracking: { stages: [{ id: 'execution' }, { id: 'ralph' }], currentStageIndex: 1 } }
+    expect(linkOf('autopilot', atRalph, 'execution')).toBe('hosts-ralph')
+    expect(linkOf('ralph', { linked_team: true }, null)).toBe('team')
+    expect(linkOf('ralph', { linked_team: 'true' }, null)).toBe('team')
+    expect(linkOf('ralph', { linked_team: 'false' }, null)).toBeNull()
+    expect(linkOf('team', { linked_ralph: true }, null)).toBe('ralph')
+    expect(linkOf('team', { linked_ralph: 'false' }, null)).toBeNull()
+    expect(linkOf('ultragoal', { linked_team: true, linked_ralph: true }, 'execution')).toBeNull()
+  })
+
+  test('labels need the other mode active; autopilot wins over team for ralph', () => {
+    const ralph = run({ mode: 'ralph', link: 'team' })
+    const teamRun = run({ mode: 'team', link: 'ralph' })
+    const host = run({ mode: 'autopilot', link: 'hosts-ralph' })
+    expect(labelRuns([ralph, teamRun]).map(r => r.label)).toEqual(['ralph (in team)', 'team (with ralph)'])
+    expect(labelRuns([ralph, host, teamRun]).map(r => r.label)).toEqual(['ralph (in autopilot)', 'autopilot', 'team (with ralph)'])
+    expect(labelRuns([ralph]).map(r => r.label)).toEqual(['ralph'])
+    expect(labelRuns([teamRun]).map(r => r.label)).toEqual(['team'])
+    expect(labelRuns([run({ mode: 'ralph' }), run({ mode: 'autopilot' })]).map(r => r.label)).toEqual(['ralph', 'autopilot'])
   })
 })
 
@@ -102,6 +160,12 @@ describe('ultragoal', () => {
     expect(ultragoalProgress(goals({ goals: [] }))).toBeNull()
     expect(ultragoalProgress('not json')).toBeNull()
     expect(ultragoalProgress(null)).toBeNull()
+  })
+
+  test('done is complete or review_blocked, trimmed and lowercased, as OMC resolves a goal', () => {
+    const g = (status: unknown) => ({ id: 'x', status })
+    const plan = JSON.stringify({ goals: [g('complete'), g(' Review_Blocked '), g('COMPLETE'), g('failed'), g('in_progress'), g(3)] })
+    expect(ultragoalProgress(plan)).toBe('3/6 goals done')
   })
 })
 
@@ -153,9 +217,23 @@ describe('the agent tally', () => {
     expect(turned(t, 'm', false).teammates).toEqual([{ id: 'm', isBusy: false }])
   })
 
-  test('pruning keeps only listed agents, and changes nothing when all are listed', () => {
+  test('reconciling drops snapshot agents the list lacks, and changes nothing when all are listed as they stand', () => {
     const t: AgentTally = { running: ['a', 'b'], teammates: [{ id: 'm', isBusy: true }, { id: 'n', isBusy: false }] }
-    expect(prune(t, new Set(['a', 'b', 'm', 'n']))).toBe(t)
-    expect(prune(t, new Set(['b', 'n']))).toEqual({ running: ['b'], teammates: [{ id: 'n', isBusy: false }] })
+    const snapshot = tallyIds(t)
+    expect([...snapshot]).toEqual(['a', 'b', 'm', 'n'])
+    const all = new Map([['a', 'running'], ['b', 'running'], ['m', 'running'], ['n', 'idle']])
+    expect(reconcile(t, snapshot, all)).toBe(t)
+    expect(reconcile(t, snapshot, new Map([['b', 'running'], ['n', 'idle']]))).toEqual({ running: ['b'], teammates: [{ id: 'n', isBusy: false }] })
+  })
+
+  test('an agent not in the snapshot is kept, whatever the list says', () => {
+    const t: AgentTally = { running: ['a', 'late'], teammates: [{ id: 'late-m', isBusy: true }] }
+    expect(reconcile(t, new Set(['a']), new Map())).toEqual({ running: ['late'], teammates: [{ id: 'late-m', isBusy: true }] })
+  })
+
+  test('a listed teammate from the snapshot takes its busy state from its status', () => {
+    const t: AgentTally = { running: [], teammates: [{ id: 'm', isBusy: false }, { id: 'n', isBusy: true }] }
+    const after = reconcile(t, tallyIds(t), new Map([['m', 'running'], ['n', 'idle']]))
+    expect(after.teammates).toEqual([{ id: 'm', isBusy: true }, { id: 'n', isBusy: false }])
   })
 })

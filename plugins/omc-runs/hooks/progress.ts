@@ -84,16 +84,23 @@ function pipelineOf(raw: Raw): { stages: Raw[]; index: number } | null {
 }
 
 /**
- * autopilot's progress: a named workflow's `stage <n>/<total> <id>` from
- * `pipelineTracking.stages[currentStageIndex]`, else `phase <n>/5 <phase>`
- * for a legacy phase (AUTOPILOT_PHASES), else `phase <phase>` for any other.
+ * autopilot's progress: a named workflow's `stage <n>/<total> <id>` for
+ * `pipelineTracking.stages[currentStageIndex]`, numbered over the stages not
+ * marked `skipped`, as getPipelineStatus() in src/hooks/autopilot/pipeline.ts
+ * counts its total (a skipped current stage is shown by name alone); else
+ * `phase <n>/5 <phase>` for a legacy phase (AUTOPILOT_PHASES), else
+ * `phase <phase>` for any other.
  */
 export function autopilotProgress(raw: Raw, phase: string | null): string | null {
   const pipeline = pipelineOf(raw)
   if (pipeline !== null) {
-    const id = textAt(pipeline.stages[pipeline.index] ?? null, 'id')
+    const current = pipeline.stages[pipeline.index] ?? {}
+    const id = textAt(current, 'id')
+    const counted = pipeline.stages.filter(s => s.status !== 'skipped')
+    const at = counted.indexOf(current)
+    const name = id === null ? '' : ` ${id}`
 
-    return `stage ${pipeline.index + 1}/${pipeline.stages.length}${id === null ? '' : ` ${id}`}`
+    return at === -1 ? `stage${name}` : `stage ${at + 1}/${counted.length}${name}`
   }
   if (phase === null) {
     return null
@@ -126,11 +133,12 @@ export function ralphProgress(raw: Raw): string[] {
 }
 
 /**
- * The workers a team state records: `execution.workers_total` and
- * `execution.workers_active` (TeamPipelineExecution, written by
- * initTeamPipelineState() in src/hooks/team-pipeline/state.ts), else the
- * `agent_count` the team skill stores through state_write, with no busy
- * count. Null when it records neither, or a total of 0.
+ * The workers a team state records: the `agent_count` the team skill stores
+ * through state_write, with no busy count. `execution.workers_total` and
+ * `execution.workers_active` (TeamPipelineExecution) are read first as
+ * future-proofing: OMC 5.8.6's initTeamPipelineState() in
+ * src/hooks/team-pipeline/state.ts declares them but only ever writes 0, and
+ * a total of 0 is skipped. Null when neither records a worker.
  */
 export function teamWorkers(raw: Raw): { total: number; busy: number | null } | null {
   const execution = objectAt(raw, 'execution')
@@ -149,8 +157,13 @@ export function teamWorkers(raw: Raw): { total: number; busy: number | null } | 
  * ultragoal's progress from its plan, `.omc/ultragoal/goals.json`
  * (UltragoalPlan in src/ultragoal/artifacts.ts), the file OMC's stop hook
  * reads in isUltragoalTerminalState(): `goal <n>/<total>` for the goal
- * `activeGoalId` names, else `<done>/<total> goals done`. Its state file
- * holds no goal index or count (activateState() writes `current_phase:
+ * `activeGoalId` names, else `<done>/<total> goals done`, done meaning a
+ * status of `complete` or `review_blocked` (isResolvedStatus() in
+ * src/ultragoal/artifacts.ts), trimmed and lowercased as the stop hook's
+ * normalizePhaseValue() reads it. Only the legacy single-plan layout,
+ * `.omc/ultragoal/goals.json`, is read, as the stop hook reads it; a
+ * multi-plan `.omc/ultragoal/plans/<planId>/goals.json` is not. Its state
+ * file holds no goal index or count (activateState() writes `current_phase:
  * 'executing'` and reinforcement counts only), so without a readable plan the
  * row shows the phase.
  */
@@ -165,7 +178,11 @@ export function ultragoalProgress(goalsText: string | null): string | null {
   if (at !== -1) {
     return `goal ${at + 1}/${goals.length}`
   }
-  const done = goals.filter(g => g.status === 'complete').length
+  const done = goals.filter(g => {
+    const status = typeof g.status === 'string' ? g.status.trim().toLowerCase() : ''
+
+    return status === 'complete' || status === 'review_blocked'
+  }).length
 
   return `${done}/${goals.length} goals done`
 }
@@ -257,6 +274,61 @@ export function warningOf(mode: string, state: ModeState, nowMs: number, limits:
   return isAwaitingConfirmation(state, nowMs) ? 'awaiting confirmation' : null
 }
 
+function isTrue(value: unknown): boolean {
+  // state_write can store booleans as strings, as the team skill's `linked_ralph: 'false'`.
+  return value === true || value === 'true'
+}
+
+/**
+ * How a mode's state says it is linked to another mode:
+ *
+ * - autopilot `hosts-ralph` while it runs ralph: its legacy `execution` phase
+ *   (transitionRalphToUltraQA() in src/hooks/autopilot/state.ts ends that
+ *   ralph as execution ends), or a named workflow's current `ralph` stage;
+ * - ralph `team` with `linked_team`, and team `ralph` with `linked_ralph`,
+ *   which linkRalphTeam() in scripts/keyword-detector.mjs sets when a prompt
+ *   starts both.
+ */
+export function linkOf(mode: string, raw: Raw, phase: string | null): Run['link'] {
+  if (mode === 'autopilot') {
+    const pipeline = pipelineOf(raw)
+    const stage = pipeline === null ? null : textAt(pipeline.stages[pipeline.index] ?? null, 'id')
+    const isRunningRalph = pipeline === null ? phase === 'execution' : stage === 'ralph'
+
+    return isRunningRalph ? 'hosts-ralph' : null
+  }
+  if (mode === 'ralph') {
+    return isTrue(raw.linked_team) ? 'team' : null
+  }
+  if (mode === 'team') {
+    return isTrue(raw.linked_ralph) ? 'ralph' : null
+  }
+
+  return null
+}
+
+/**
+ * Each run's label: `ralph (in autopilot)` while an active autopilot runs
+ * ralph, else `ralph (in team)` when ralph is linked to an active team;
+ * `team (with ralph)` when team is linked to an active ralph; else the mode.
+ */
+export function labelRuns(runs: readonly Run[]): Run[] {
+  const active = (mode: string) => runs.find(r => r.mode === mode)
+
+  return runs.map(run => {
+    let label = run.mode
+    if (run.mode === 'ralph' && active('autopilot')?.link === 'hosts-ralph') {
+      label = 'ralph (in autopilot)'
+    } else if (run.mode === 'ralph' && run.link === 'team' && active('team') !== undefined) {
+      label = 'ralph (in team)'
+    } else if (run.mode === 'team' && run.link === 'ralph' && active('ralph') !== undefined) {
+      label = 'team (with ralph)'
+    }
+
+    return label === run.label ? run : { ...run, label }
+  })
+}
+
 /**
  * One mode's run from its state file, or null when the mode is not active.
  * `goalsText` is ultragoal's plan file, read only for ultragoal.
@@ -292,6 +364,8 @@ export function buildRun(
 
   return {
     mode,
+    label: mode,
+    link: linkOf(mode, raw, state.phase),
     progress,
     elapsed: started === null ? null : age(nowMs - started),
     workers: mode === 'team' ? teamWorkers(raw) : null,
@@ -307,13 +381,14 @@ function agentsText(count: number): string | null {
 }
 
 /**
- * The row's main text, without the warning: the mode, its progress, the
- * elapsed time, team workers and this session's running subagents, joined
- * with ` · `. A team row counts workers from this session's teammates when it
- * has seen any, else from the state file.
+ * The row's main text, without the warning: the label, its progress, team
+ * workers and the elapsed time, joined with ` · `, then this session's
+ * running subagents when `withAgents` (the first row only: the count is the
+ * session's, not one mode's). A team row counts workers from this session's
+ * teammates when it has seen any, else from the state file.
  */
-export function rowText(run: Run, tally: AgentTally): string {
-  const parts = [run.mode, ...run.progress]
+export function rowText(run: Run, tally: AgentTally, withAgents: boolean): string {
+  const parts = [run.label, ...run.progress]
   if (run.mode === 'team') {
     const seen = tally.teammates.length
     const workers = seen > 0 ? { total: seen, busy: tally.teammates.filter(t => t.isBusy).length } : run.workers
@@ -325,7 +400,7 @@ export function rowText(run: Run, tally: AgentTally): string {
   if (run.elapsed !== null) {
     parts.push(run.elapsed)
   }
-  const agents = agentsText(tally.running.length)
+  const agents = withAgents ? agentsText(tally.running.length) : null
   if (agents !== null) {
     parts.push(agents)
   }
@@ -333,9 +408,12 @@ export function rowText(run: Run, tally: AgentTally): string {
   return parts.join(' · ')
 }
 
-/** The detail `/omc-runs` prints for one run: plan file, last phase change and the cancel command. */
-export function detailText(run: Run, tally: AgentTally): string {
-  const lines = [rowText(run, tally)]
+/**
+ * The detail `/omc-runs` prints for one run: plan file, last phase change and
+ * the cancel command. The agent count is on the first run's line only.
+ */
+export function detailText(run: Run, tally: AgentTally, withAgents: boolean): string {
+  const lines = [rowText(run, tally, withAgents)]
   if (run.warning !== null) {
     lines.push(`  warning: ${run.warning}`)
   }

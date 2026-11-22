@@ -126,7 +126,10 @@ export function team(updatedMs: number, overrides: Record<string, unknown> = {})
   })
 }
 
-/** team-state.json as initTeamPipelineState() and markTeamPhase() write it: 4 workers, 3 active, 9 minutes in. */
+/**
+ * team-state.json as initTeamPipelineState() and markTeamPhase() write it, 9
+ * minutes in. OMC 5.8.6 writes 0 for both worker counts and never updates them.
+ */
 export function teamTyped(nowMs: number, overrides: Record<string, unknown> = {}): string {
   return JSON.stringify({
     schema_version: 1,
@@ -142,7 +145,7 @@ export function teamTyped(nowMs: number, overrides: Record<string, unknown> = {}
     iteration: 1,
     max_iterations: 25,
     artifacts: { plan_path: '.omc/plans/team-plan.md', prd_path: null, verify_report_path: null },
-    execution: { workers_total: 4, workers_active: 3, tasks_total: 6, tasks_completed: 2, tasks_failed: 0 },
+    execution: { workers_total: 0, workers_active: 0, tasks_total: 0, tasks_completed: 0, tasks_failed: 0 },
     fix_loop: { attempt: 0, max_attempts: 3, last_failure_reason: null },
     cancel: { requested: false, requested_at: null, preserve_for_resume: true },
     started_at: iso(nowMs - 9 * MIN),

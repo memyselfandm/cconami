@@ -740,7 +740,8 @@ ultragoal · goal 2/5 · 31m
 ```
 
 A healthy row is dim. When something is wrong, the warning follows in the same
-row, bold and in the warning colour:
+row (nested in the row's text, so a narrow terminal wraps it as one line), bold
+and in the warning colour:
 `autopilot · phase 3/5 execution · 3h · stale for 3h; cancel or resume`. With no
 active mode, or while a survey is showing, nothing is drawn. `/omc-runs` prints
 each active run's row with its warning, its plan file, its last phase change and
@@ -759,7 +760,8 @@ and the TypeScript state modules under `src/hooks/`); both are read.
 
 - **autopilot.** A named workflow's stage, `stage <n>/<total> <id>`, from
   `pipelineTracking.stages[currentStageIndex]` (`PipelineTracking`,
-  `src/hooks/autopilot/pipeline-types.ts`). Otherwise the legacy phase,
+  `src/hooks/autopilot/pipeline-types.ts`), numbered over the stages not marked
+  `skipped`, as `getPipelineStatus()` counts its total. Otherwise the legacy phase,
   `phase <n>/5 <phase>`, counted through `expansion`, `planning`, `execution`,
   `qa`, `validation` (`AutopilotPhase`, `src/hooks/autopilot/types.ts`). OMC's
   own prompts number these Phase 0 to Phase 4; the row counts from 1 so the last
@@ -768,22 +770,33 @@ and the TypeScript state modules under `src/hooks/`); both are read.
   (`RalphLoopState`, `src/hooks/ralph/loop.ts`: architect, critic or codex).
   `max_iterations` is not shown: OMC extends it by 10 whenever it is reached.
 - **team.** The phase, then the workers: this session's teammates when it has
-  seen any, busy while in a turn; otherwise `execution.workers_total` and
-  `workers_active` (`TeamPipelineState`, `src/hooks/team-pipeline/types.ts`), or
-  the team skill's `agent_count` with no busy count.
-- **ultragoal.** `goal <n>/<total>` for `activeGoalId` in
+  seen any; otherwise the team skill's `agent_count`, with no busy count.
+  `execution.workers_total` / `workers_active` (`TeamPipelineState`) are read
+  first as future-proofing only: OMC 5.8.6 writes 0 there and never updates them.
+- **ultragoal.** `goal <n>/<total>` for `activeGoalId` in the legacy single-plan
   `.omc/ultragoal/goals.json` (`UltragoalPlan`, `src/ultragoal/artifacts.ts`),
-  the file OMC's stop hook reads; else `<done>/<total> goals done`. Its state
-  file holds no goal index or count, so without a readable plan the row shows
-  the phase (`executing`).
+  the file OMC's stop hook reads; else `<done>/<total> goals done`, done being
+  `complete` or `review_blocked` after trimming and lowercasing. A multi-plan
+  `plans/<planId>/goals.json` is not read. Its state file holds no goal index or
+  count, so without a readable plan the row shows the phase (`executing`).
+- **Linked modes.** A ralph row reads `ralph (in autopilot)` while an active
+  autopilot runs it: its legacy `execution` phase, or a named workflow's current
+  `ralph` stage. Otherwise `ralph (in team)` when its state has `linked_team` and
+  team is active, and team reads `team (with ralph)` when its state has
+  `linked_ralph` and ralph is active. `linkRalphTeam()` in
+  `scripts/keyword-detector.mjs` sets both links; `true` and `"true"` count.
 - **Elapsed time.** From `started_at`, else the first `phase_history` entry.
   The team skill's `state_write` file records neither, so its row has none.
 - **Running agents.** Counted from this session's own events, not OMC's files:
   a subagent from the `agent.spawn` that started it to its `agent.report`; a
   teammate is a worker, busy from a `turn.start` in its loop to that turn's
   `turn.complete`. A workflow script's agents are not counted, since no
-  `agent.report` is raised for them. At each read, agents `$.agent.list()` no
-  longer lists are dropped. A `/clear` or `/resume` starts the tally over.
+  `agent.report` is raised for them. At each read, agents tallied before
+  `$.agent.list()` was asked for and no longer listed are dropped (one tallied
+  while the list was awaited is kept), and a listed teammate is busy when its
+  `status` is `running`, so a teammate in a terminal pane of its own counts too.
+  The count is the session's, so it is shown once, on the first row. A `/clear`
+  or `/resume` starts the tally over.
 - **Warnings.** omc-watchdog's stale and looping checks, then `awaiting
   confirmation` while OMC's stop hook holds the run for the person (two minutes
   from `awaiting_confirmation_set_at`, as `isAwaitingConfirmation` holds it).
