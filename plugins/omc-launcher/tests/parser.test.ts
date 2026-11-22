@@ -10,13 +10,15 @@ import {
   highestVersion,
   installPathFrom,
   MAIN_WORKFLOWS,
-  missing,
   orderSkills,
   parseHint,
   parseJsonc,
+  quoteText,
+  seedValues,
   skillFrom,
   stripJsonc,
   tokenize,
+  warnings,
 } from '../hooks/logic'
 import { HINTS_5_8_6, skillMd } from './fixtures'
 
@@ -26,7 +28,7 @@ function shape(field: Field): string {
     case 'toggle':
       return `toggle(${field.emit})`
     case 'choice':
-      return `choice(${field.options.map(o => o.emit).join('|')}${field.required ? ', required' : ''}${field.positional ? ', positional' : ''})`
+      return `choice(${field.options.map(o => o.emit).join('|')}${field.required ? ', required' : ''})`
     case 'value':
       return `value(${field.flag}${field.joiner}<${field.placeholder}>${field.required ? ', required' : ''})`
     case 'pair':
@@ -64,14 +66,14 @@ const EXPECTED: Record<string, string[]> = {
   'external-context': ['text(search query or topic, required)'],
   graph: ['text(descriptor.json | describe the pipeline, required)', 'value(--runs-root <dir>)'],
   harbor: ["text(sweep | look at #N | sign ... | what's ready?)"],
-  hud: ['choice(setup|minimal|focused|full|status, positional)'],
+  hud: ['choice(setup|minimal|focused|full|status)'],
   intent: ['text(pasted feedback / chat log | path to existing intent.md | nothing to continue open review, required)'],
   launch: ['text(mission brief | path to existing spec, required)', 'toggle(--serial)'],
   map: ['text(what are you trying to do)'],
   plan: ['choice(--direct|--consensus|--review)', 'toggle(--interactive)', 'toggle(--deliberate)', 'text(task description, required)'],
   ralph: ['toggle(--no-deslop)', 'choice(--critic=architect|--critic=critic|--critic=codex)', 'text(task description, required)'],
   ralplan: ['toggle(--interactive)', 'toggle(--deliberate)', 'toggle(--architect codex)', 'toggle(--critic codex)', 'text(task description, required)'],
-  'session-flow': ['choice(short|reset, positional)'],
+  'session-flow': ['choice(short|reset)'],
   skill: ['text(command, required)', 'text(args)'],
   team: ['pair(N:agent-type)', 'toggle(ralph)', 'text(task description, required)'],
   trace: ['text(observation to trace, required)'],
@@ -102,38 +104,69 @@ describe('the commands the main workflows submit', () => {
 
   test('ralph with --critic=codex and a task', () => {
     expect(buildCommand('ralph', form('ralph'), { f1: '--critic=codex', f2: 'fix the flaky test' })).toBe(
-      '/oh-my-claudecode:ralph --critic=codex fix the flaky test',
+      '/oh-my-claudecode:ralph --critic=codex "fix the flaky test"',
     )
   })
 
-  test('flags go first in hint order, then the task, as typed and unquoted', () => {
+  test('the task is quoted, double quotes and backslashes escaped, outer whitespace trimmed', () => {
     expect(
-      buildCommand('ralplan', form('ralplan'), { f0: 'on', f1: 'on', f2: 'on', f4: '  add "dark mode" to $HOME & co  ' }),
-    ).toBe('/oh-my-claudecode:ralplan --interactive --deliberate --architect codex add "dark mode" to $HOME & co')
+      buildCommand('ralplan', form('ralplan'), { f0: 'on', f1: 'on', f2: 'on', f4: '  add "dark mode" to C:\\x & $HOME  ' }),
+    ).toBe('/oh-my-claudecode:ralplan --interactive --deliberate --architect codex "add \\"dark mode\\" to C:\\\\x & $HOME"')
   })
 
-  test("graph's flag after the positional still goes before the task text", () => {
+  test('a task that looks like a flag or a keyword is quoted, and one starting with - is warned about', () => {
+    const ralph = form('ralph')
+    expect(buildCommand('ralph', ralph, { f2: '--critic=codex is broken' })).toBe('/oh-my-claudecode:ralph "--critic=codex is broken"')
+    expect(warnings(ralph, { f2: '--critic=codex is broken' })).toEqual(['task description starts with "-"'])
+    const team = form('team')
+    expect(buildCommand('team', team, { f2: 'ralph the logs' })).toBe('/oh-my-claudecode:team "ralph the logs"')
+    expect(buildCommand('team', team, { f2: 'ralph' })).toBe('/oh-my-claudecode:team "ralph"')
+    // A plain single word stays bare, so a subcommand still reads as one.
+    expect(buildCommand('skill', form('skill'), { f0: 'list' })).toBe('/oh-my-claudecode:skill list')
+  })
+
+  test('quoteText', () => {
+    expect(quoteText('list', [])).toBe('list')
+    expect(quoteText('src/app.ts', [])).toBe('src/app.ts')
+    expect(quoteText('ralph', ['ralph'])).toBe('"ralph"')
+    expect(quoteText('-x', [])).toBe('"-x"')
+    expect(quoteText('a"b', [])).toBe('"a\\"b"')
+    expect(quoteText('a\\', [])).toBe('"a\\\\"')
+  })
+
+  test("graph keeps the hint's order: the positional first, then its flag", () => {
     expect(buildCommand('graph', form('graph'), { f0: 'describe a pipeline', f1: '/tmp/runs' })).toBe(
-      '/oh-my-claudecode:graph --runs-root /tmp/runs describe a pipeline',
+      '/oh-my-claudecode:graph "describe a pipeline" --runs-root /tmp/runs',
     )
+  })
+
+  test('a value holding whitespace is left out and warned about', () => {
+    const fields = form('graph')
+    expect(buildCommand('graph', fields, { f0: 'p.json', f1: '/tmp/my runs' })).toBe('/oh-my-claudecode:graph p.json')
+    expect(warnings(fields, { f0: 'p.json', f1: '/tmp/my runs' })).toEqual(['--runs-root cannot hold spaces, so it is left out'])
   })
 
   test('team: the pair joins with a colon; a half-filled pair is left out and warned about', () => {
     const fields = form('team')
     expect(buildCommand('team', fields, { 'f0-left': '3', 'f0-right': 'executor', f1: 'on', f2: 'ship it' })).toBe(
-      '/oh-my-claudecode:team 3:executor ralph ship it',
+      '/oh-my-claudecode:team 3:executor ralph "ship it"',
     )
-    expect(buildCommand('team', fields, { 'f0-left': '3', f2: 'ship it' })).toBe('/oh-my-claudecode:team ship it')
-    expect(missing(fields, { 'f0-left': '3', f2: 'ship it' })).toEqual(['N:agent-type needs both parts'])
+    expect(buildCommand('team', fields, { 'f0-left': '3', f2: 'ship it' })).toBe('/oh-my-claudecode:team "ship it"')
+    expect(warnings(fields, { 'f0-left': '3', f2: 'ship it' })).toEqual(['N:agent-type needs both parts'])
   })
 
   test('autopilot --workflow takes the value with a space; empty values add nothing', () => {
     const fields = form('autopilot')
     expect(buildCommand('autopilot', fields, { f0: 'plan-build-qa', f1: 'build it' })).toBe(
-      '/oh-my-claudecode:autopilot --workflow plan-build-qa build it',
+      '/oh-my-claudecode:autopilot --workflow plan-build-qa "build it"',
     )
     expect(buildCommand('autopilot', fields, { f0: '  ', f1: '' })).toBe('/oh-my-claudecode:autopilot')
-    expect(missing(fields, { f0: '', f1: '' })).toEqual(['product idea or task description is required'])
+    expect(warnings(fields, { f0: '', f1: '' })).toEqual(['product idea or task description is required'])
+  })
+
+  test('a required choice opens on its first option, as it is drawn', () => {
+    expect(seedValues(parseHint('--level=a|b [--x=c|d] <t>') ?? [])).toEqual({ f0: '--level=a' })
+    expect(seedValues(form('ralph'))).toEqual({})
   })
 
   test('a choice value that is no option, such as the none sentinel, adds nothing', () => {
@@ -163,7 +196,7 @@ describe('hint shapes outside 5.8.6', () => {
     }
     const skill = { name: 'odd', description: '', hint: 'literal <task>' }
     expect(formFor(skill)).toEqual({
-      fields: [{ kind: 'text', id: 'args', label: 'literal <task>', required: false }],
+      fields: [{ kind: 'text', id: 'args', label: 'literal <task>', required: false, verbatim: true }],
       isFallback: true,
     })
     expect(buildCommand('odd', formFor(skill).fields, { args: 'a b --c' })).toBe('/oh-my-claudecode:odd a b --c')
@@ -171,7 +204,7 @@ describe('hint shapes outside 5.8.6', () => {
 
   test('a skill with no hint gets one optional arguments field, not marked as a fallback', () => {
     expect(formFor({ name: 'verify', description: '', hint: null })).toEqual({
-      fields: [{ kind: 'text', id: 'args', label: 'arguments', required: false }],
+      fields: [{ kind: 'text', id: 'args', label: 'arguments', required: false, verbatim: true }],
       isFallback: false,
     })
   })
@@ -260,7 +293,21 @@ describe('JSONC config', () => {
     expect(configChoices('ralph', '--workflow', [project])).toEqual([])
   })
 
+  test('as OMC accepts it: a trailing comma before a comment, and a leading BOM', () => {
+    expect(parseJsonc('{"a":1, // x\n}')).toEqual({ a: 1 })
+    expect(parseJsonc('{"a":1, /* x */ }')).toEqual({ a: 1 })
+    expect(parseJsonc('\uFEFF{"a":1}')).toEqual({ a: 1 })
+    // A block comment becomes a space, so it still separates tokens.
+    expect(stripJsonc('[1/* x */,2]')).toBe('[1 ,2]')
+  })
+
+  test('only names OMC admits are offered', () => {
+    const config = parseJsonc('{"autopilot": {"workflows": {"ok-1": {}, "Bad": {}, "1st": {}, "has space": {}, "_x": {}}}}')
+    expect(configChoices('autopilot', '--workflow', [config])).toEqual(['ok-1'])
+  })
+
   test('a broken or non-object config is null, and a non-object table gives nothing', () => {
+    expect(parseJsonc('{"a": 1 /* never closed')).toBeNull()
     expect(parseJsonc('{ nope')).toBeNull()
     expect(parseJsonc('[1]')).toBeNull()
     expect(configChoices('autopilot', '--workflow', [{ autopilot: { workflows: ['a'] } }])).toEqual([])
@@ -276,6 +323,15 @@ describe('finding OMC', () => {
     expect(highestVersion(['notes'])).toBeNull()
   })
 
+  test('a release ranks above its prereleases; build metadata is ignored', () => {
+    expect(compareVersions('5.9.0', '5.9.0-beta.1')).toBeGreaterThan(0)
+    expect(compareVersions('5.9.0-beta.2', '5.9.0-beta.10')).toBeLessThan(0)
+    expect(compareVersions('5.9.0-beta', '5.9.0-beta.1')).toBeLessThan(0)
+    expect(compareVersions('5.9.0-rc.1', '5.8.6')).toBeGreaterThan(0)
+    expect(compareVersions('5.9.0+build.7', '5.9.0')).toBe(0)
+    expect(highestVersion(['5.9.0-beta.1', '5.9.0', '5.8.6'])).toBe('5.9.0')
+  })
+
   test('installed_plugins.json: the highest usable entry for this session', () => {
     const json = JSON.stringify({
       version: 2,
@@ -289,6 +345,8 @@ describe('finding OMC', () => {
       },
     })
     expect(installPathFrom(json, '/work')).toBe('/c/omc/5.8.6')
+    expect(installPathFrom(json, '/work/sub/dir')).toBe('/c/omc/5.8.6')
+    expect(installPathFrom(json, '/workshop')).toBe('/c/omc/5.8.4')
     expect(installPathFrom(json, '/home')).toBe('/c/omc/5.8.4')
     expect(installPathFrom('{"plugins": {}}', '/work')).toBeNull()
     expect(installPathFrom('not json', '/work')).toBeNull()

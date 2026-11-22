@@ -11,10 +11,12 @@ import {
   highestVersion,
   installPathFrom,
   join,
-  missing,
+  OMC_NAMESPACE,
   orderSkills,
   parseJsonc,
+  seedValues,
   skillFrom,
+  warnings,
 } from './logic'
 
 // /omc opens a three-step wizard over the installed oh-my-claudecode skills:
@@ -28,19 +30,35 @@ const TITLE = 'OMC launcher'
 /** A Select value that matches no option's emitted text: the "leave it out" choice. */
 export const NONE = '(none)'
 
-const START: Wizard = { step: 'pick', skill: null, values: {} }
-const wizard = atom({ plugin: 'omc-launcher', key: 'wizard' } as const, START, { shape: 'wizard-1' })
+const START: Wizard = { step: 'pick', skill: null, values: {}, isArmed: false }
+const wizard = atom({ plugin: 'omc-launcher', key: 'wizard' } as const, START, { shape: 'wizard-2' })
 const catalog = atom({ plugin: 'omc-launcher', key: 'catalog' } as const, { skills: [], choices: {} } as Catalog, {
   shape: 'catalog-1',
 })
 
-type Places = { home: string; configDir: string }
+type Places = { configDir: string; userConfig: string }
 
 async function places($: EngineInterface): Promise<Places> {
   const home = (await $.env.get('HOME')) || ''
   const configDir = (await $.env.get('CLAUDE_CONFIG_DIR')) || join(home, '.claude')
+  // OMC's getConfigDir(): XDG_CONFIG_HOME, else ~/.config.
+  const xdg = (await $.env.get('XDG_CONFIG_HOME')) || join(home, '.config')
 
-  return { home, configDir }
+  return { configDir, userConfig: join(xdg, 'claude-omc', 'config.jsonc') }
+}
+
+/**
+ * The OMC skills this session can run, by bare name: the session's
+ * `oh-my-claudecode:*` commands. Empty when OMC is not active here.
+ */
+async function omcCommands($: EngineInterface): Promise<string[]> {
+  const prefix = `${OMC_NAMESPACE}:`
+  const names = (await $.command.list().catch(() => []))
+    .map(command => command.name)
+    .filter(name => name.startsWith(prefix))
+    .map(name => name.slice(prefix.length))
+
+  return [...new Set(names)]
 }
 
 /** True when the directory holds a skills folder. */
@@ -73,14 +91,17 @@ export async function findOmc($: EngineInterface, cwd: string): Promise<string |
   return null
 }
 
-/** Every skill under `<root>/skills/*\/SKILL.md` that has frontmatter, main workflows first. */
-async function readSkills($: EngineInterface, root: string): Promise<Skill[]> {
-  const dirs = (await $.fs.list(join(root, 'skills')).catch(() => [])).filter(entry => entry.kind === 'dir')
+/**
+ * The runnable skills that have a `<root>/skills/<name>/SKILL.md` with
+ * frontmatter, main workflows first. A command with no such file (one of OMC's
+ * `commands/*.md`, or an alias) is not a skill and is left out.
+ */
+async function readSkills($: EngineInterface, root: string, names: readonly string[]): Promise<Skill[]> {
   const found = await Promise.all(
-    dirs.map(async dir => {
-      const text = await $.fs.read(join(root, 'skills', dir.name, 'SKILL.md')).catch(() => null)
+    names.map(async name => {
+      const text = await $.fs.read(join(root, 'skills', name, 'SKILL.md')).catch(() => null)
 
-      return typeof text === 'string' ? skillFrom(dir.name, text) : null
+      return typeof text === 'string' ? skillFrom(name, text) : null
     }),
   )
 
@@ -89,8 +110,8 @@ async function readSkills($: EngineInterface, root: string): Promise<Skill[]> {
 
 /** Config choices for every valued flag, from the project's and the user's OMC config. */
 async function readChoices($: EngineInterface, cwd: string, skills: readonly Skill[]): Promise<Record<string, string[]>> {
-  const { home } = await places($)
-  const paths = [join(cwd, '.claude', 'omc.jsonc'), join(home, '.config', 'claude-omc', 'config.jsonc')]
+  const { userConfig } = await places($)
+  const paths = [join(cwd, '.claude', 'omc.jsonc'), userConfig]
   const configs = await Promise.all(
     paths.map(async path => {
       const text = await $.fs.read(path).catch(() => null)
@@ -114,8 +135,14 @@ async function readChoices($: EngineInterface, cwd: string, skills: readonly Ski
   return choices
 }
 
+/** Sets one value; any change disarms a pending Run anyway. */
 async function setValue($: EngineInterface, key: string, value: string): Promise<void> {
-  await update($, wizard, w => ({ ...w, values: { ...w.values, [key]: value } }))
+  await update($, wizard, w => ({ ...w, values: { ...w.values, [key]: value }, isArmed: false }))
+}
+
+/** Flips a toggle from its current value, not the one it was drawn with. */
+async function flip($: EngineInterface, key: string): Promise<void> {
+  await update($, wizard, w => ({ ...w, values: { ...w.values, [key]: w.values[key] === 'on' ? '' : 'on' }, isArmed: false }))
 }
 
 async function finish($: EngineInterface): Promise<void> {
@@ -128,12 +155,10 @@ function short(text: string, room: number): string {
 }
 
 export const register: Register = on => {
-  let cwd = ''
-
   on('session.start', async ($, e, next) => {
-    cwd = e.cwd
-    // Without OMC there is nothing to launch, so the command is not offered.
-    if ((await findOmc($, cwd)) !== null) {
+    // Without OMC's commands in this session there is nothing to launch, so
+    // /omc is not offered.
+    if ((await omcCommands($)).length > 0) {
       await $.command.register({
         name: 'omc',
         description: 'Pick an oh-my-claudecode workflow, set its options and run it',
@@ -144,11 +169,16 @@ export const register: Register = on => {
   })
 
   on('command.run', { command: 'omc' }, async $ => {
+    const names = await omcCommands($)
+    if (names.length === 0) {
+      return { text: 'oh-my-claudecode is not active in this session, so there is nothing to launch.' }
+    }
+    const cwd = await $.session.cwd()
     const root = await findOmc($, cwd)
     if (root === null) {
-      return { text: 'oh-my-claudecode is not installed, so there is nothing to launch.' }
+      return { text: 'The oh-my-claudecode plugin folder was not found, so its skills cannot be read.' }
     }
-    const skills = await readSkills($, root)
+    const skills = await readSkills($, root, names)
     if (skills.length === 0) {
       return { text: `No oh-my-claudecode skills were found under ${root}/skills.` }
     }
@@ -179,7 +209,7 @@ export const register: Register = on => {
         key="back"
         label="Back"
         onPress={() => {
-          void update($, wizard, (x): Wizard => ({ ...x, step }))
+          void update($, wizard, (x): Wizard => ({ ...x, step, isArmed: false }))
         }}
       />
     )
@@ -197,12 +227,16 @@ export const register: Register = on => {
             key="skill"
             label="Skill"
             autoFocus
-            options={skills.map(s => ({
-              value: s.name,
-              label: short(s.description === '' ? s.name : `${s.name}: ${s.description}`, columns - 10),
-            }))}
+            options={skills.map(s => {
+              // The name always shows; only the description gives way.
+              const room = columns - 12 - s.name.length
+
+              return { value: s.name, label: s.description === '' || room < 4 ? s.name : `${s.name}: ${short(s.description, room)}` }
+            })}
             onSelect={value => {
-              void update($, wizard, (): Wizard => ({ step: 'form', skill: value, values: {} }))
+              const picked = skills.find(s => s.name === value)
+              const values = picked === undefined ? {} : seedValues(formFor(picked).fields)
+              void update($, wizard, (): Wizard => ({ step: 'form', skill: value, values, isArmed: false }))
             }}
           />
           <Box gap={1}>{cancel}</Box>
@@ -215,7 +249,20 @@ export const register: Register = on => {
     if (w.step === 'review') {
       const command = buildCommand(skill.name, fields, w.values)
       const args = buildArgs(fields, w.values)
-      const warnings = missing(fields, w.values)
+      const warned = warnings(fields, w.values)
+      const run = async () => {
+        // A command with warnings (an empty task starts an autonomous run on
+        // nothing) needs a second press: the first only arms it.
+        if (warned.length > 0 && !(await read($, wizard)).isArmed) {
+          await update($, wizard, (x): Wizard => ({ ...x, isArmed: true }))
+
+          return
+        }
+        await finish($)
+        // A prompt beginning with / is refused by $.prompt.submit, so the skill
+        // runs through $.command.run: as if the person typed the line.
+        await $.command.run({ command: commandName(skill.name), args })
+      }
 
       return (
         <Box flexDirection="column" gap={1}>
@@ -223,21 +270,20 @@ export const register: Register = on => {
           <Text wrap="wrap">
             {command}
           </Text>
-          {warnings.map(warning => (
-            <Text color="warning">{warning}</Text>
+          {warned.map(warning => (
+            <Box key={`warning-${warning}`}>
+              <Text color="warning">{warning}</Text>
+            </Box>
           ))}
+          {w.isArmed && <Text color="warning">Press Run anyway again to run it as shown.</Text>}
           <Box gap={1}>
             <Button
               key="run"
-              label="Run"
+              label={warned.length > 0 ? 'Run anyway' : 'Run'}
               onPress={() => {
-                // A prompt beginning with / is refused by $.prompt.submit, so the
-                // skill runs through $.command.run: as if the person typed it.
-                void finish($)
-                  .then(() => $.command.run({ command: commandName(skill.name), args }))
-                  .catch((error: unknown) => {
-                    $.ui.toast(`Could not run ${command}: ${error instanceof Error ? error.message : String(error)}`)
-                  })
+                void run().catch((error: unknown) => {
+                  $.ui.toast(`Could not run ${command}: ${error instanceof Error ? error.message : String(error)}`)
+                })
               }}
             />
             {back('form')}
@@ -257,7 +303,7 @@ export const register: Register = on => {
               key={field.id}
               label={`[${isOn ? 'x' : ' '}] ${field.label}`}
               onPress={() => {
-                void setValue($, field.id, isOn ? '' : 'on')
+                void flip($, field.id)
               }}
             />
           )

@@ -12,18 +12,22 @@ not have to remember each skill's flags:
    an input for `--workflow <name>`, two inputs for team's `[N:agent-type]`, and
    a text box for the task. Autopilot's `--workflow` also offers the profiles
    under `autopilot.workflows` in `.claude/omc.jsonc` and
-   `~/.config/claude-omc/config.jsonc`.
+   `$XDG_CONFIG_HOME/claude-omc/config.jsonc` (`~/.config` when that is unset).
+   OMC runs named workflow profiles only on Linux with `flock`.
 3. **Review and run.** The exact command line, for example
-   `/oh-my-claudecode:ralph --critic=codex fix the flaky login test`, with Run,
-   Back and Cancel. Run runs it as though you had typed it.
+   `/oh-my-claudecode:ralph --critic=codex "fix the flaky login test"`, with Run,
+   Back and Cancel. The task is quoted so it cannot be read as a flag or
+   keyword. Run runs the line through `$.command.run`, as though you had typed
+   it. When the review step shows a warning (an empty task, for one), the button
+   reads Run anyway and takes two presses.
 
 ```
 /plugin install omc-launcher --marketplace memyselfandm/cconami
 ```
 
 Choose the user scope to have it in every session. The mod reads OMC's skill
-files and config and runs the command you review. It writes nothing. When OMC
-is not installed, `/omc` is not offered.
+files and config and runs the command you review. It writes nothing. When the
+session has no `oh-my-claudecode:*` commands, `/omc` is not offered.
 
 How it parses hints, which shapes fall back to free text, and the owner smoke
 test: [../MODS.md](../MODS.md#omc-launcher).

@@ -26,8 +26,6 @@ export type Field =
       /** Each option's label and the text it adds. */
       options: { label: string; emit: string }[]
       required: boolean
-      /** True for a positional word list (`[setup|minimal]`), which goes with the task text. */
-      positional: boolean
     }
   | {
       /** A flag with a typed value, such as `[--workflow <name>]`. */
@@ -47,11 +45,13 @@ export type Field =
       right: string
     }
   | {
-      /** Positional text, such as `<task description>`, appended as typed. */
+      /** Positional text, such as `<task description>`, quoted when it could be misread. */
       kind: 'text'
       id: string
       label: string
       required: boolean
+      /** True for the fallback free-text arguments field, which goes in exactly as typed. */
+      verbatim: boolean
     }
 
 /** Where the wizard is. */
@@ -61,6 +61,8 @@ export type Wizard = {
   skill: string | null
   /** Field values by field id (a pair's halves at `<id>-left` and `<id>-right`; a toggle is `on`). */
   values: Record<string, string>
+  /** True once Run anyway has been pressed on a command with warnings; the next press runs it. */
+  isArmed: boolean
 }
 
 /** What /omc read when it was last run. */

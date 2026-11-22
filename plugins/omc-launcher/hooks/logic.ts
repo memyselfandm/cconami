@@ -72,7 +72,7 @@ function scalar(raw: string): string {
  * Returns null when the text has no frontmatter.
  */
 export function frontmatter(text: string): Record<string, string> | null {
-  const lines = text.replace(/^﻿/, '').split(/\r?\n/)
+  const lines = text.replace(/^\uFEFF/, '').split(/\r?\n/)
   if (lines[0]?.trim() !== '---') {
     return null
   }
@@ -188,7 +188,6 @@ function flagField(text: string, id: string, required: boolean): Field | null {
       label: flag,
       options: (m[2] ?? '').split('|').map(v => ({ label: v, emit: `${flag}=${v}` })),
       required,
-      positional: false,
     }
   }
   m = new RegExp(`^(${FLAG})(?:\\|(${FLAG}))+$`).exec(text)
@@ -199,7 +198,6 @@ function flagField(text: string, id: string, required: boolean): Field | null {
       label: text,
       options: text.split('|').map(v => ({ label: v, emit: v })),
       required,
-      positional: false,
     }
   }
   m = new RegExp(`^(${FLAG})(=| )<([^<>]+)>$`).exec(text)
@@ -223,7 +221,6 @@ function flagField(text: string, id: string, required: boolean): Field | null {
       label: flag,
       options: (m[2] ?? '').split('|').map(v => ({ label: v, emit: `${flag} ${v}` })),
       required,
-      positional: false,
     }
   }
   if (required) {
@@ -250,6 +247,9 @@ function flagField(text: string, id: string, required: boolean): Field | null {
  * - `[a|b|c]` of single words, a positional Select.
  * - `[word]` before any positional, a toggle emitting the word (a keyword such as
  *   `ralph`); after one, an optional positional text (more arguments, such as `args`).
+ *   The risk: hint syntax cannot tell a keyword from a one-word placeholder, so
+ *   a future `[path] <task>` would draw `path` as a toggle emitting the literal
+ *   word. Placement is the only signal; a misread shows on the review step.
  * - `<anything>` a required positional text; `[several words]` an optional one.
  */
 export function parseHint(hint: string): Field[] | null {
@@ -278,7 +278,7 @@ export function parseHint(hint: string): Field[] | null {
       return null
     }
     if (token.kind === 'required') {
-      fields.push({ kind: 'text', id, label: text, required: true })
+      fields.push({ kind: 'text', id, label: text, required: true, verbatim: false })
       seenPositional = true
       continue
     }
@@ -294,16 +294,16 @@ export function parseHint(hint: string): Field[] | null {
         label: text,
         options: text.split('|').map(v => ({ label: v, emit: v })),
         required: false,
-        positional: true,
       })
       seenPositional = true
       continue
     }
+    // A lone word before any positional is a keyword: see the risk noted above.
     if (new RegExp(`^${IDENT}$`).test(text) && !seenPositional) {
       fields.push({ kind: 'toggle', id, label: text, emit: text })
       continue
     }
-    fields.push({ kind: 'text', id, label: text, required: false })
+    fields.push({ kind: 'text', id, label: text, required: false, verbatim: false })
     seenPositional = true
   }
 
@@ -318,18 +318,33 @@ export function formFor(skill: Skill): { fields: Field[]; isFallback: boolean } 
   }
 
   return {
-    fields: [{ kind: 'text', id: 'args', label: skill.hint ?? 'arguments', required: false }],
+    fields: [{ kind: 'text', id: 'args', label: skill.hint ?? 'arguments', required: false, verbatim: true }],
     isFallback: skill.hint !== null,
   }
 }
 
-/** True when a field emits text from the trailing positional part of the command. */
-function isPositional(field: Field): boolean {
-  return field.kind === 'text' || (field.kind === 'choice' && field.positional)
+/** The words the form's toggles emit, which a bare task word could be mistaken for. */
+function keywords(fields: readonly Field[]): string[] {
+  return fields.flatMap(field => (field.kind === 'toggle' ? [field.emit] : []))
+}
+
+/**
+ * Task text as the skill should read it: one plain word that is no keyword
+ * stays bare (a subcommand such as `list`); anything else goes in double
+ * quotes, as the skills' own usage examples write a task, with backslashes and
+ * double quotes escaped, so it cannot be read as a flag, a keyword or several
+ * arguments.
+ */
+export function quoteText(text: string, words: readonly string[]): string {
+  if (/^[A-Za-z0-9][\w./:#@-]*$/.test(text) && !words.includes(text)) {
+    return text
+  }
+
+  return `"${text.replace(/["\\]/g, ch => `\\${ch}`)}"`
 }
 
 /** What one field contributes to the command line, or null when it is left empty. */
-export function emitField(field: Field, values: Readonly<Record<string, string>>): string | null {
+export function emitField(field: Field, values: Readonly<Record<string, string>>, words: readonly string[] = []): string | null {
   const value = values[field.id] ?? ''
   switch (field.kind) {
     case 'toggle':
@@ -339,7 +354,9 @@ export function emitField(field: Field, values: Readonly<Record<string, string>>
     case 'value': {
       const v = value.trim()
 
-      return v === '' ? null : `${field.flag}${field.joiner}${v}`
+      // A value holding whitespace would split into several arguments: it is
+      // left out and named on the review step.
+      return v === '' || /\s/.test(v) ? null : `${field.flag}${field.joiner}${v}`
     }
     case 'pair': {
       const left = (values[`${field.id}-left`] ?? '').trim()
@@ -349,16 +366,19 @@ export function emitField(field: Field, values: Readonly<Record<string, string>>
     }
     case 'text': {
       const v = value.trim()
+      if (v === '') {
+        return null
+      }
 
-      return v === '' ? null : v
+      return field.verbatim ? v : quoteText(v, words)
     }
   }
 }
 
 /**
- * The exact command line: `/oh-my-claudecode:<skill>`, then the flags and
- * keywords in hint order, then the positional text in hint order, each as typed.
- * Nothing is quoted: OMC skills read their arguments as plain text.
+ * The exact command line: `/oh-my-claudecode:<skill>` and its arguments in
+ * hint order. Task text is quoted when it could be misread (quoteText); the
+ * fallback free-text field goes in as typed.
  */
 export function buildCommand(skill: string, fields: readonly Field[], values: Readonly<Record<string, string>>): string {
   const args = buildArgs(fields, values)
@@ -371,17 +391,12 @@ export function commandName(skill: string): string {
   return `${OMC_NAMESPACE}:${skill}`
 }
 
-/** Everything after the command name: the flags and keywords, then the positional text. */
+/** Everything after the command name, each field's part in hint order. */
 export function buildArgs(fields: readonly Field[], values: Readonly<Record<string, string>>): string {
+  const words = keywords(fields)
   const parts: string[] = []
-  for (const field of fields.filter(f => !isPositional(f))) {
-    const part = emitField(field, values)
-    if (part !== null) {
-      parts.push(part)
-    }
-  }
-  for (const field of fields.filter(isPositional)) {
-    const part = emitField(field, values)
+  for (const field of fields) {
+    const part = emitField(field, values, words)
     if (part !== null) {
       parts.push(part)
     }
@@ -390,8 +405,25 @@ export function buildArgs(fields: readonly Field[], values: Readonly<Record<stri
   return parts.join(' ')
 }
 
-/** What the review step warns about: required fields left empty, and half-filled pairs. */
-export function missing(fields: readonly Field[], values: Readonly<Record<string, string>>): string[] {
+/** The values a form opens with: a required choice starts on its first option, as it is drawn. */
+export function seedValues(fields: readonly Field[]): Record<string, string> {
+  const values: Record<string, string> = {}
+  for (const field of fields) {
+    const first = field.kind === 'choice' && field.required ? field.options[0] : undefined
+    if (first !== undefined) {
+      values[field.id] = first.emit
+    }
+  }
+
+  return values
+}
+
+/**
+ * What the review step warns about, any of which makes Run a two-press action:
+ * required fields left empty, half-filled pairs, values holding whitespace, and
+ * task text starting with `-`.
+ */
+export function warnings(fields: readonly Field[], values: Readonly<Record<string, string>>): string[] {
   const out: string[] = []
   for (const field of fields) {
     if (field.kind === 'pair') {
@@ -401,6 +433,14 @@ export function missing(fields: readonly Field[], values: Readonly<Record<string
         out.push(`${field.left}:${field.right} needs both parts`)
       }
       continue
+    }
+    const value = (values[field.id] ?? '').trim()
+    if (field.kind === 'value' && /\s/.test(value)) {
+      out.push(`${field.flag} cannot hold spaces, so it is left out`)
+      continue
+    }
+    if (field.kind === 'text' && value.startsWith('-')) {
+      out.push(`${field.label} starts with "-"`)
     }
     if ((field.kind === 'text' || field.kind === 'value' || field.kind === 'choice') && field.required && emitField(field, values) === null) {
       out.push(`${field.kind === 'value' ? field.flag : field.label} is required`)
@@ -412,19 +452,34 @@ export function missing(fields: readonly Field[], values: Readonly<Record<string
 
 // JSONC config.
 
-/** Removes `//` and `/* *\/` comments and trailing commas outside strings, keeping string content as is. */
+/**
+ * JSONC to JSON in OMC's own order (`dist/utils/jsonc.js`): drop a leading BOM,
+ * then comments (a block comment becomes a space), then trailing commas, each
+ * pass leaving string contents untouched. Throws on an unterminated block comment.
+ */
 export function stripJsonc(text: string): string {
+  return stripTrailingCommas(stripComments(text.replace(/^\uFEFF/, '')))
+}
+
+/** The index just past the string literal that opens at `start`. */
+function stringEnd(text: string, start: number): number {
+  let end = start + 1
+  while (end < text.length && text[end] !== '"') {
+    end += text[end] === '\\' ? 2 : 1
+  }
+
+  return end + 1
+}
+
+function stripComments(text: string): string {
   let out = ''
   let i = 0
   while (i < text.length) {
     const ch = text[i]
     if (ch === '"') {
-      let end = i + 1
-      while (end < text.length && text[end] !== '"') {
-        end += text[end] === '\\' ? 2 : 1
-      }
-      out += text.slice(i, end + 1)
-      i = end + 1
+      const end = stringEnd(text, i)
+      out += text.slice(i, end)
+      i = end
       continue
     }
     if (ch === '/' && text[i + 1] === '/') {
@@ -435,7 +490,29 @@ export function stripJsonc(text: string): string {
     }
     if (ch === '/' && text[i + 1] === '*') {
       const end = text.indexOf('*/', i + 2)
-      i = end === -1 ? text.length : end + 2
+      if (end === -1) {
+        throw new SyntaxError('Unterminated JSONC block comment')
+      }
+      out += ' '
+      i = end + 2
+      continue
+    }
+    out += ch
+    i++
+  }
+
+  return out
+}
+
+function stripTrailingCommas(text: string): string {
+  let out = ''
+  let i = 0
+  while (i < text.length) {
+    const ch = text[i]
+    if (ch === '"') {
+      const end = stringEnd(text, i)
+      out += text.slice(i, end)
+      i = end
       continue
     }
     if (ch === ',') {
@@ -466,10 +543,13 @@ export function parseJsonc(text: string): Record<string, unknown> | null {
   }
 }
 
+/** The profile names OMC admits (`^[a-z][a-z0-9-]{0,62}$`); other keys are not offered. */
+export const CONFIG_NAME = /^[a-z][a-z0-9-]{0,62}$/
+
 /**
  * The names a valued flag can take from OMC config: the keys of the object at
- * `<skill>.<flag name>s` (autopilot's `--workflow` reads `autopilot.workflows`),
- * the project's first, then the user's, without repeats.
+ * `<skill>.<flag name>s` (autopilot's `--workflow` reads `autopilot.workflows`)
+ * that match CONFIG_NAME, the project's first, then the user's, without repeats.
  */
 export function configChoices(skill: string, flag: string, configs: readonly (Record<string, unknown> | null)[]): string[] {
   const key = `${flag.replace(/^--/, '')}s`
@@ -481,7 +561,7 @@ export function configChoices(skill: string, flag: string, configs: readonly (Re
       continue
     }
     for (const name of Object.keys(table)) {
-      if (!names.includes(name)) {
+      if (CONFIG_NAME.test(name) && !names.includes(name)) {
         names.push(name)
       }
     }
@@ -492,16 +572,14 @@ export function configChoices(skill: string, flag: string, configs: readonly (Re
 
 // Finding OMC.
 
-/** Compares dotted versions numerically (`5.10.0` > `5.8.6`); a non-numeric part compares as text. */
-export function compareVersions(a: string, b: string): number {
-  const pa = a.split(/[.+-]/)
-  const pb = b.split(/[.+-]/)
-  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
-    const x = pa[i] ?? '0'
-    const y = pb[i] ?? '0'
-    const nx = Number(x)
-    const ny = Number(y)
-    const diff = Number.isFinite(nx) && Number.isFinite(ny) ? nx - ny : x.localeCompare(y)
+/** Compares dot-separated parts, numbers numerically and anything else as text; a missing part reads as `missing`. */
+function compareParts(x: readonly string[], y: readonly string[], missing: string): number {
+  for (let i = 0; i < Math.max(x.length, y.length); i++) {
+    const p = x[i] ?? missing
+    const q = y[i] ?? missing
+    const np = Number(p)
+    const nq = Number(q)
+    const diff = p !== '' && q !== '' && Number.isFinite(np) && Number.isFinite(nq) ? np - nq : p.localeCompare(q)
     if (diff !== 0) {
       return diff
     }
@@ -510,12 +588,43 @@ export function compareVersions(a: string, b: string): number {
   return 0
 }
 
+/**
+ * Compares versions as semver orders them: the dotted core numerically
+ * (`5.10.0` > `5.8.6`), then a release above its prereleases
+ * (`5.9.0` > `5.9.0-beta.1`), prereleases part by part. Build metadata is ignored.
+ */
+export function compareVersions(a: string, b: string): number {
+  const split = (v: string) => {
+    const bare = v.split('+')[0] ?? ''
+    const dash = bare.indexOf('-')
+
+    return dash === -1 ? { core: bare, pre: null } : { core: bare.slice(0, dash), pre: bare.slice(dash + 1) }
+  }
+  const va = split(a)
+  const vb = split(b)
+  const core = compareParts(va.core.split('.'), vb.core.split('.'), '0')
+  if (core !== 0 || va.pre === vb.pre) {
+    return core
+  }
+  if (va.pre === null || vb.pre === null) {
+    return va.pre === null ? 1 : -1
+  }
+
+  return compareParts(va.pre.split('.'), vb.pre.split('.'), '')
+}
+
+/** True when `path` is `root` or inside it. */
+function isWithin(path: string, root: unknown): boolean {
+  return typeof root === 'string' && root !== '' && (path === root || path.startsWith(`${root.replace(/\/+$/, '')}/`))
+}
+
 type InstallEntry = { installPath?: unknown; version?: unknown; scope?: unknown; projectPath?: unknown }
 
 /**
  * OMC's install path from installed_plugins.json: of the entries for this
- * session (user scope, or a project or local scope whose projectPath is the
- * cwd), the highest version. Null when none.
+ * session (user scope, or a project or local scope whose projectPath holds
+ * the cwd), the highest version. Null when none. It only says where the
+ * SKILL.md files are: which skills can run is the session's command list.
  */
 export function installPathFrom(installedJson: string, cwd: string): string | null {
   let parsed: unknown
@@ -532,7 +641,7 @@ export function installPathFrom(installedJson: string, cwd: string): string | nu
     entry =>
       typeof entry.installPath === 'string' &&
       entry.installPath !== '' &&
-      (entry.scope === undefined || entry.scope === 'user' || entry.projectPath === cwd),
+      (entry.scope === undefined || entry.scope === 'user' || isWithin(cwd, entry.projectPath)),
   )
   usable.sort((a, b) => compareVersions(String(b.version ?? '0'), String(a.version ?? '0')))
 
