@@ -13,6 +13,7 @@ installed from this repository by name.
 | [`token-budget`](token-budget/) | Shows the session's token spend against a budget in a band above the prompt, with a warning at 90% and an alert at 100% |
 | [`guardrail-notice`](guardrail-notice/) | Shows a card in the chat and an entry above the prompt when a hook refuses a tool call, with the hook's message and the safe form it names |
 | [`omc-watchdog`](omc-watchdog/) | Shows a band above the prompt when an oh-my-claudecode run in this session is dead (active but stale) or looping, with its mode and phase |
+| [`omc-launcher`](omc-launcher/) | A pane opened with `/omc` that steps through picking an oh-my-claudecode workflow, setting the options its argument-hint names, and running the exact command |
 
 ## Install
 
@@ -26,6 +27,7 @@ At the prompt of a terminal session:
 /plugin install token-budget --marketplace memyselfandm/cconami
 /plugin install guardrail-notice --marketplace memyselfandm/cconami
 /plugin install omc-watchdog --marketplace memyselfandm/cconami
+/plugin install omc-launcher --marketplace memyselfandm/cconami
 ```
 
 Or from a shell:
@@ -38,6 +40,7 @@ claude plugin install mcp-health --marketplace memyselfandm/cconami
 claude plugin install token-budget --marketplace memyselfandm/cconami
 claude plugin install guardrail-notice --marketplace memyselfandm/cconami
 claude plugin install omc-watchdog --marketplace memyselfandm/cconami
+claude plugin install omc-launcher --marketplace memyselfandm/cconami
 ```
 
 Choose the user scope to have a mod in every session. To pick up a change after the
@@ -575,6 +578,147 @@ so the check also shows which `.omc` OMC uses:
    Within a minute the band reads `ralph active but stale for 3h; cancel or resume`.
 6. Run `/oh-my-claudecode:cancel`, or `mv "$f.bak" "$f"`. The band goes at the
    next read.
+
+## omc-launcher
+
+A pane opened with `/omc` that walks through running an oh-my-claudecode (OMC)
+skill in three steps: pick, set options, review and run. OMC's skills each take
+different flags, and Claude Code hides the argument hint once you start typing.
+
+- **Is OMC active?** The session's command list (`$.command.list()`) decides.
+  `/omc` is registered at session start only when it holds `oh-my-claudecode:*`
+  commands, and those commands are the skills the picker may offer. OMC files
+  on disk for a plugin that is disabled, or installed for another project, do
+  not count. If OMC's commands have gone by the time `/omc` runs, it replies
+  that OMC is not active in this session.
+- **Finding the SKILL.md files.** The files are only read for each skill's
+  description and hint. The mod reads `installed_plugins.json` under
+  `$CLAUDE_CONFIG_DIR/plugins` (else `~/.claude/plugins`) for
+  `oh-my-claudecode@omc`. Of the entries for this session (user scope, or a
+  project or local scope whose `projectPath` holds the cwd), it takes the
+  highest version whose folder holds `skills/`. Versions order as semver does,
+  so a release ranks above its prereleases. With no usable entry it takes the
+  highest version folder under `plugins/cache/omc/oh-my-claudecode/`.
+- **The picker.** Each `skills/<dir>/SKILL.md` with frontmatter whose skill
+  the session can run. The command list names a skill by its frontmatter
+  `name`: OMC's `skills/plan` has `name: omc-plan`, so it is listed as
+  `oh-my-claudecode:omc-plan`, and `skills/review` as `omc-review`. A skill is
+  kept when either `oh-my-claudecode:<dir>` or `oh-my-claudecode:<name>` is in
+  the list. It is shown and run by its folder name (`/oh-my-claudecode:plan`),
+  which resolves as the alias does. A command with no skill folder, such as one
+  of OMC's `commands/*.md`, is left out. The main workflows come first
+  in this order: autopilot, ralph, team, ralplan, ultragoal, deep-interview,
+  autoresearch. The rest follow by name. That ordering list is the only
+  per-skill knowledge in the mod. On a narrow pane the skill name always shows;
+  only its description is cut.
+- **The form.** The skill's `argument-hint` frontmatter is parsed generically,
+  one field per part, in hint order:
+
+  | Hint part | Field | Adds |
+  |---|---|---|
+  | `[--x=a\|b\|c]` | Select, with `(none)` | `--x=b` |
+  | `[--a\|--b\|--c]` | Select, with `(none)` | `--b` |
+  | `[--x a\|b]` | Select, with `(none)` | `--x b` |
+  | `[--flag]`, `[--x word]` | toggle | `--flag`, `--x word` |
+  | `[--x <v>]`, `[--x=<v>]` | input | `--x v`, `--x=v` |
+  | `[A:B]` | two inputs | `a:b`, only when both are filled |
+  | `[a\|b\|c]` (single words) | Select, with `(none)` | `b` |
+  | `[word]` before any positional | toggle | `word` (team's `ralph`) |
+  | `[word]` after a positional | optional text | the text (skill's `[args]`) |
+  | `<anything>` | required text | the text |
+  | `[several words]` | optional text | the text |
+
+  A required Select with no `(none)` starts on its first option, and that
+  value is stored, so what it shows is what runs.
+
+  The keyword rule carries a risk. Hint syntax cannot tell a keyword from a
+  one-word placeholder, so a future hint such as `[path] <task>` would draw
+  `path` as a toggle that adds the literal word `path`. Where the word sits is
+  the only signal. A misread shows on the review step, before anything runs.
+
+  The same flag shapes outside brackets are required fields. A hint with any
+  part the table does not cover (unbalanced brackets, a bare literal word, a
+  flag that is always present) falls back to one free-text arguments field, as
+  does a skill with no hint. In OMC 5.8.6 every hint parses; harbor's
+  `[sweep | look at #N | sign ... | what's ready?]` has alternatives with spaces,
+  so it is an optional free-text field with the hint as its label rather than a
+  Select.
+- **Config choices.** A valued flag also offers the keys of the object at
+  `<skill>.<flag name>s` in `.claude/omc.jsonc` and in the user config, the
+  project's first. The project file is read from the cwd at the moment `/omc`
+  runs. The user config is `$XDG_CONFIG_HOME/claude-omc/config.jsonc`, or
+  `~/.config/claude-omc/config.jsonc` when `XDG_CONFIG_HOME` is unset, which is
+  OMC's own `getConfigDir()` rule. That is how autopilot's `--workflow` lists
+  `autopilot.workflows`. Only keys matching `^[a-z][a-z0-9-]{0,62}$`, the
+  profile names OMC admits, are offered. The files are JSONC, read in OMC's
+  order (`dist/utils/jsonc.js`): a leading BOM is dropped, then comments (a
+  block comment becomes a space), then trailing commas, so a comma followed by
+  a comment is accepted. A file that does not parse offers nothing. A typed
+  value is always accepted too. OMC runs named workflow profiles only on Linux
+  with the `flock` utility; elsewhere it rejects `--workflow`.
+- **The command.** `/oh-my-claudecode:<skill>` and every field's part, in hint
+  order. Task text is trimmed at its ends. It goes in double quotes, as the
+  skills' own usage examples write a task, unless it is one plain word that is
+  no keyword of the form and holds no `:` (so a subcommand such as `list`
+  stays bare, while `2:codex` is quoted rather than read as team's
+  `N:agent-type`). Quotes and
+  backslashes inside it are escaped with a backslash. Quoting stops a task such
+  as `--critic=codex is broken` from setting the critic, and stops team's task
+  `ralph the logs` from turning on the ralph keyword. A value field cannot hold
+  whitespace: such a value is left out and named on the review step. The
+  fallback free-text field goes in exactly as typed.
+- **Warnings and Run anyway.** The review step names any required field left
+  empty, a pair with one half, a value left out for holding whitespace, and task
+  text starting with `-`. With any warning showing, the button reads Run anyway
+  and takes two presses. The first press only says that a second one runs the
+  line. Changing a value or leaving the step disarms it. An empty autopilot task
+  would otherwise start a fully autonomous run on nothing.
+- **Running it.** Run runs the skill with `$.command.run({ command:
+  'oh-my-claudecode:<skill>', args })`, which queues it as though you had typed
+  the command line and runs it once the session is idle. `$.prompt.submit`
+  refuses any text beginning with `/`, so it cannot carry a slash command. If
+  the run is refused, a toast says why.
+- **Read only.** The mod reads files (`$.fs.read`, `$.fs.list`, `$.fs.exists`),
+  the session's command list and cwd, and the `HOME`, `CLAUDE_CONFIG_DIR` and
+  `XDG_CONFIG_HOME` variables. It writes nothing and runs no process. The only
+  thing it starts is the command you reviewed. The tests fail if it writes a
+  file.
+
+### Owner smoke test
+
+The tests stub the engine, so two things are unverified. One is that
+`$.command.list()` lists OMC's skills as `oh-my-claudecode:*`. The other is that
+`$.command.run` starts an OMC skill the way typing it does, OMC's prompt hooks
+included. Check them once, by hand:
+
+1. In a scratch folder, start a session with the mod loaded:
+   `d=$(mktemp -d) && cd "$d" && claude --plugin-dir <cconami checkout>/plugins/omc-launcher`.
+2. Type `/omc`. Expected: the reply `OMC launcher opened: <n> skills.` and a pane
+   whose first step lists autopilot, ralph, team, ralplan, ultragoal,
+   deep-interview and autoresearch first. Further down, `plan` and `review` are
+   listed (their frontmatter names are `omc-plan` and `omc-review`). If `/omc`
+   is not offered at all, or either is missing, the command list does not name
+   OMC's skills as expected: report it.
+3. Pick `ralph`. Set `--critic` to `codex`, type the task `say hello and stop`,
+   and press Review. Expected: `/oh-my-claudecode:ralph --critic=codex "say hello and stop"`
+   and a button reading Run.
+4. Press Run. Expected: the pane closes and the transcript shows the ralph skill
+   starting with those arguments, as if you had typed the line. If a toast reads
+   `Could not run ...` instead, the run path does not reach OMC's skills: report
+   it.
+5. While ralph runs, check that OMC's prompt hooks ran on the plugin-started
+   command: `grep -rl '"active": *true' .omc/state` lists a
+   `ralph-state.json` (under `.omc/state/` or `.omc/state/sessions/<id>/`).
+   With no such file, the skill text reached the model but OMC's hooks did not
+   start a ralph run: report it. Then cancel it with `/oh-my-claudecode:cancel`.
+6. Type `/omc` again, pick `autopilot` and press Review with no task. Expected:
+   `product idea or task description is required` and a button reading Run
+   anyway. Press it once: nothing runs, and a line says to press again. Press
+   Back, then Cancel: the pane closes and nothing runs.
+7. If `.claude/omc.jsonc` or the user config (`$XDG_CONFIG_HOME`, else
+   `~/.config`, then `/claude-omc/config.jsonc`) defines `autopilot.workflows`,
+   the `--workflow from config` list on autopilot's form shows those profile
+   names.
 
 ## Working on a mod
 
