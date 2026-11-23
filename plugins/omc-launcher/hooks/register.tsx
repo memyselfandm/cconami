@@ -50,7 +50,8 @@ async function places($: EngineInterface): Promise<Places> {
 
 /**
  * The OMC skills this session can run, by bare name: the session's
- * `oh-my-claudecode:*` commands. Empty when OMC is not active here.
+ * `oh-my-claudecode:*` commands. Empty when OMC is not active here, or its
+ * skills have not joined the command list yet.
  */
 async function omcCommands($: EngineInterface): Promise<string[]> {
   const prefix = `${OMC_NAMESPACE}:`
@@ -164,9 +165,12 @@ function short(text: string, room: number): string {
 
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
-    // Without OMC's commands in this session there is nothing to launch, so
-    // /omc is not offered.
-    if ((await omcCommands($)).length > 0) {
+    // /omc is offered whenever OMC is installed on disk. The command list is
+    // not consulted here: in an interactive or resumed session OMC's skills
+    // can join it after session.start, which would hide /omc for the whole
+    // session. Which skills can run is read when /omc opens. Registering again
+    // replaces the command, so a repeated session.start (a reload) is harmless.
+    if ((await findOmc($, e.cwd)) !== null) {
       await $.command.register({
         name: 'omc',
         description: 'Pick an oh-my-claudecode workflow, set its options and run it',
@@ -177,9 +181,10 @@ export const register: Register = on => {
   })
 
   on('command.run', { command: 'omc' }, async $ => {
+    // Read on every open, never kept from session start.
     const names = await omcCommands($)
     if (names.length === 0) {
-      return { text: 'oh-my-claudecode is not active in this session, so there is nothing to launch.' }
+      return { text: 'No oh-my-claudecode skills are available in this session, so there is nothing to launch.' }
     }
     const cwd = await $.session.cwd()
     const root = await findOmc($, cwd)

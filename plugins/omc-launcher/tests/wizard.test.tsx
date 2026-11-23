@@ -420,16 +420,56 @@ test('a command that cannot run says so in a toast', async ($, on) => {
   await ui.unmount()
 })
 
-test('without OMC, /omc is not registered, and running it anyway says so', async ($, on) => {
+const NO_SKILLS = 'No oh-my-claudecode skills are available in this session, so there is nothing to launch.'
+
+test('without OMC on disk, /omc is not registered, and running it anyway says so', async ($, on) => {
   const world = await start($, on, machine({ installed: false }))
   expect(world.registered).toEqual([])
-  expect(await openWizard($)).toBe('oh-my-claudecode is not active in this session, so there is nothing to launch.')
+  expect(await openWizard($)).toBe(NO_SKILLS)
   expect(world.opened).toEqual([])
 })
 
-test('OMC on disk but not active in this session: /omc is not registered', async ($, on) => {
-  const world = await start($, on, machine({ active: false }))
+test('OMC commands listed but OMC not on disk: /omc is not registered', async ($, on) => {
+  const world = await start($, on, machine({ installed: false, active: true }))
   expect(world.registered).toEqual([])
+})
+
+test('OMC on disk with its skills not yet listed at session start: /omc is registered and later shows them', async ($, on) => {
+  // An interactive or resumed session: OMC's skills join the command list after session.start.
+  const tree = machine({ active: false })
+  const world = await start($, on, tree)
+  expect(world.registered).toEqual(['omc'])
+  tree.commands = machine().commands
+  expect(await openWizard($)).toBe('OMC launcher opened: 6 skills.')
+  expect(world.opened).toEqual([PANE])
+  const ui = await $.ui.mount({ ...PANE_PROPS, surface: 'terminal' })
+  const values = ((await ui.find({ key: 'skill' }))?.props.options as { value: string }[]).map(option => option.value)
+  expect(values).toContain('ralph')
+  expect(values).toContain('plan')
+  await ui.unmount()
+})
+
+test('OMC on disk with no skills listed when /omc runs: it says so and opens no pane', async ($, on) => {
+  const world = await start($, on, machine({ active: false }))
+  expect(world.registered).toEqual(['omc'])
+  expect(await openWizard($)).toBe(NO_SKILLS)
+  expect(world.opened).toEqual([])
+})
+
+test('the runnable skills are read again on each open', async ($, on) => {
+  const tree = machine()
+  const world = await start($, on, tree)
+  expect(await openWizard($)).toBe('OMC launcher opened: 6 skills.')
+  tree.commands = machine({ active: false }).commands
+  expect(await openWizard($)).toBe(NO_SKILLS)
+  expect(world.opened).toEqual([PANE])
+})
+
+test('a second session.start (a reload) registers /omc again without error', async ($, on) => {
+  const world = await start($, on)
+  await $.session.start({ cwd: CWD, surface: 'terminal', isInteractive: true })
+  expect(world.registered).toEqual(['omc', 'omc'])
+  expect(await openWizard($)).toBe('OMC launcher opened: 6 skills.')
 })
 
 test('CLAUDE_CONFIG_DIR is where installed_plugins.json is read', async ($, on) => {

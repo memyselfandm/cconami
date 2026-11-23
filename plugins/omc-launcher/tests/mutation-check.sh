@@ -98,9 +98,13 @@ hooks/register.tsx~s/names\.includes\(dir\) \|\| //~a skill listed by its folder
 hooks/register.tsx~s/void flip\(\$, field\.id\)/void setValue(\$, field.id, isOn ? '' : 'on')/~a toggle flips from the value it was drawn with
 hooks/logic.ts~s/\[A-Za-z0-9\]\[\\w\.\/#@-\]\*\$/[A-Za-z0-9][\\w.\/:#@-]*\$/~a task word with a colon goes in bare and reads as N:agent-type
 hooks/register.tsx~s/\(await \$\.env\.get\('CLAUDE_CONFIG_DIR'\)\) \|\| //~CLAUDE_CONFIG_DIR is ignored
-hooks/register.tsx~s/if \(\(await omcCommands\(\$\)\)\.length > 0\) \{/if (true) {/~/omc is registered without OMC
+hooks/register.tsx~s/if \(\(await findOmc\(\$, e\.cwd\)\) !== null\) \{/if (true) {/~/omc is registered without OMC on disk
+hooks/register.tsx~s/if \(\(await findOmc\(\$, e\.cwd\)\) !== null\) \{/if ((await omcCommands(\$)).length > 0) {/~/omc is registered only when OMC's skills are already listed at session start (the CCC-153 bug)
+hooks/register.tsx~s/if \(\(await findOmc\(\$, e\.cwd\)\) !== null\) \{/if ((await findOmc(\$, e.cwd)) !== null \&\& (await omcCommands(\$)).length > 0) {/~/omc also needs OMC's skills listed at session start
+hooks/register.tsx~s/export const register: Register = on => \{\n/let cached: string[] = []\nexport const register: Register = on => {\n/; s/    return next\(e\)/    cached = await omcCommands(\$)\n    return next(e)/; s/const names = await omcCommands\(\$\)\n/const names = cached\n/~the runnable skills are kept from session start, not read when /omc opens
+hooks/register.tsx~s/    if \(names\.length === 0\) \{\n      return \{ text: 'No oh-my-claudecode/    if (false) {\n      return { text: 'No oh-my-claudecode/~an empty command list at open is not reported as no skills available
 hooks/register.tsx~s/\.filter\(name => name\.startsWith\(prefix\)\)//~another plugin's commands count as OMC being active
-hooks/register.tsx~s/text: 'oh-my-claudecode is not active in this session, so there is nothing to launch\.'/text: 'OMC launcher opened.'/~running /omc without OMC does not say so
+hooks/register.tsx~s/text: 'No oh-my-claudecode skills are available in this session, so there is nothing to launch\.'/text: 'OMC launcher opened.'/~running /omc with no OMC skills listed does not say so
 hooks/register.tsx~s/join\(cwd, '\.claude', 'omc\.jsonc'\)/join(cwd, 'omc.jsonc')/~the project config path is wrong
 hooks/register.tsx~s/join\(xdg, 'claude-omc', 'config\.jsonc'\)/join(xdg, 'omc', 'config.jsonc')/~the user config path is wrong
 hooks/register.tsx~s/\(await \$\.env\.get\('XDG_CONFIG_HOME'\)\) \|\| //~XDG_CONFIG_HOME is ignored
