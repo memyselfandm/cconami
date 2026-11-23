@@ -1,7 +1,7 @@
 {
   "name": "omc-launcher",
-  "version": "0.1.0",
-  "description": "A pane opened with /omc that steps through running an oh-my-claudecode workflow: pick a skill (main workflows first), fill one field per flag parsed from its argument-hint, review the exact command line, and run it through $.command.run as though you had typed it. Writes nothing; /omc is offered only when OMC's commands are active in the session.",
+  "version": "0.1.1",
+  "description": "A pane opened with /omc that steps through running an oh-my-claudecode workflow: pick a skill (main workflows first), fill one field per flag parsed from its argument-hint, review the exact command line, and run it through $.command.run as though you had typed it. Writes nothing; /omc is offered whenever OMC is installed, and lists the OMC skills the session can run when it opens.",
   "license": "MIT",
   "author": { "name": "memyselfandm" },
   "types": "./types/index.d.ts"

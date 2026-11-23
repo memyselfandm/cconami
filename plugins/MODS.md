@@ -593,12 +593,21 @@ A pane opened with `/omc` that walks through running an oh-my-claudecode (OMC)
 skill in three steps: pick, set options, review and run. OMC's skills each take
 different flags, and Claude Code hides the argument hint once you start typing.
 
-- **Is OMC active?** The session's command list (`$.command.list()`) decides.
-  `/omc` is registered at session start only when it holds `oh-my-claudecode:*`
-  commands, and those commands are the skills the picker may offer. OMC files
-  on disk for a plugin that is disabled, or installed for another project, do
-  not count. If OMC's commands have gone by the time `/omc` runs, it replies
-  that OMC is not active in this session.
+- **When `/omc` is offered.** `/omc` is registered at every session start
+  where the OMC install is found on disk (see the next point). It is not
+  registered when OMC is not installed at all. The command list is not read at
+  session start: in an interactive or resumed session OMC's skills can join it
+  after `session.start` fires, and gating on it hid `/omc` for the whole
+  session. `session.start` carries no resume, clear or startup source. It fires
+  once per process (a resumed or `/restart`ed session is a new process) and on
+  a reload, never on `/clear`, and registering again replaces the command.
+- **Which skills can run.** The session's command list (`$.command.list()`)
+  decides, read afresh each time `/omc` runs and never kept from session start.
+  Its `oh-my-claudecode:*` commands are the skills the picker may offer. OMC
+  files on disk for a plugin that is disabled, or installed for another
+  project, do not count. When the list holds no OMC commands, `/omc` replies
+  `No oh-my-claudecode skills are available in this session, so there is
+  nothing to launch.` and opens no pane.
 - **Finding the SKILL.md files.** The files are only read for each skill's
   description and hint. The mod reads `installed_plugins.json` under
   `$CLAUDE_CONFIG_DIR/plugins` (else `~/.claude/plugins`) for
@@ -701,12 +710,16 @@ included. Check them once, by hand:
 
 1. In a scratch folder, start a session with the mod loaded:
    `d=$(mktemp -d) && cd "$d" && claude --plugin-dir <cconami checkout>/plugins/omc-launcher`.
-2. Type `/omc`. Expected: the reply `OMC launcher opened: <n> skills.` and a pane
-   whose first step lists autopilot, ralph, team, ralplan, ultragoal,
-   deep-interview and autoresearch first. Further down, `plan` and `review` are
-   listed (their frontmatter names are `omc-plan` and `omc-review`). If `/omc`
-   is not offered at all, or either is missing, the command list does not name
-   OMC's skills as expected: report it.
+2. Type `/omc`, in a fresh session and again in one resumed with `/restart`.
+   Expected in both: `/omc` is offered in the typeahead, and running it gives
+   the reply `OMC launcher opened: <n> skills.` and a pane whose first step
+   lists autopilot, ralph, team, ralplan, ultragoal, deep-interview and
+   autoresearch first. Further down, `plan` and `review` are listed (their
+   frontmatter names are `omc-plan` and `omc-review`). If `/omc` is not offered
+   at all, the install lookup did not find OMC on disk: report it. If it replies
+   `No oh-my-claudecode skills are available in this session`, or `plan` or
+   `review` is missing, the command list does not name OMC's skills as
+   expected: report it.
 3. Pick `ralph`. Set `--critic` to `codex`, type the task `say hello and stop`,
    and press Review. Expected: `/oh-my-claudecode:ralph --critic=codex "say hello and stop"`
    and a button reading Run.

@@ -26,8 +26,10 @@ not have to remember each skill's flags:
 ```
 
 Choose the user scope to have it in every session. The mod reads OMC's skill
-files and config and runs the command you review. It writes nothing. When the
-session has no `oh-my-claudecode:*` commands, `/omc` is not offered.
+files and config and runs the command you review. It writes nothing. `/omc` is
+offered whenever OMC is installed. When the session has no
+`oh-my-claudecode:*` commands at the moment it runs, it says so instead of
+opening the pane.
 
 How it parses hints, which shapes fall back to free text, and the owner smoke
 test: [../MODS.md](../MODS.md#omc-launcher).
