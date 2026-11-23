@@ -1,5 +1,12 @@
 # omc-watchdog
 
+> **Superseded by [omc-runs](../omc-runs/).** omc-runs draws one row per active
+> OMC mode with its progress, and carries these same stale and looping checks in
+> that row, so there is one OMC row instead of two. omc-watchdog is frozen: it
+> still works, but gets no further changes. Install omc-runs instead, and
+> uninstall this one (`claude plugin uninstall omc-watchdog`) so the warnings are
+> not drawn twice.
+
 A Claude Code mod for [oh-my-claudecode](https://github.com/Yeachan-Heo/oh-my-claudecode)
 (OMC). It shows a band above the prompt only when an OMC run in this session is
 dead or looping, for example:

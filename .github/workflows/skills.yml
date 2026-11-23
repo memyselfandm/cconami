@@ -51,12 +51,6 @@ jobs:
             fi
           done
           exit "$failed"
-      - name: Mutation check for guardrail-notice
-        run: bash plugins/guardrail-notice/tests/mutation-check.sh
-      - name: Mutation check for omc-watchdog
-        run: bash plugins/omc-watchdog/tests/mutation-check.sh
-      - name: Mutation check for omc-launcher
-        run: bash plugins/omc-launcher/tests/mutation-check.sh
       - name: Lint SKILL.md files
         run: uv run --script scripts/lint-skills.py
       - name: Test the lint
@@ -71,3 +65,45 @@ jobs:
           bash plugins/operating-model/hooks/test-guard-bash-command.sh
       - name: Render every skill for Hermes (dry run)
         run: bash platforms/hermes/install.sh --dry-run "$RUNNER_TEMP/hermes"
+
+  # Each mod's tests/mutation-check.sh is found here, so a new mod's mutation
+  # check runs in CI without editing this workflow.
+  mutation-scripts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      scripts: ${{ steps.find.outputs.scripts }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: List the mutation checks
+        id: find
+        run: |
+          scripts="$(find plugins -path '*/tests/mutation-check.sh' -type f | sort | python3 -c 'import json, sys; print(json.dumps([line.strip() for line in sys.stdin if line.strip()]))')"
+          echo "found: $scripts"
+          echo "scripts=$scripts" >> "$GITHUB_OUTPUT"
+
+  mutation:
+    needs: mutation-scripts
+    if: needs.mutation-scripts.outputs.scripts != '[]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        script: ${{ fromJSON(needs.mutation-scripts.outputs.scripts) }}
+    name: mutation (${{ matrix.script }})
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install Claude Code
+        run: npm install -g @anthropic-ai/claude-code@2.1.329
+      - name: Run the mutation check
+        env:
+          SCRIPT: ${{ matrix.script }}
+        run: bash "$SCRIPT"
